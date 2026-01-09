@@ -1,0 +1,14 @@
+{
+  "name": "meeting-ai-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev:frontend": "pnpm --dir frontend dev",
+    "dev:backend": "pnpm --dir backend start:dev",
+    "build:frontend": "pnpm --dir frontend build",
+    "build:backend": "pnpm --dir backend build",
+    "lint:frontend": "pnpm --dir frontend lint",
+    "lint:backend": "pnpm --dir backend lint",
+    "install:all": "pnpm install"
+  }
+}

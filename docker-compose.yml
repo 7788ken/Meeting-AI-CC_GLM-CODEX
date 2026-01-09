@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: meeting-ai-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: meeting_ai
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - meeting-ai-network
+
+  # MongoDB 数据库
+  mongo:
+    image: mongo:6
+    container_name: meeting-ai-mongo
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - meeting-ai-network
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: meeting-ai-redis
+    ports:
+      - '6379:6379'
+    networks:
+      - meeting-ai-network
+
+  # RabbitMQ 消息队列
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: meeting-ai-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    networks:
+      - meeting-ai-network
+
+volumes:
+  postgres-data:
+  mongo-data:
+
+networks:
+  meeting-ai-network:
+    driver: bridge
