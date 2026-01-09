@@ -27,7 +27,7 @@ export class TranscriptGateway implements OnGatewayConnection, OnGatewayDisconne
     this.logger.log(`Client connected: ${client.id}`)
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`)
     this.transcriptService.removeClient(client.id)
   }
@@ -59,7 +59,8 @@ export class TranscriptGateway implements OnGatewayConnection, OnGatewayDisconne
     const result = await this.transcriptService.processAudio(
       client.id,
       data.audioData,
-      data.sessionId
+      data.sessionId,
+      Boolean(data.isFinal)
     )
 
     if (result) {
@@ -69,8 +70,9 @@ export class TranscriptGateway implements OnGatewayConnection, OnGatewayDisconne
   }
 
   @SubscribeMessage('audio:end')
-  handleAudioEnd(@ConnectedSocket() client: Socket) {
+  async handleAudioEnd(@ConnectedSocket() client: Socket) {
     this.logger.log(`Audio streaming ended for client: ${client.id}`)
+    await this.transcriptService.endAudio(client.id)
     client.emit('audio:ended')
   }
 }

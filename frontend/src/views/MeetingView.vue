@@ -3,6 +3,7 @@
     <!-- 顶部栏 -->
     <header class="meeting-header">
       <div class="header-left">
+        <el-button size="small" class="back-button" @click="router.push('/')">← 返回</el-button>
         <h1 class="app-title">AI会议助手</h1>
         <el-tag v-if="meetingStore.currentSession" type="success" size="small">
           会话进行中
@@ -259,6 +260,10 @@ onUnmounted(() => {
 .header-right {
   display: flex;
   align-items: center;
+}
+
+.back-button {
+  padding: 0 8px;
 }
 
 /* 主内容区 */
