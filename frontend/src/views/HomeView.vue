@@ -5,12 +5,14 @@
         <h1 class="app-title">AI会议助手</h1>
       </div>
       <div class="header-right">
-        <el-button type="primary" @click="createMeeting">+ 创建新会议</el-button>
+        <el-button type="primary" @click="createMeeting" :loading="loading">
+          + 创建新会议
+        </el-button>
       </div>
     </header>
 
     <main class="home-main">
-      <section class="meeting-list">
+      <section v-loading="loading" class="meeting-list">
         <el-row v-if="meetings.length > 0" :gutter="16">
           <el-col
             v-for="meeting in meetings"
@@ -23,23 +25,23 @@
             <el-card class="meeting-card" shadow="hover" @click="openMeeting(meeting.id)">
               <template #header>
                 <div class="card-header">
-                  <span class="meeting-title">{{ meeting.title }}</span>
-                  <el-tag :type="meeting.status === 'ongoing' ? 'success' : 'info'" size="small">
-                    {{ meeting.status === 'ongoing' ? '进行中' : '已结束' }}
+                  <span class="meeting-title">{{ meeting.title || '未命名会议' }}</span>
+                  <el-tag :type="meeting.isActive ? 'success' : 'info'" size="small">
+                    {{ meeting.isActive ? '进行中' : '已结束' }}
                   </el-tag>
                 </div>
               </template>
               <div class="card-item">
-                <span class="card-label">创建时间</span>
-                <span class="card-value">{{ formatDate(meeting.createdAt) }}</span>
+                <span class="card-label">开始时间</span>
+                <span class="card-value">{{ formatDate(meeting.startedAt) }}</span>
               </div>
               <div class="card-item">
                 <span class="card-label">持续时长</span>
-                <span class="card-value">{{ formatDuration(meeting.durationMinutes) }}</span>
+                <span class="card-value">{{ formatDuration(meeting.duration) }}</span>
               </div>
-              <div class="card-item">
-                <span class="card-label">参会人数</span>
-                <span class="card-value">{{ meeting.participants }} 人</span>
+              <div v-if="meeting.endedAt" class="card-item">
+                <span class="card-label">结束时间</span>
+                <span class="card-value">{{ formatDate(meeting.endedAt) }}</span>
               </div>
             </el-card>
           </el-col>
@@ -53,33 +55,57 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-
-type MeetingStatus = 'ongoing' | 'ended'
-
-interface MeetingSummary {
-  id: string
-  title: string
-  createdAt: Date
-  durationMinutes: number
-  participants: number
-  status: MeetingStatus
-}
+import { ElMessage } from 'element-plus'
+import { sessionApi, type Session } from '@/services/api'
 
 const router = useRouter()
+const loading = ref(false)
+const meetings = ref<Session[]>([])
 
-const meetings = ref<MeetingSummary[]>([])
+onMounted(() => {
+  loadMeetings()
+})
 
-function createMeeting() {
-  router.push('/meeting/new')
+async function loadMeetings() {
+  loading.value = true
+  try {
+    const response = await sessionApi.list()
+    meetings.value = response.data?.data || []
+  } catch (error) {
+    console.error('加载会议列表失败:', error)
+    ElMessage.error('加载会议列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function createMeeting() {
+  loading.value = true
+  try {
+    const response = await sessionApi.create({
+      title: `会议 ${new Date().toLocaleString()}`,
+    })
+    const sessionId = response.data?.data?.id
+    if (sessionId) {
+      ElMessage.success('会议创建成功')
+      router.push(`/meeting/${sessionId}`)
+    }
+  } catch (error) {
+    console.error('创建会议失败:', error)
+    ElMessage.error('创建会议失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 function openMeeting(id: string) {
   router.push(`/meeting/${id}`)
 }
 
-function formatDate(date: Date): string {
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr)
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
   const day = `${date.getDate()}`.padStart(2, '0')
@@ -88,12 +114,15 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
-function formatDuration(minutes: number): string {
-  const safeMinutes = Math.max(minutes, 0)
-  const hours = Math.floor(safeMinutes / 60)
-  const remaining = safeMinutes % 60
-  if (hours > 0) return `${hours}小时${remaining}分钟`
-  return `${remaining}分钟`
+function formatDuration(milliseconds: number | null): string {
+  if (!milliseconds) return '-'
+  const seconds = Math.floor(milliseconds / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+
+  if (hours > 0) return `${hours}小时${minutes % 60}分钟`
+  if (minutes > 0) return `${minutes}分钟`
+  return `${seconds}秒`
 }
 </script>
 
@@ -164,6 +193,9 @@ function formatDuration(minutes: number): string {
   font-size: 15px;
   font-weight: 600;
   color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-item {

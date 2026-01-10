@@ -37,3 +37,7 @@ backend/prisma/migrations/
 # Temp
 *.tmp
 .cache/
+*playwright-report/*
+frontend/playwright-report/*
+frontend/test-results/*
+frontend/tests/*

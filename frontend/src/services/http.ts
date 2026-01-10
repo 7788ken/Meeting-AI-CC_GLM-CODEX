@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
+import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
 
 // API响应类型
 export interface ApiResponse<T = unknown> {
@@ -8,8 +8,12 @@ export interface ApiResponse<T = unknown> {
 }
 
 // 创建HTTP实例
+const getBaseUrl = () => {
+  return (globalThis as any).__VITE_API_BASE_URL__ || '/api'
+}
+
 export const http: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: getBaseUrl(),
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -29,7 +33,7 @@ http.interceptors.request.use(
 
 // 响应拦截器
 http.interceptors.response.use(
-  (response: AxiosResponse) => {
+  (response) => {
     return response.data
   },
   (error) => {
@@ -42,8 +46,8 @@ http.interceptors.response.use(
 // 通用请求方法
 export const request = async <T = unknown>(
   config: AxiosRequestConfig
-): Promise<ApiResponse<T>> => {
-  return http.request<ApiResponse<T>>(config)
+): Promise<T> => {
+  return http.request<T>(config) as Promise<T>
 }
 
 export const get = <T = unknown>(url: string, config?: AxiosRequestConfig) => {

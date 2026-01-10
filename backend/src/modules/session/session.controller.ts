@@ -12,7 +12,7 @@ export class SessionController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: '创建新会话' })
   @ApiResponse({ status: 201, type: SessionDto })
-  create(@Body() dto: CreateSessionDto): SessionDto {
+  async create(@Body() dto: CreateSessionDto): Promise<SessionDto> {
     return this.sessionService.create(dto?.settings)
   }
 
@@ -33,7 +33,7 @@ export class SessionController {
   @Get()
   @ApiOperation({ summary: '获取所有会话' })
   @ApiResponse({ status: 200, type: [SessionDto] })
-  findAll(): SessionDto[] {
+  async findAll(): Promise<SessionDto[]> {
     return this.sessionService.findAll()
   }
 }

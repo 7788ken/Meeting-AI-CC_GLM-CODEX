@@ -1,46 +1,115 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
+import { Session, SessionStatus, Speaker } from '@prisma/client'
+import { PrismaService } from '../../database/prisma.service'
 import { SessionDto } from './dto/session.dto'
 
 @Injectable()
 export class SessionService {
-  // 简单的内存存储，生产环境应使用数据库
-  private sessions: Map<string, SessionDto> = new Map()
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(settings?: Record<string, unknown>): SessionDto {
-    const session: SessionDto = {
-      id: this.generateId(),
-      startedAt: new Date(),
-      endedAt: null,
-      duration: null,
-      isActive: true,
-    }
-    this.sessions.set(session.id, session)
-    return session
+  async create(settings?: Record<string, unknown>): Promise<SessionDto> {
+    const { title, description } = this.extractSessionMeta(settings)
+    const session = await this.prisma.session.create({
+      data: {
+        title,
+        description,
+        status: SessionStatus.CREATED,
+      },
+    })
+    return this.toSessionDto(session)
   }
 
   async findOne(id: string): Promise<SessionDto> {
-    const session = this.sessions.get(id)
+    const session = await this.prisma.session.findUnique({
+      where: { id },
+      include: { speakers: true },
+    })
     if (!session) {
       throw new NotFoundException(`Session ${id} not found`)
     }
-    return session
+    return this.toSessionDto(session)
   }
 
   async end(id: string): Promise<SessionDto> {
-    const session = await this.findOne(id)
-    session.endedAt = new Date()
-    session.duration =
-      session.endedAt.getTime() - new Date(session.startedAt).getTime()
-    session.isActive = false
-    this.sessions.set(id, session)
-    return session
+    await this.ensureSessionExists(id)
+    const session = await this.prisma.session.update({
+      where: { id },
+      data: { status: SessionStatus.ENDED, endTime: new Date() },
+    })
+    return this.toSessionDto(session)
   }
 
-  findAll(): SessionDto[] {
-    return Array.from(this.sessions.values())
+  async findAll(): Promise<SessionDto[]> {
+    const sessions = await this.prisma.session.findMany()
+    return sessions.map((session) => this.toSessionDto(session))
   }
 
-  private generateId(): string {
-    return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  async updateStatus(id: string, status: SessionStatus): Promise<SessionDto> {
+    await this.ensureSessionExists(id)
+    const session = await this.prisma.session.update({
+      where: { id },
+      data: { status },
+    })
+    return this.toSessionDto(session)
+  }
+
+  async addSpeaker(
+    sessionId: string,
+    input: { name: string; avatarUrl?: string; color?: string }
+  ): Promise<Speaker> {
+    await this.ensureSessionExists(sessionId)
+    return this.prisma.speaker.create({
+      data: {
+        sessionId,
+        name: input.name,
+        avatarUrl: input.avatarUrl,
+        color: input.color,
+      },
+    })
+  }
+
+  async getSpeakers(sessionId: string): Promise<Speaker[]> {
+    await this.ensureSessionExists(sessionId)
+    return this.prisma.speaker.findMany({ where: { sessionId } })
+  }
+
+  private async ensureSessionExists(id: string): Promise<void> {
+    const session = await this.prisma.session.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+    if (!session) {
+      throw new NotFoundException(`Session ${id} not found`)
+    }
+  }
+
+  private toSessionDto(session: Session): SessionDto {
+    const endedAt = session.endTime ?? null
+    const duration = endedAt ? endedAt.getTime() - session.startTime.getTime() : null
+
+    return {
+      id: session.id,
+      startedAt: session.startTime,
+      endedAt,
+      duration,
+      isActive: session.status !== SessionStatus.ENDED,
+    }
+  }
+
+  private extractSessionMeta(
+    settings?: Record<string, unknown>
+  ): { title: string; description?: string } {
+    const rawTitle = settings?.['title']
+    const rawDescription = settings?.['description']
+    const title =
+      typeof rawTitle === 'string' && rawTitle.trim().length > 0
+        ? rawTitle.trim()
+        : `Session ${new Date().toISOString()}`
+    const description =
+      typeof rawDescription === 'string' && rawDescription.trim().length > 0
+        ? rawDescription.trim()
+        : undefined
+
+    return { title, description }
   }
 }

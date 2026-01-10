@@ -65,6 +65,42 @@ export class TranscriptService {
     }
   }
 
+  /**
+   * 处理二进制音频数据 (原生 WebSocket)
+   * 前端发送的是 PCM 16-bit Int16Array 数据
+   */
+  async processBinaryAudio(
+    clientId: string,
+    audioBuffer: Buffer,
+    sessionId: string
+  ): Promise<TranscriptResultDto | null> {
+    try {
+      const client = this.doubaoClientManager.getOrCreate(clientId, sessionId)
+
+      if (!audioBuffer.length) {
+        this.logger.debug(`Empty binary audio data, clientId=${clientId}`)
+        return null
+      }
+
+      // 直接发送 PCM 数据到豆包 ASR
+      await client.sendAudio(audioBuffer, false)
+
+      const response = await client.nextResponse(this.getResponseTimeoutMs())
+      if (!response) {
+        this.logger.debug(`No response within timeout, clientId=${clientId}`)
+        return null
+      }
+
+      return this.buildTranscriptResult(response, sessionId, clientId)
+    } catch (error) {
+      this.logger.error(
+        `Doubao ASR binary failed, clientId=${clientId}`,
+        error instanceof Error ? error.stack : String(error)
+      )
+      return null
+    }
+  }
+
   async endAudio(clientId: string): Promise<void> {
     const client = this.doubaoClientManager.get(clientId)
     if (!client) {

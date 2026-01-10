@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { ConfigurationService } from './config/configuration.service'
 import configuration from './config/configuration'
+import { PrismaModule } from './database/prisma.module'
+import { MongoDBModule } from './database/mongodb.module'
 import { SessionModule } from './modules/session/session.module'
 import { SpeechModule } from './modules/speech/speech.module'
 import { AnalysisModule } from './modules/analysis/analysis.module'
@@ -16,6 +18,8 @@ import { AppService } from './app.service'
       load: [configuration],
       envFilePath: ['.env.local', '.env'],
     }),
+    PrismaModule,
+    MongoDBModule,
     SessionModule,
     SpeechModule,
     AnalysisModule,

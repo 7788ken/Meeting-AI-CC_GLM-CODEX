@@ -1,0 +1,54 @@
+// Prisma Schema for AI Meeting Assistant
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 会话模型 (B1007) - 用于管理会议会话的基本信息和状态
+model Session {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  status      SessionStatus @default(CREATED)
+  startTime   DateTime @default(now())
+  endTime     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 关联发言者
+  speakers    Speaker[]
+
+  @@map("sessions")
+}
+
+// 发言者模型 (B1008) - 用于管理会议中的发言者信息
+model Speaker {
+  id        String   @id @default(uuid())
+  sessionId String
+  name      String
+  avatarUrl String?
+  color     String   @default("#3B82F6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 关联会话
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, name])
+  @@index([sessionId])
+  @@map("speakers")
+}
+
+// 会话状态枚举
+enum SessionStatus {
+  CREATED    // 已创建
+  IN_PROGRESS // 进行中
+  PAUSED     // 已暂停
+  ENDED      // 已结束
+}

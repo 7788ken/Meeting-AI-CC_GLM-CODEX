@@ -14,6 +14,11 @@ export class CreateSpeechDto {
   @IsString()
   speakerName: string
 
+  @ApiPropertyOptional({ description: '发言者颜色' })
+  @IsOptional()
+  @IsString()
+  speakerColor?: string
+
   @ApiProperty({ description: '发言内容' })
   @IsString()
   content: string
@@ -22,6 +27,11 @@ export class CreateSpeechDto {
   @IsOptional()
   @IsNumber()
   confidence?: number
+
+  @ApiPropertyOptional({ description: '音频偏移量（毫秒）' })
+  @IsOptional()
+  @IsNumber()
+  audioOffset?: number
 }
 
 export class UpdateSpeechDto {
@@ -52,8 +62,14 @@ export class SpeechDto {
   @ApiProperty({ description: '发言者名称' })
   speakerName: string
 
+  @ApiPropertyOptional({ description: '发言者颜色' })
+  speakerColor?: string
+
   @ApiProperty({ description: '发言内容' })
   content: string
+
+  @ApiProperty({ description: '转写置信度' })
+  confidence: number
 
   @ApiProperty({ description: '开始时间' })
   startTime: Date
@@ -64,12 +80,12 @@ export class SpeechDto {
   @ApiProperty({ description: '时长（秒）' })
   duration: number
 
-  @ApiProperty({ description: '转写置信度' })
-  confidence: number
-
   @ApiProperty({ description: '是否被编辑' })
   isEdited: boolean
 
   @ApiProperty({ description: '是否被标记' })
   isMarked: boolean
+
+  @ApiPropertyOptional({ description: '音频偏移量（毫秒）' })
+  audioOffset?: number
 }

@@ -1,0 +1,356 @@
+/**
+ * WebSocket 服务 (F1012)
+ * 处理与后端的实时音频传输和转写结果接收
+ */
+
+export interface WebSocketConfig {
+  url?: string
+  protocols?: string | string[]
+  maxReconnectAttempts?: number
+}
+
+export type MessageHandler = (data: any) => void
+export type ConnectionHandler = () => void
+export type ErrorHandler = (error: Event) => void
+
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
+
+export interface ConnectionStatus {
+  state: ConnectionState
+  attempt: number
+  maxAttempts: number
+  nextRetryMs?: number
+}
+
+export type ConnectionStatusHandler = (status: ConnectionStatus) => void
+
+export interface TranscriptMessage {
+  type: 'transcript' | 'error' | 'status'
+  data: {
+    sessionId?: string
+    content?: string
+    speakerId?: string
+    speakerName?: string
+    confidence?: number
+    isFinal?: boolean
+    timestamp?: number
+    error?: string
+  }
+}
+
+export class WebSocketService {
+  private ws: WebSocket | null = null
+  private url: string
+  private protocols?: string | string[]
+  private maxReconnectAttempts: number
+
+  private connectionStatusValue!: ConnectionStatus
+
+  private reconnectAttempts = 0
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private manualClose = false
+  private connectPromise: Promise<void> | null = null
+
+  private lastSessionId: string | null = null
+  private lastTranscribeConfig: { language?: string; model?: string } | null = null
+  private isTranscribing = false
+
+  private onMessageCallback: MessageHandler | null = null
+  private onOpenCallback: ConnectionHandler | null = null
+  private onCloseCallback: ConnectionHandler | null = null
+  private onErrorCallback: ErrorHandler | null = null
+  private onConnectionStatusCallback: ConnectionStatusHandler | null = null
+
+  constructor(config?: WebSocketConfig) {
+    const getWsUrl = () => {
+      // 开发环境直接连接后端 WebSocket，生产环境使用当前 host
+      if (import.meta.env.DEV) {
+        return 'ws://127.0.0.1:8000/transcript'
+      }
+      return (globalThis as any).__VITE_WS_URL__ || `ws://${location.host}/transcript`
+    }
+
+    this.url = config?.url || getWsUrl()
+    this.protocols = config?.protocols
+    this.maxReconnectAttempts = Math.min(config?.maxReconnectAttempts || 5, 5)
+    this.connectionStatusValue = {
+      state: 'disconnected',
+      attempt: 0,
+      maxAttempts: this.maxReconnectAttempts,
+    }
+  }
+
+  /**
+   * 连接 WebSocket
+   */
+  connect(): Promise<void> {
+    if (this.isConnected) return Promise.resolve()
+    if (this.connectPromise) return this.connectPromise
+
+    this.manualClose = false
+    const isReconnecting = this.reconnectAttempts > 0
+    this.emitConnectionStatus({
+      state: isReconnecting ? 'reconnecting' : 'connecting',
+      attempt: this.reconnectAttempts,
+      maxAttempts: this.maxReconnectAttempts,
+    })
+
+    this.connectPromise = new Promise((resolve, reject) => {
+      let settled = false
+
+      try {
+        this.ws = new WebSocket(this.url, this.protocols)
+
+        this.ws.onopen = () => {
+          console.log('[WebSocket] 连接成功')
+          this.reconnectAttempts = 0
+          this.emitConnectionStatus({
+            state: 'connected',
+            attempt: 0,
+            maxAttempts: this.maxReconnectAttempts,
+          })
+          this.restoreSubscriptions()
+          this.onOpenCallback?.()
+          settled = true
+          resolve()
+          this.connectPromise = null
+        }
+
+        this.ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            this.onMessageCallback?.(data)
+          } catch (error) {
+            console.error('[WebSocket] 消息解析失败:', error)
+          }
+        }
+
+        this.ws.onclose = () => {
+          console.log('[WebSocket] 连接关闭')
+          this.ws = null
+          this.onCloseCallback?.()
+          if (!this.manualClose) {
+            this.attemptReconnect()
+          } else {
+            this.emitConnectionStatus({
+              state: 'disconnected',
+              attempt: 0,
+              maxAttempts: this.maxReconnectAttempts,
+            })
+          }
+          this.connectPromise = null
+        }
+
+        this.ws.onerror = (error) => {
+          console.error('[WebSocket] 错误:', error)
+          this.onErrorCallback?.(error)
+          if (!settled) {
+            settled = true
+            reject(error)
+            this.connectPromise = null
+          }
+        }
+      } catch (error) {
+        reject(error)
+        this.connectPromise = null
+      }
+    })
+
+    return this.connectPromise
+  }
+
+  /**
+   * 断开连接
+   */
+  disconnect(): void {
+    this.manualClose = true
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    if (this.ws) {
+      this.ws.close()
+      this.ws = null
+    }
+    this.connectPromise = null
+    this.reconnectAttempts = 0
+    this.emitConnectionStatus({
+      state: 'disconnected',
+      attempt: 0,
+      maxAttempts: this.maxReconnectAttempts,
+    })
+  }
+
+  /**
+   * 发送音频数据
+   */
+  sendAudioData(pcm16Data: Int16Array): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[WebSocket] 未连接，无法发送音频数据')
+      return
+    }
+
+    // 直接发送二进制数据
+    this.ws.send(pcm16Data.buffer)
+  }
+
+  /**
+   * 发送 JSON 消息
+   */
+  sendMessage(data: Record<string, unknown>): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[WebSocket] 未连接，无法发送消息')
+      return
+    }
+
+    this.ws.send(JSON.stringify(data))
+  }
+
+  /**
+   * 设置会话
+   */
+  setSession(sessionId: string): void {
+    this.lastSessionId = sessionId
+    this.sendMessage({
+      type: 'set_session',
+      sessionId,
+    })
+  }
+
+  /**
+   * 开始转写
+   */
+  startTranscribe(config?: { language?: string; model?: string }): void {
+    this.isTranscribing = true
+    this.lastTranscribeConfig = config || null
+    this.sendMessage({
+      type: 'start_transcribe',
+      ...config,
+    })
+  }
+
+  /**
+   * 停止转写
+   */
+  stopTranscribe(): void {
+    this.isTranscribing = false
+    this.sendMessage({
+      type: 'stop_transcribe',
+    })
+  }
+
+  /**
+   * 自动重连
+   */
+  private attemptReconnect(): void {
+    if (this.manualClose) return
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('[WebSocket] 达到最大重连次数')
+      this.emitConnectionStatus({
+        state: 'failed',
+        attempt: this.reconnectAttempts,
+        maxAttempts: this.maxReconnectAttempts,
+      })
+      return
+    }
+
+    this.reconnectAttempts++
+    console.log(`[WebSocket] 尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+
+    const delayMs = this.getReconnectDelayMs(this.reconnectAttempts)
+    this.emitConnectionStatus({
+      state: 'reconnecting',
+      attempt: this.reconnectAttempts,
+      maxAttempts: this.maxReconnectAttempts,
+      nextRetryMs: delayMs,
+    })
+
+    this.reconnectTimer = setTimeout(() => {
+      this.connect().catch((error) => {
+        console.error('[WebSocket] 重连失败:', error)
+      })
+    }, delayMs)
+  }
+
+  private getReconnectDelayMs(attempt: number): number {
+    const delays = [1000, 2000, 5000, 10000]
+    const index = Math.max(0, Math.min(attempt - 1, delays.length - 1))
+    return delays[index]
+  }
+
+  private restoreSubscriptions(): void {
+    if (!this.isConnected) return
+
+    if (this.lastSessionId) {
+      this.sendMessage({
+        type: 'set_session',
+        sessionId: this.lastSessionId,
+      })
+    }
+
+    if (this.isTranscribing) {
+      this.sendMessage({
+        type: 'start_transcribe',
+        ...(this.lastTranscribeConfig || {}),
+      })
+    }
+  }
+
+  private emitConnectionStatus(status: ConnectionStatus): void {
+    this.connectionStatusValue = status
+    this.onConnectionStatusCallback?.(status)
+  }
+
+  get connectionStatus(): ConnectionStatus {
+    return this.connectionStatusValue
+  }
+
+  /**
+   * 获取连接状态
+   */
+  get isConnected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN
+  }
+
+  get readyState(): number {
+    return this.ws?.readyState ?? WebSocket.CLOSED
+  }
+
+  /**
+   * 事件监听器
+   */
+  onMessage(callback: MessageHandler): void {
+    this.onMessageCallback = callback
+  }
+
+  onOpen(callback: ConnectionHandler): void {
+    this.onOpenCallback = callback
+  }
+
+  onClose(callback: ConnectionHandler): void {
+    this.onCloseCallback = callback
+  }
+
+  onError(callback: ErrorHandler): void {
+    this.onErrorCallback = callback
+  }
+
+  onConnectionStatus(callback: ConnectionStatusHandler): void {
+    this.onConnectionStatusCallback = callback
+  }
+
+  /**
+   * 移除所有监听器
+   */
+  removeAllListeners(): void {
+    this.onMessageCallback = null
+    this.onOpenCallback = null
+    this.onCloseCallback = null
+    this.onErrorCallback = null
+    this.onConnectionStatusCallback = null
+  }
+}
+
+// 导出单例
+export const websocket = new WebSocketService()

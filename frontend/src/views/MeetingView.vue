@@ -1,211 +1,387 @@
 <template>
-  <div class="meeting-container">
-    <!-- 顶部栏 -->
-    <header class="meeting-header">
-      <div class="header-left">
-        <el-button size="small" class="back-button" @click="router.push('/')">← 返回</el-button>
-        <h1 class="app-title">AI会议助手</h1>
-        <el-tag v-if="meetingStore.currentSession" type="success" size="small">
-          会话进行中
-        </el-tag>
-      </div>
+  <MainLayout>
+    <template #header>
+      <AppHeader
+        title="AI会议助手"
+        :showBackButton="true"
+        :status="sessionInfo?.isActive ? 'active' : 'ended'"
+        @back="router.push('/')"
+      />
+
       <div class="header-right">
         <el-select
-          v-model="selectedModel"
-          placeholder="选择AI模型"
+          v-model="selectedAnalysisType"
+          placeholder="分析类型"
           size="small"
-          style="width: 120px; margin-right: 12px"
+          style="width: 120px; margin-right: 8px"
         >
-          <el-option
-            v-for="model in AI_MODELS"
-            :key="model.value"
-            :label="model.label"
-            :value="model.value"
-          />
+          <el-option label="会议摘要" value="summary" />
+          <el-option label="行动项" value="action-items" />
+          <el-option label="情感分析" value="sentiment" />
+          <el-option label="关键词" value="keywords" />
+          <el-option label="议题分析" value="topics" />
         </el-select>
+
         <el-button
-          :type="meetingStore.isRecording ? 'danger' : 'primary'"
-          :icon="meetingStore.isRecording ? 'VideoPause' : 'VideoPlay'"
           size="small"
-          @click="toggleRecording"
+          type="danger"
+          :loading="endingSession"
+          :disabled="!sessionId || isSessionEnded"
+          @click="endSession"
         >
-          {{ meetingStore.isRecording ? '停止录音' : '开始录音' }}
+          结束会话
         </el-button>
-        <el-button size="small" @click="router.push('/settings')">设置</el-button>
+
+        <RecordButton
+          :status="recordingStatus"
+          :isPaused="isPaused"
+          :disabled="isSessionEnded"
+          disabledText="会话已结束"
+          @toggle="toggleRecording"
+          @pause="pauseRecording"
+        />
+
+        <el-tag v-if="wsReconnectTag" :type="wsReconnectTag.type" size="small">
+          {{ wsReconnectTag.text }}
+        </el-tag>
+
+        <el-button size="small" type="success" @click="generateAnalysis">生成分析</el-button>
       </div>
-    </header>
+    </template>
 
-    <!-- 主内容区 -->
-    <main class="meeting-main">
-      <!-- 左侧：转写显示区 -->
-      <section class="transcript-panel">
-        <div class="panel-header">
-          <h2>实时转写</h2>
-          <el-button-group size="small">
-            <el-button @click="meetingStore.clearSession">清空</el-button>
-          </el-button-group>
-        </div>
-        <div ref="transcriptRef" class="transcript-list">
-          <div
-            v-for="speech in meetingStore.activeSpeeches"
-            :key="speech.id"
-            :class="[
-              'speech-item',
-              { selected: speech.id === meetingStore.selectedSpeechId },
-            ]"
-            :style="{ borderColor: getSpeakerColor(speech.speakerId) }"
-            @click="selectSpeech(speech.id)"
-          >
-            <div class="speech-header">
-              <span
-                class="speaker-name"
-                :style="{ backgroundColor: getSpeakerColor(speech.speakerId) }"
-              >
-                {{ speech.speakerName }}
-              </span>
-              <span class="speech-time">{{ formatTime(speech.startTime) }}</span>
-            </div>
-            <div class="speech-content">{{ speech.content }}</div>
+    <!-- 左侧：转写显示区 -->
+    <section class="transcript-panel">
+      <div class="panel-header">
+        <h2>实时转写</h2>
+        <el-button-group size="small">
+          <el-button @click="loadSpeeches">刷新</el-button>
+          <el-button @click="speeches = []">清空</el-button>
+        </el-button-group>
+      </div>
+      <div ref="transcriptRef" class="transcript-list">
+        <div
+          v-for="speech in speeches"
+          :key="speech.id"
+          :class="['speech-item', { selected: speech.id === selectedSpeechId }]"
+          :style="{ borderLeftColor: speech.speakerColor }"
+          @click="selectSpeech(speech.id)"
+        >
+          <div class="speech-header">
+            <span class="speaker-name" :style="{ backgroundColor: speech.speakerColor || '#1890ff' }">
+              {{ speech.speakerName }}
+            </span>
+            <span class="speech-time">{{ formatTime(speech.startTime) }}</span>
+            <span v-if="speech.isMarked" class="mark-badge">已标记</span>
           </div>
-          <div v-if="meetingStore.activeSpeeches.length === 0" class="empty-state">
-            <el-empty description="暂无转写内容，点击右上角开始录音" />
-          </div>
+          <div class="speech-content">{{ speech.content }}</div>
+          <div v-if="speech.isEdited" class="edited-badge">已编辑</div>
         </div>
-      </section>
+        <div v-if="speeches.length === 0" class="empty-state">
+          <el-empty description="暂无转写内容，点击右上角开始录音" />
+        </div>
+      </div>
+    </section>
 
-      <!-- 右侧：AI分析区 -->
-      <section class="analysis-panel">
-        <div class="panel-header">
-          <h2>AI分析</h2>
+    <!-- 右侧：AI分析区 -->
+    <section class="analysis-panel">
+      <div class="panel-header">
+        <h2>AI分析</h2>
+        <el-tag v-if="currentAnalysis?.isCached" type="info" size="small">缓存</el-tag>
+      </div>
+      <div class="analysis-content">
+        <div v-if="analysisLoading" v-loading="true" class="analysis-loading"></div>
+        <div v-else-if="currentAnalysis" class="analysis-result">
+          <div class="analysis-meta">
+            <span>模型: {{ currentAnalysis.modelUsed }}</span>
+            <span v-if="currentAnalysis.processingTime">耗时: {{ currentAnalysis.processingTime }}ms</span>
+            <span>状态: {{ statusText }}</span>
+          </div>
+          <div class="analysis-text" v-html="renderMarkdown(currentAnalysis.result)"></div>
+          <div class="analysis-actions">
+            <el-button size="small" @click="copyAnalysis">复制</el-button>
+            <el-button size="small" type="primary" @click="generateAnalysis">重新生成</el-button>
+          </div>
         </div>
-        <div class="analysis-content">
-          <template v-if="meetingStore.selectedAnalysis">
-            <el-tabs v-model="activeTab" type="border-card">
-              <el-tab-pane label="核心要点" name="core">
-                <div class="analysis-text">
-                  {{ meetingStore.selectedAnalysis.coreAnalysis }}
-                </div>
-              </el-tab-pane>
-              <el-tab-pane label="简要回答" name="brief">
-                <div class="analysis-text">
-                  {{ meetingStore.selectedAnalysis.briefAnswer }}
-                </div>
-              </el-tab-pane>
-              <el-tab-pane label="深度分析" name="deep">
-                <div class="analysis-text">
-                  {{ meetingStore.selectedAnalysis.deepAnswer }}
-                </div>
-              </el-tab-pane>
-            </el-tabs>
-            <div class="analysis-actions">
-              <el-button size="small" @click="copyAnalysis">复制</el-button>
-              <el-button size="small" type="primary" @click="regenerateAnalysis">
-                重新生成
-              </el-button>
-            </div>
-          </template>
-          <template v-else>
-            <div class="empty-state">
-              <el-empty description="点击左侧发言查看AI分析" />
-            </div>
-          </template>
+        <div v-else class="empty-state">
+          <el-empty description="选择发言记录后点击「生成分析」" />
         </div>
-      </section>
-    </main>
-  </div>
+      </div>
+    </section>
+  </MainLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { useMeetingStore } from '@/stores/meeting'
-import { AI_MODELS } from '@/types'
-import type { Speech } from '@/stores/meeting'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { sessionApi, speechApi, analysisApi, type Session, type Speech, type AIAnalysis } from '@/services/api'
+import { transcription } from '@/services/transcription'
+import type { ConnectionStatus } from '@/services/websocket'
+import MainLayout from '@/components/MainLayout.vue'
+import AppHeader from '@/components/AppHeader.vue'
+import RecordButton from '@/components/RecordButton.vue'
 
 const router = useRouter()
-const meetingStore = useMeetingStore()
+const route = useRoute()
 
 // 状态
-const selectedModel = ref<string>('qianwen')
-const activeTab = ref<string>('core')
+const sessionId = ref<string>('')
+const sessionInfo = ref<Session | null>(null)
+const speeches = ref<Speech[]>([])
+const selectedSpeechId = ref<string>('')
+const currentAnalysis = ref<AIAnalysis | null>(null)
+const analysisLoading = ref(false)
+const recordingStatus = ref<'idle' | 'connecting' | 'recording' | 'paused' | 'error'>('idle')
+const isPaused = ref(false)
+const selectedAnalysisType = ref<string>('summary')
 const transcriptRef = ref<HTMLElement>()
+const endingSession = ref(false)
+const sessionEndedOverride = ref(false)
+const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 
-// 发言者颜色映射
-const speakerColors = new Map<string, string>()
-function getSpeakerColor(speakerId: string): string {
-  if (!speakerColors.has(speakerId)) {
-    const colors = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2']
-    const colorIndex = speakerColors.size % colors.length
-    speakerColors.set(speakerId, colors[colorIndex])
+// 计算属性
+const statusText = computed(() => {
+  if (!currentAnalysis.value) return ''
+  const statusMap: Record<string, string> = {
+    pending: '等待中',
+    processing: '处理中',
+    completed: '已完成',
+    failed: '失败',
   }
-  return speakerColors.get(speakerId)!
+  return statusMap[currentAnalysis.value.status] || currentAnalysis.value.status
+})
+
+const isSessionEnded = computed(() => {
+  if (sessionEndedOverride.value) return true
+  if (!sessionInfo.value) return false
+  return !sessionInfo.value.isActive
+})
+
+const wsReconnectTag = computed(() => {
+  const status = wsConnectionStatus.value
+  if (!status) return null
+
+  if (status.state === 'reconnecting') {
+    const nextRetrySeconds = status.nextRetryMs ? Math.ceil(status.nextRetryMs / 1000) : null
+    const nextRetryText = nextRetrySeconds ? `，${nextRetrySeconds}s 后重试` : ''
+    return {
+      type: 'warning' as const,
+      text: `正在重连（${status.attempt}/${status.maxAttempts}）${nextRetryText}`,
+    }
+  }
+
+  if (status.state === 'failed') {
+    return {
+      type: 'danger' as const,
+      text: '重连失败',
+    }
+  }
+
+  return null
+})
+
+// 初始化
+onMounted(async () => {
+  sessionId.value = route.params.id as string || route.query.id as string || ''
+  if (sessionId.value) {
+    await loadSession()
+    await loadSpeeches()
+  }
+})
+
+onUnmounted(() => {
+  transcription.dispose()
+})
+
+// 加载会话信息
+async function loadSession() {
+  try {
+    const response = await sessionApi.get(sessionId.value)
+    sessionInfo.value = response.data?.data || null
+    sessionEndedOverride.value = !!sessionInfo.value && !sessionInfo.value.isActive
+  } catch (error) {
+    console.error('加载会话失败:', error)
+  }
 }
 
-// 格式化时间
-function formatTime(date: Date): string {
-  const hours = date.getHours().toString().padStart(2, '0')
-  const minutes = date.getMinutes().toString().padStart(2, '0')
-  return `${hours}:${minutes}`
+// 加载发言记录
+async function loadSpeeches() {
+  try {
+    const response = await speechApi.list(sessionId.value)
+    speeches.value = response.data?.data || []
+  } catch (error) {
+    console.error('加载发言记录失败:', error)
+  }
+}
+
+// 结束会话
+async function endSession() {
+  if (!sessionId.value || isSessionEnded.value) return
+
+  try {
+    await ElMessageBox.confirm(
+      '确定要结束当前会话吗？结束后将无法继续录音。',
+      '结束会话确认',
+      {
+        confirmButtonText: '结束会话',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  try {
+    endingSession.value = true
+
+    if (recordingStatus.value !== 'idle') {
+      transcription.stop()
+      recordingStatus.value = 'idle'
+      isPaused.value = false
+      wsConnectionStatus.value = null
+    }
+
+    await sessionApi.end(sessionId.value)
+    sessionEndedOverride.value = true
+    await loadSession()
+    ElMessage.success('会话已结束')
+  } catch (error) {
+    console.error('结束会话失败:', error)
+    ElMessage.error('结束会话失败')
+  } finally {
+    endingSession.value = false
+  }
 }
 
 // 选择发言
 function selectSpeech(id: string) {
-  meetingStore.selectSpeech(id)
-  generateAnalysis(id)
-}
-
-// 生成AI分析
-async function generateAnalysis(speechId: string) {
-  // TODO: 调用后端API生成分析
-  ElMessage.info('AI分析功能开发中...')
-}
-
-// 复制分析
-function copyAnalysis() {
-  if (!meetingStore.selectedAnalysis) return
-
-  const text =
-    activeTab.value === 'core'
-      ? meetingStore.selectedAnalysis.coreAnalysis
-      : activeTab.value === 'brief'
-        ? meetingStore.selectedAnalysis.briefAnswer
-        : meetingStore.selectedAnalysis.deepAnswer
-
-  navigator.clipboard.writeText(text)
-  ElMessage.success('已复制到剪贴板')
-}
-
-// 重新生成分析
-function regenerateAnalysis() {
-  if (meetingStore.selectedSpeechId) {
-    generateAnalysis(meetingStore.selectedSpeechId)
-  }
+  selectedSpeechId.value = id
 }
 
 // 切换录音
 async function toggleRecording() {
-  if (meetingStore.isRecording) {
+  if (isSessionEnded.value) {
+    ElMessage.warning('会话已结束，无法录音')
+    return
+  }
+
+  if (recordingStatus.value === 'recording') {
     // 停止录音
-    meetingStore.isRecording = false
-    meetingStore.endSession()
-    ElMessage.info('录音已停止')
+    stopRecording()
   } else {
     // 开始录音
-    try {
-      // 请求麦克风权限
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach((track) => track.stop())
-
-      meetingStore.createSession()
-      meetingStore.isRecording = true
-      ElMessage.success('录音已开始')
-
-      // TODO: 连接WebSocket开始实时转写
-    } catch (error) {
-      ElMessage.error('无法访问麦克风，请检查权限设置')
-    }
+    await startRecording()
   }
+}
+
+// 开始录音
+async function startRecording() {
+  try {
+    if (isSessionEnded.value) {
+      ElMessage.warning('会话已结束，无法录音')
+      return
+    }
+
+    recordingStatus.value = 'connecting'
+
+    // 设置转写服务回调
+    transcription.start({
+      sessionId: sessionId.value,
+      model: 'doubao',
+      onTranscript: (transcript: Speech) => {
+        speeches.value.push(transcript)
+        scrollToBottom()
+      },
+      onError: (error: Error) => {
+        ElMessage.error(`转写错误: ${error.message}`)
+      },
+      onStatusChange: (status) => {
+        recordingStatus.value = status
+      },
+      onConnectionStatusChange: (status) => {
+        wsConnectionStatus.value = status
+      },
+    })
+
+    ElMessage.success('录音已开始')
+  } catch (error) {
+    console.error('开始录音失败:', error)
+    ElMessage.error('无法访问麦克风，请检查权限设置')
+    recordingStatus.value = 'idle'
+  }
+}
+
+// 停止录音
+function stopRecording() {
+  transcription.stop()
+  recordingStatus.value = 'idle'
+  isPaused.value = false
+  wsConnectionStatus.value = null
+  ElMessage.info('录音已停止')
+}
+
+// 暂停录音
+function pauseRecording() {
+  if (isPaused.value) {
+    transcription.resume()
+    isPaused.value = false
+  } else {
+    transcription.pause()
+    isPaused.value = true
+  }
+}
+
+// 生成 AI 分析
+async function generateAnalysis() {
+  if (speeches.value.length === 0) {
+    ElMessage.warning('请先开始录音并获取转写内容')
+    return
+  }
+
+  analysisLoading.value = true
+  try {
+    const response = await analysisApi.getOrCreate({
+      sessionId: sessionId.value,
+      speechIds: speeches.value.map(s => s.id),
+      analysisType: selectedAnalysisType.value as any,
+    })
+    currentAnalysis.value = response.data?.data || null
+    ElMessage.success('AI分析生成成功')
+  } catch (error) {
+    console.error('生成分析失败:', error)
+    ElMessage.error('生成分析失败')
+  } finally {
+    analysisLoading.value = false
+  }
+}
+
+// 复制分析
+function copyAnalysis() {
+  if (!currentAnalysis.value) return
+  navigator.clipboard.writeText(currentAnalysis.value.result)
+  ElMessage.success('已复制到剪贴板')
+}
+
+// 渲染 Markdown（简单实现）
+function renderMarkdown(text: string): string {
+  return text
+    .replace(/### (.*)/g, '<h3>$1</h3>')
+    .replace(/## (.*)/g, '<h2>$1</h2>')
+    .replace(/# (.*)/g, '<h1>$1</h1>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/- (.*)/g, '<li>$1</li>')
+    .replace(/\n/g, '<br>')
+}
+
+// 格式化时间
+function formatTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const hours = date.getHours().toString().padStart(2, '0')
+  const minutes = date.getMinutes().toString().padStart(2, '0')
+  const seconds = date.getSeconds().toString().padStart(2, '0')
+  return `${hours}:${minutes}:${seconds}`
 }
 
 // 自动滚动到底部
@@ -216,63 +392,13 @@ function scrollToBottom() {
     }
   })
 }
-
-onMounted(() => {
-  // 初始化
-})
-
-onUnmounted(() => {
-  // 清理
-})
 </script>
 
 <style scoped>
-.meeting-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background-color: #f5f5f5;
-}
-
-/* 顶部栏 */
-.meeting-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 24px;
-  background-color: #fff;
-  border-bottom: 1px solid #e8e8e8;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.app-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1890ff;
-}
-
 .header-right {
   display: flex;
   align-items: center;
-}
-
-.back-button {
-  padding: 0 8px;
-}
-
-/* 主内容区 */
-.meeting-main {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-  padding: 16px;
-  gap: 16px;
+  gap: 8px;
 }
 
 /* 转写面板 */
@@ -340,6 +466,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+  gap: 8px;
 }
 
 .speaker-name {
@@ -354,9 +481,24 @@ onUnmounted(() => {
   color: #999;
 }
 
+.mark-badge {
+  padding: 2px 6px;
+  background-color: #faad14;
+  color: #fff;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.edited-badge {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #52c41a;
+}
+
 .speech-content {
   line-height: 1.6;
   color: #333;
+  white-space: pre-wrap;
 }
 
 .empty-state {
@@ -374,11 +516,47 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.analysis-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analysis-result {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.analysis-meta {
+  display: flex;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e8e8e8;
+  font-size: 12px;
+  color: #999;
+}
+
 .analysis-text {
+  flex: 1;
   padding: 16px;
   line-height: 1.8;
   color: #333;
   white-space: pre-wrap;
+  overflow-y: auto;
+}
+
+.analysis-text :deep(h1),
+.analysis-text :deep(h2),
+.analysis-text :deep(h3) {
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.analysis-text :deep(li) {
+  margin-left: 20px;
 }
 
 .analysis-actions {
@@ -391,10 +569,6 @@ onUnmounted(() => {
 
 /* 响应式 */
 @media (max-width: 768px) {
-  .meeting-main {
-    flex-direction: column;
-  }
-
   .transcript-panel,
   .analysis-panel {
     flex: none;

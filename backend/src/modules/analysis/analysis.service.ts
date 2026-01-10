@@ -1,67 +1,197 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import { HttpService } from '@nestjs/axios'
-import { firstValueFrom } from 'rxjs'
-import { AnalysisDto } from './dto/analysis.dto'
-import { GenerateAnalysisDto } from './dto/analysis.dto'
-import { AIModel } from './dto/analysis.enum'
+import { Injectable, NotFoundException, Logger } from '@nestjs/common'
+import { InjectModel } from '@nestjs/mongoose'
+import { Model, Types } from 'mongoose'
+import { Analysis, AnalysisDocument } from './schemas/analysis.schema'
+import { AnalysisDto, GenerateAnalysisDto } from './dto/analysis.dto'
+import { AIModel, AnalysisType } from './dto/analysis.enum'
+import { GlmClient } from './clients/glm.client'
+import { SpeechService } from '../speech/speech.service'
 
+/**
+ * AI 分析服务 (B1026)
+ * 使用 Mongoose 实现分析结果的持久化
+ */
 @Injectable()
 export class AnalysisService {
-  private analyses: Map<string, AnalysisDto> = new Map()
+  private readonly logger = new Logger(AnalysisService.name)
 
   constructor(
-    private readonly configService: ConfigService,
-    private readonly httpService: HttpService
+    @InjectModel(Analysis.name) private analysisModel: Model<AnalysisDocument>,
+    private readonly glmClient: GlmClient,
+    private readonly speechService: SpeechService,
   ) {}
 
+  /**
+   * 生成 AI 分析并持久化
+   */
   async generate(dto: GenerateAnalysisDto): Promise<AnalysisDto> {
-    const model = dto.model || AIModel.QIANWEN
-    const speechId = dto.speechIds[0] // 暂时只处理单条发言
+    const startTime = Date.now()
 
-    // 调用AI模型生成分析
-    const analysisContent = await this.callAIModel(model, speechId)
+    // 创建分析记录（初始状态为 processing）
+    const analysis = new this.analysisModel({
+      sessionId: dto.sessionId,
+      analysisType: dto.analysisType || AnalysisType.SUMMARY,
+      modelUsed: AIModel.GLM,
+      modelVersion: 'glm-4',
+      result: '',
+      status: 'processing',
+      isCached: false,
+      relatedSpeeches: dto.speechIds.map((id) => new Types.ObjectId(id)),
+    })
 
-    const analysis: AnalysisDto = {
-      id: this.generateId(),
-      speechId,
-      sessionId: '', // TODO: 从speech获取
-      coreAnalysis: analysisContent.core || '暂无核心要点',
-      briefAnswer: analysisContent.brief || '暂无简要回答',
-      deepAnswer: analysisContent.deep || '暂无深度分析',
-      modelUsed: model,
-      generatedAt: new Date(),
+    await analysis.save()
+
+    try {
+      // 调用 AI 模型生成分析
+      const result = await this.callAIModel(
+        dto.analysisType || AnalysisType.SUMMARY,
+        dto.sessionId,
+        dto.speechIds,
+      )
+
+      const processingTime = Date.now() - startTime
+
+      // 更新分析结果
+      analysis.result = result
+      analysis.status = 'completed'
+      analysis.processingTime = processingTime
+      analysis.generatedAt = new Date()
+      await analysis.save()
+
+      return this.toDto(analysis)
+    } catch (error) {
+      // 标记为失败
+      analysis.status = 'failed'
+      analysis.errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      await analysis.save()
+
+      throw error
     }
-
-    this.analyses.set(analysis.id, analysis)
-    return analysis
   }
 
+  /**
+   * 查询单条分析记录
+   */
   async findOne(id: string): Promise<AnalysisDto> {
-    const analysis = this.analyses.get(id)
+    const analysis = await this.analysisModel.findById(id)
     if (!analysis) {
       throw new NotFoundException(`Analysis ${id} not found`)
     }
-    return analysis
+    return this.toDto(analysis)
   }
 
-  private async callAIModel(model: AIModel, speechId: string) {
-    // TODO: 根据不同模型调用对应的API
-    // 这里先返回模拟数据
-    await this.delay(1000) // 模拟API调用延迟
+  /**
+   * 查询会话的所有分析记录
+   */
+  async findBySession(sessionId: string): Promise<AnalysisDto[]> {
+    const analyses = await this.analysisModel
+      .find({ sessionId })
+      .sort({ createdAt: -1 })
+      .exec()
 
-    return {
-      core: '这是核心要点分析',
-      brief: '这是简要回答',
-      deep: '这是深度分析内容',
+    return analyses.map((a) => this.toDto(a))
+  }
+
+  /**
+   * 查询会话的特定类型分析
+   */
+  async findByType(sessionId: string, analysisType: string): Promise<AnalysisDto[]> {
+    const analyses = await this.analysisModel
+      .find({ sessionId, analysisType })
+      .sort({ createdAt: -1 })
+      .exec()
+
+    return analyses.map((a) => this.toDto(a))
+  }
+
+  /**
+   * 获取或生成缓存的分析结果
+   */
+  async getOrCreate(dto: GenerateAnalysisDto): Promise<AnalysisDto> {
+    // 查找是否已有缓存的分析
+    const existing = await this.analysisModel
+      .findOne({
+        sessionId: dto.sessionId,
+        analysisType: dto.analysisType || AnalysisType.SUMMARY,
+        modelUsed: AIModel.GLM,
+        status: 'completed',
+        createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // 24小时内
+      })
+      .sort({ createdAt: -1 })
+
+    if (existing) {
+      // 标记为缓存
+      existing.isCached = true
+      existing.cachedAt = new Date()
+      await existing.save()
+
+      this.logger.log(`Using cached analysis for session ${dto.sessionId}`)
+      return this.toDto(existing)
+    }
+
+    // 生成新的分析
+    return this.generate(dto)
+  }
+
+  /**
+   * 删除会话的所有分析记录
+   */
+  async deleteBySession(sessionId: string): Promise<void> {
+    await this.analysisModel.deleteMany({ sessionId }).exec()
+  }
+
+  /**
+   * 调用 AI 模型生成分析
+   */
+  private async callAIModel(
+    analysisType: AnalysisType,
+    sessionId: string,
+    speechIds: string[],
+  ): Promise<string> {
+    // 获取发言记录内容
+    const speeches = await this.getSpeechesForAnalysis(speechIds)
+
+    return this.glmClient.generateAnalysis({
+      analysisType,
+      speeches,
+      sessionId,
+    })
+  }
+
+  /**
+   * 获取发言记录用于分析
+   */
+  private async getSpeechesForAnalysis(speechIds: string[]): Promise<Array<{ content: string; speakerName: string }>> {
+    if (speechIds.length === 0) {
+      return []
+    }
+
+    try {
+      const speeches = await Promise.all(speechIds.map((id) => this.speechService.findOne(id)))
+      return speeches.map((speech) => ({
+        content: speech.content ?? '',
+        speakerName: speech.speakerName ?? '',
+      }))
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return []
+      }
+      throw error
     }
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms))
-  }
-
-  private generateId(): string {
-    return `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  private toDto(analysis: AnalysisDocument): AnalysisDto {
+    return {
+      id: analysis._id.toString(),
+      sessionId: analysis.sessionId,
+      analysisType: analysis.analysisType,
+      modelUsed: analysis.modelUsed,
+      result: analysis.result,
+      status: analysis.status,
+      processingTime: analysis.processingTime,
+      isCached: analysis.isCached,
+      generatedAt: analysis.generatedAt,
+      createdAt: analysis.createdAt,
+    }
   }
 }
