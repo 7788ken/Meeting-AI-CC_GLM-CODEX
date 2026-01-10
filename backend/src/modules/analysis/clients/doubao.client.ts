@@ -18,7 +18,7 @@ export class DoubaoClient {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly httpService: HttpService,
+    private readonly httpService: HttpService
   ) {
     this.apiKey = this.configService.get<string>('DOUBAO_API_KEY') || ''
     this.endpointId = this.configService.get<string>('DOUBAO_ENDPOINT_ID') || ''
@@ -47,14 +47,17 @@ export class DoubaoClient {
       return this.parseResponse(response)
     } catch (error) {
       this.logger.error('Failed to call Doubao API', error)
-      throw new Error(`Doubao API call failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      throw new Error(
+        `Doubao API call failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
     }
   }
 
-  private buildPrompt(analysisType: string, speeches: Array<{ content: string; speakerName: string }>): string {
-    const speechesText = speeches
-      .map((s) => `${s.speakerName}: ${s.content}`)
-      .join('\n')
+  private buildPrompt(
+    analysisType: string,
+    speeches: Array<{ content: string; speakerName: string }>
+  ): string {
+    const speechesText = speeches.map(s => `${s.speakerName}: ${s.content}`).join('\n')
 
     const prompts: Record<string, string> = {
       summary: `请根据以下会议发言内容，生成一份简洁的会议摘要：
@@ -140,7 +143,7 @@ ${speechesText}
     this.logger.debug('Calling Doubao API...')
 
     const response = await firstValueFrom(
-      this.httpService.post(this.baseURL, requestBody, { headers }),
+      this.httpService.post(this.baseURL, requestBody, { headers })
     )
 
     if (response.data?.choices?.[0]?.message?.content) {
@@ -171,8 +174,8 @@ ${speechesText}
           {
             headers: { Authorization: `Bearer ${this.apiKey}` },
             timeout: 5000,
-          },
-        ),
+          }
+        )
       )
       return !!response.data?.choices?.[0]?.message?.content
     } catch {

@@ -49,6 +49,43 @@ services:
     networks:
       - meeting-ai-network
 
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: meeting-ai-backend
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/meeting_ai
+      MONGODB_URI: mongodb://mongo:27017/meeting_ai
+      REDIS_URI: redis://redis:6379
+      JWT_SECRET: your-secret-key-change-in-production
+    ports:
+      - '3000:3000'
+    depends_on:
+      - postgres
+      - mongo
+      - redis
+    networks:
+      - meeting-ai-network
+    restart: unless-stopped
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: meeting-ai-frontend
+    ports:
+      - '80:80'
+    depends_on:
+      - backend
+    networks:
+      - meeting-ai-network
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   mongo-data:

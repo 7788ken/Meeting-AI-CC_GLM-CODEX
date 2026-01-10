@@ -10,9 +10,7 @@ import { Connection } from 'mongoose'
 export class MongoDBService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MongoDBService.name)
 
-  constructor(
-    @InjectConnection() private readonly connection: Connection,
-  ) {}
+  constructor(@InjectConnection() private readonly connection: Connection) {}
 
   /**
    * 模块初始化时验证连接
@@ -24,7 +22,7 @@ export class MongoDBService implements OnModuleInit, OnModuleDestroy {
       } else {
         this.logger.warn('MongoDB connection not ready, waiting...')
         // 等待连接建立
-        await new Promise<void>((resolve) => {
+        await new Promise<void>(resolve => {
           const checkInterval = setInterval(() => {
             if (this.connection.readyState === 1) {
               clearInterval(checkInterval)

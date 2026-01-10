@@ -1,56 +1,92 @@
 #!/bin/bash
-# E2E 测试脚本 - 使用 Playwright MCP 进行浏览器验证
+# E2E 测试脚本 - 使用 Playwright CLI 进行测试
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 LOG_FILE=".claude/e2e-test.log"
-PID_FILE=".claude/e2e-test.pid"
 
-# 检查是否已在运行
-if [ -f "$PID_FILE" ]; then
-    OLD_PID=$(cat "$PID_FILE")
-    if ps -p "$OLD_PID" > /dev/null 2>&1; then
-        echo "E2E 测试已在运行 (PID: $OLD_PID)，跳过" >> "$LOG_FILE"
-        exit 0
-    fi
+echo "===== E2E 测试开始 $(date) =====" | tee -a "$LOG_FILE"
+
+# 检查是否有文件变更
+if git diff --quiet && git diff --cached --quiet 2>/dev/null; then
+    echo "没有文件变更，跳过 E2E 测试" | tee -a "$LOG_FILE"
+    exit 0
 fi
 
-# 启动后台测试任务
-(
-    echo "===== E2E 测试开始 $(date) =====" >> "$LOG_FILE"
-    
-    # 检查是否有修改的文件
-    if git diff --quiet && git diff --cached --quiet; then
-        echo "没有文件变更，跳过 E2E 测试" >> "$LOG_FILE"
-    else
-        # 检查是否修改了前端代码
-        FRONTEND_CHANGES=$(git diff --name-only HEAD 2>/dev/null | grep -E '^frontend/' || true)
-        
-        if [ -z "$FRONTEND_CHANGES" ]; then
-            echo "没有前端代码变更，跳过 E2E 测试" >> "$LOG_FILE"
-        else
-            echo "检测到前端代码变更，准备运行 E2E 测试..." >> "$LOG_FILE"
-            
-            # 检查前端开发服务器是否运行
-            if ! curl -s http://localhost:5173 > /dev/null; then
-                echo "前端开发服务器未运行，跳过 E2E 测试" >> "$LOG_FILE"
-                echo "提示: 启动前端服务器: cd frontend && npm run dev" >> "$LOG_FILE"
-            else
-                echo "前端服务正在运行，可以执行 Playwright MCP 测试" >> "$LOG_FILE"
-                
-                # 这里会触发 Playwright MCP 测试
-                # 实际测试需要在 AI 助手中使用 MCP 工具
-                echo "Playwright MCP 测试已就绪" >> "$LOG_FILE"
-            fi
-        fi
+# 检查是否修改了前端代码
+FRONTEND_CHANGES=$(git diff --name-only HEAD 2>/dev/null | grep -E '^frontend/' || true)
+
+if [ -z "$FRONTEND_CHANGES" ]; then
+    echo "没有前端代码变更，跳过 E2E 测试" | tee -a "$LOG_FILE"
+    exit 0
+fi
+
+echo "检测到前端代码变更:" | tee -a "$LOG_FILE"
+echo "$FRONTEND_CHANGES" | tee -a "$LOG_FILE"
+
+# 动态检测前端端口
+FRONTEND_PORT=""
+for port in 5173 5174 5175 5180 5181 5182; do
+    if curl -s "http://localhost:$port" > /dev/null 2>&1; then
+        FRONTEND_PORT=$port
+        break
     fi
-    
-    echo "===== E2E 测试完成 $(date) =====" >> "$LOG_FILE"
-) &
+done
 
-echo $! > "$PID_FILE"
-echo "E2E 测试已启动 (PID: $!)"
-echo "查看日志: tail -f $LOG_FILE"
+BACKEND_PORT=""
+if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
+    BACKEND_PORT=8000
+fi
 
-exit 0
+# 服务状态检查
+if [ -z "$FRONTEND_PORT" ]; then
+    echo "⚠️  前端服务未运行 (检测端口: 5173-5182)" | tee -a "$LOG_FILE"
+    FRONTEND_RUNNING=false
+else
+    echo "✅ 前端服务运行在: http://localhost:$FRONTEND_PORT" | tee -a "$LOG_FILE"
+    FRONTEND_RUNNING=true
+fi
+
+if [ -z "$BACKEND_PORT" ]; then
+    echo "⚠️  后端服务未运行 (端口 8000)" | tee -a "$LOG_FILE"
+    BACKEND_RUNNING=false
+else
+    echo "✅ 后端服务运行在: http://localhost:$BACKEND_PORT" | tee -a "$LOG_FILE"
+    BACKEND_RUNNING=true
+fi
+
+# 如果服务未运行，跳过测试
+if [ "$FRONTEND_RUNNING" = false ] || [ "$BACKEND_RUNNING" = false ]; then
+    echo "⏭️  服务未完全运行，跳过 E2E 测试" | tee -a "$LOG_FILE"
+    echo "   提示: 使用 'docker-compose up -d' 启动服务" | tee -a "$LOG_FILE"
+    exit 0
+fi
+
+# 运行 Playwright E2E 测试
+echo "🧪 开始运行 E2E 测试..." | tee -a "$LOG_FILE"
+
+cd frontend
+
+# 更新测试配置中的 URL
+cat > tests/e2e/config.ts << 'EOF'
+export const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
+export const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000'
+EOF
+
+# 运行测试
+FRONTEND_URL="http://localhost:$FRONTEND_PORT" \
+BACKEND_URL="http://localhost:$BACKEND_PORT" \
+npx playwright test --project=chromium tests/e2e/ 2>&1 | tee -a "$LOG_FILE"
+
+TEST_EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $TEST_EXIT_CODE -eq 0 ]; then
+    echo "✅ E2E 测试全部通过" | tee -a "$LOG_FILE"
+else
+    echo "❌ E2E 测试失败 (退出码: $TEST_EXIT_CODE)" | tee -a "$LOG_FILE"
+fi
+
+echo "===== E2E 测试完成 $(date) =====" | tee -a "$LOG_FILE"
+
+exit $TEST_EXIT_CODE

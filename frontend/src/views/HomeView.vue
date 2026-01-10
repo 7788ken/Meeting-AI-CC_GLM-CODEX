@@ -72,7 +72,7 @@ async function loadMeetings() {
   loading.value = true
   try {
     const response = await sessionApi.list()
-    meetings.value = response.data?.data || []
+    meetings.value = response.data || []
   } catch (error) {
     console.error('加载会议列表失败:', error)
     ElMessage.error('加载会议列表失败')
@@ -87,10 +87,12 @@ async function createMeeting() {
     const response = await sessionApi.create({
       title: `会议 ${new Date().toLocaleString()}`,
     })
-    const sessionId = response.data?.data?.id
+    const sessionId = response.data?.id
     if (sessionId) {
       ElMessage.success('会议创建成功')
       router.push(`/meeting/${sessionId}`)
+    } else {
+      ElMessage.error('创建会议失败: 未返回会话ID')
     }
   } catch (error) {
     console.error('创建会议失败:', error)

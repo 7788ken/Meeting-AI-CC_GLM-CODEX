@@ -41,7 +41,7 @@ export class SessionService {
 
   async findAll(): Promise<SessionDto[]> {
     const sessions = await this.prisma.session.findMany()
-    return sessions.map((session) => this.toSessionDto(session))
+    return sessions.map(session => this.toSessionDto(session))
   }
 
   async updateStatus(id: string, status: SessionStatus): Promise<SessionDto> {
@@ -96,9 +96,10 @@ export class SessionService {
     }
   }
 
-  private extractSessionMeta(
-    settings?: Record<string, unknown>
-  ): { title: string; description?: string } {
+  private extractSessionMeta(settings?: Record<string, unknown>): {
+    title: string
+    description?: string
+  } {
     const rawTitle = settings?.['title']
     const rawDescription = settings?.['description']
     const title =

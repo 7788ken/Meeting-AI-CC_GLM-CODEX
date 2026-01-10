@@ -10,9 +10,7 @@ import { CreateSpeechDto, UpdateSpeechDto, SpeechDto } from './dto/speech.dto'
  */
 @Injectable()
 export class SpeechService {
-  constructor(
-    @InjectModel(Speech.name) private speechModel: Model<SpeechDocument>,
-  ) {}
+  constructor(@InjectModel(Speech.name) private speechModel: Model<SpeechDocument>) {}
 
   /**
    * 创建发言记录
@@ -53,12 +51,9 @@ export class SpeechService {
    * 查询会话的所有发言记录
    */
   async findBySession(sessionId: string): Promise<SpeechDto[]> {
-    const speeches = await this.speechModel
-      .find({ sessionId })
-      .sort({ startTime: 1 })
-      .exec()
+    const speeches = await this.speechModel.find({ sessionId }).sort({ startTime: 1 }).exec()
 
-    return speeches.map((s) => this.toDto(s))
+    return speeches.map(s => this.toDto(s))
   }
 
   /**
@@ -70,7 +65,7 @@ export class SpeechService {
       .sort({ startTime: 1 })
       .exec()
 
-    return speeches.map((s) => this.toDto(s))
+    return speeches.map(s => this.toDto(s))
   }
 
   /**
@@ -105,7 +100,7 @@ export class SpeechService {
       .sort({ startTime: 1 })
       .exec()
 
-    return speeches.map((s) => this.toDto(s))
+    return speeches.map(s => this.toDto(s))
   }
 
   /**
@@ -129,7 +124,7 @@ export class SpeechService {
    */
   async batchCreate(dtos: CreateSpeechDto[]): Promise<SpeechDto[]> {
     const now = new Date()
-    const speeches = dtos.map((dto) => ({
+    const speeches = dtos.map(dto => ({
       sessionId: dto.sessionId,
       speakerId: dto.speakerId,
       speakerName: dto.speakerName,
@@ -145,7 +140,7 @@ export class SpeechService {
     }))
 
     const saved = await this.speechModel.insertMany(speeches)
-    return saved.map((s) => this.toDto(s))
+    return saved.map(s => this.toDto(s))
   }
 
   /**

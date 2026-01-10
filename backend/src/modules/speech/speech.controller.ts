@@ -57,7 +57,7 @@ export class SpeechController {
   @ApiResponse({ status: 200, type: [SpeechDto] })
   async findBySpeaker(
     @Param('sessionId') sessionId: string,
-    @Param('speakerId') speakerId: string,
+    @Param('speakerId') speakerId: string
   ): Promise<SpeechDto[]> {
     return this.speechService.findBySpeaker(sessionId, speakerId)
   }
@@ -67,7 +67,7 @@ export class SpeechController {
   @ApiResponse({ status: 200, type: [SpeechDto] })
   async search(
     @Param('sessionId') sessionId: string,
-    @Query('keyword') keyword: string,
+    @Query('keyword') keyword: string
   ): Promise<SpeechDto[]> {
     return this.speechService.search(sessionId, keyword)
   }
@@ -75,10 +75,7 @@ export class SpeechController {
   @Put(':id')
   @ApiOperation({ summary: '更新发言记录 (B1029)' })
   @ApiResponse({ status: 200, type: SpeechDto })
-  async update(
-    @Param('id') id: string,
-    @Body() dto: UpdateSpeechDto,
-  ): Promise<SpeechDto> {
+  async update(@Param('id') id: string, @Body() dto: UpdateSpeechDto): Promise<SpeechDto> {
     return this.speechService.update(id, dto)
   }
 
@@ -87,7 +84,7 @@ export class SpeechController {
   @ApiResponse({ status: 200, type: SpeechDto })
   async toggleMark(
     @Param('id') id: string,
-    @Body() body: { marked: boolean; reason?: string },
+    @Body() body: { marked: boolean; reason?: string }
   ): Promise<SpeechDto> {
     return this.speechService.toggleMark(id, body.marked, body.reason)
   }

@@ -98,6 +98,16 @@
           </div>
           <div class="analysis-text" v-html="renderMarkdown(currentAnalysis.result)"></div>
           <div class="analysis-actions">
+            <el-dropdown split-button type="primary" @click="exportAnalysis('txt')" @command="exportAnalysis">
+              <span>导出</span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="txt">纯文本 (.txt)</el-dropdown-item>
+                  <el-dropdown-item command="md">Markdown (.md)</el-dropdown-item>
+                  <el-dropdown-item command="json">JSON (.json)</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
             <el-button size="small" @click="copyAnalysis">复制</el-button>
             <el-button size="small" type="primary" @click="generateAnalysis">重新生成</el-button>
           </div>
@@ -115,6 +125,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { sessionApi, speechApi, analysisApi, type Session, type Speech, type AIAnalysis } from '@/services/api'
+import { exportAnalysis as exportAnalysisService, type ExportFormat } from '@/services/export'
 import { transcription } from '@/services/transcription'
 import type { ConnectionStatus } from '@/services/websocket'
 import MainLayout from '@/components/MainLayout.vue'
@@ -286,7 +297,7 @@ async function startRecording() {
     recordingStatus.value = 'connecting'
 
     // 设置转写服务回调
-    transcription.start({
+    await transcription.start({
       sessionId: sessionId.value,
       model: 'doubao',
       onTranscript: (transcript: Speech) => {
@@ -307,8 +318,11 @@ async function startRecording() {
     ElMessage.success('录音已开始')
   } catch (error) {
     console.error('开始录音失败:', error)
-    ElMessage.error('无法访问麦克风，请检查权限设置')
+    transcription.stop()
+    ElMessage.error(error instanceof Error ? `开始录音失败: ${error.message}` : '开始录音失败')
     recordingStatus.value = 'idle'
+    isPaused.value = false
+    wsConnectionStatus.value = null
   }
 }
 
@@ -361,6 +375,32 @@ function copyAnalysis() {
   if (!currentAnalysis.value) return
   navigator.clipboard.writeText(currentAnalysis.value.result)
   ElMessage.success('已复制到剪贴板')
+}
+
+// 导出分析
+function exportAnalysis(format: string | ExportFormat) {
+  if (!currentAnalysis.value) {
+    ElMessage.warning('请先生成分析')
+    return
+  }
+
+  try {
+    exportAnalysisService(currentAnalysis.value, {
+      format: format as ExportFormat,
+      includeTimestamp: true,
+      includeMetadata: true,
+    }, sessionInfo.value || undefined, speeches.value)
+
+    const formatNames: Record<string, string> = {
+      txt: '纯文本',
+      md: 'Markdown',
+      json: 'JSON',
+    }
+    ElMessage.success(`已导出为 ${formatNames[format]} 格式`)
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  }
 }
 
 // 渲染 Markdown（简单实现）

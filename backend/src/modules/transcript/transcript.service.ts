@@ -124,7 +124,7 @@ export class TranscriptService {
       return Buffer.alloc(0)
     }
 
-    const base64 = audioData.includes(',') ? audioData.split(',').pop() ?? '' : audioData
+    const base64 = audioData.includes(',') ? (audioData.split(',').pop() ?? '') : audioData
     try {
       return Buffer.from(base64, 'base64')
     } catch {
@@ -181,8 +181,8 @@ export class TranscriptService {
     const utterances = result?.utterances as Array<Record<string, unknown>> | undefined
     if (Array.isArray(utterances)) {
       const text = utterances
-        .map((item) => (typeof item?.text === 'string' ? item.text : ''))
-        .filter((value) => value.length > 0)
+        .map(item => (typeof item?.text === 'string' ? item.text : ''))
+        .filter(value => value.length > 0)
         .join('')
       return text || null
     }

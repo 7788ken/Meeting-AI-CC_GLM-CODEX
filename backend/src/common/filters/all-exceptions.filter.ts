@@ -23,15 +23,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     // 判断异常类型
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR
 
     // 获取错误消息
-    const message =
-      exception instanceof HttpException
-        ? exception.message
-        : '服务器内部错误'
+    const message = exception instanceof HttpException ? exception.message : '服务器内部错误'
 
     // 获取详细错误信息（开发环境）
     const errorResponse =

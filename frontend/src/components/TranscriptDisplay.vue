@@ -25,6 +25,14 @@
           </span>
           <span class="speech-time">{{ formatTime(speech.startTime) }}</span>
           <span v-if="speech.isMarked" class="mark-badge">已标记</span>
+          <span
+            v-if="speech.confidence !== undefined"
+            class="confidence-badge"
+            :class="getConfidenceClass(speech.confidence)"
+            :title="`置信度: ${(speech.confidence * 100).toFixed(1)}%`"
+          >
+            置信度: {{ (speech.confidence * 100).toFixed(0) }}%
+          </span>
         </div>
 
         <div
@@ -133,6 +141,15 @@ function formatTime(dateStr: string): string {
   const minutes = date.getMinutes().toString().padStart(2, '0')
   const seconds = date.getSeconds().toString().padStart(2, '0')
   return `${hours}:${minutes}:${seconds}`
+}
+
+/**
+ * 获取置信度样式类
+ */
+function getConfidenceClass(confidence: number): string {
+  if (confidence >= 0.9) return 'confidence-high'
+  if (confidence >= 0.7) return 'confidence-medium'
+  return 'confidence-low'
 }
 
 /**
@@ -347,6 +364,30 @@ defineExpose({
   color: #fff;
   border-radius: 4px;
   font-size: 11px;
+}
+
+/* 置信度样式 */
+.confidence-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.confidence-badge.confidence-high {
+  background-color: #52c41a;
+  color: #fff;
+}
+
+.confidence-badge.confidence-medium {
+  background-color: #faad14;
+  color: #fff;
+}
+
+.confidence-badge.confidence-low {
+  background-color: #ff4d4f;
+  color: #fff;
 }
 
 .speech-content {

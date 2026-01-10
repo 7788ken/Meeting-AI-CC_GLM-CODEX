@@ -64,9 +64,7 @@ describe('TranscriptGateway', () => {
     it('should remove client from transcript service', async () => {
       await gateway.handleDisconnect(mockClient as Socket)
 
-      expect(transcriptService.removeClient).toHaveBeenCalledWith(
-        mockClient.id
-      )
+      expect(transcriptService.removeClient).toHaveBeenCalledWith(mockClient.id)
     })
   })
 
@@ -112,10 +110,7 @@ describe('TranscriptGateway', () => {
     it('should add client to transcript service and emit confirmation', () => {
       gateway.handleAudioStart(mockClient as Socket)
 
-      expect(transcriptService.addClient).toHaveBeenCalledWith(
-        mockClient.id,
-        mockClient
-      )
+      expect(transcriptService.addClient).toHaveBeenCalledWith(mockClient.id, mockClient)
       expect(mockClient.emit).toHaveBeenCalledWith('audio:started')
     })
   })
@@ -186,9 +181,7 @@ describe('TranscriptGateway', () => {
     })
 
     it('should handle errors during audio processing', async () => {
-      transcriptService.processAudio.mockRejectedValue(
-        new Error('Processing error')
-      )
+      transcriptService.processAudio.mockRejectedValue(new Error('Processing error'))
 
       // Call the method and catch the error
       try {
@@ -211,9 +204,7 @@ describe('TranscriptGateway', () => {
     })
 
     it('should handle errors during audio end', async () => {
-      transcriptService.endAudio.mockRejectedValue(
-        new Error('End audio error')
-      )
+      transcriptService.endAudio.mockRejectedValue(new Error('End audio error'))
 
       // Call the method and catch the error
       try {

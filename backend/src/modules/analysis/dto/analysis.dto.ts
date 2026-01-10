@@ -20,6 +20,14 @@ export class GenerateAnalysisDto {
   @IsOptional()
   @IsEnum(AnalysisType)
   analysisType?: AnalysisType
+
+  @ApiPropertyOptional({
+    description: 'AI 模型',
+    default: 'qianwen',
+  })
+  @IsOptional()
+  @IsString()
+  model?: string
 }
 
 export class AnalysisDto {

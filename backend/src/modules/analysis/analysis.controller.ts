@@ -56,7 +56,7 @@ export class AnalysisController {
   @ApiResponse({ status: 200, type: [AnalysisDto] })
   async findByType(
     @Param('sessionId') sessionId: string,
-    @Param('analysisType') analysisType: string,
+    @Param('analysisType') analysisType: string
   ): Promise<AnalysisDto[]> {
     return this.analysisService.findByType(sessionId, analysisType)
   }

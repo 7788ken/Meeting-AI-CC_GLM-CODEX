@@ -6,9 +6,7 @@ import { SpeakerService } from './speaker.service'
 import { Speech, SpeechSchema } from './schemas/speech.schema'
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([{ name: Speech.name, schema: SpeechSchema }]),
-  ],
+  imports: [MongooseModule.forFeature([{ name: Speech.name, schema: SpeechSchema }])],
   controllers: [SpeechController],
   providers: [SpeechService, SpeakerService],
   exports: [SpeechService, SpeakerService],

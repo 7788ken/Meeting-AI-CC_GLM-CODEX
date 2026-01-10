@@ -41,3 +41,6 @@ backend/prisma/migrations/
 frontend/playwright-report/*
 frontend/test-results/*
 frontend/tests/*
+.claude
+.claude/*
+frontend/e2e*.png

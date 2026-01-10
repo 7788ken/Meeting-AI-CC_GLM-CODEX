@@ -72,11 +72,11 @@ class DoubaoWsClient {
       }, timeoutMs)
 
       const waiter: ResponseWaiter = {
-        resolve: (message) => {
+        resolve: message => {
           clearTimeout(timeoutId)
           resolve(message)
         },
-        reject: (error) => {
+        reject: error => {
           clearTimeout(timeoutId)
           reject(error)
         },
@@ -103,7 +103,7 @@ class DoubaoWsClient {
       return
     }
 
-    await new Promise<void>((resolve) => {
+    await new Promise<void>(resolve => {
       ws.once('close', () => resolve())
       ws.close(1000, 'normal')
     })
@@ -146,8 +146,8 @@ class DoubaoWsClient {
           resolve()
         })
 
-        ws.on('message', (data) => this.handleMessage(data))
-        ws.on('error', (error) => {
+        ws.on('message', data => this.handleMessage(data))
+        ws.on('error', error => {
           const message = error instanceof Error ? error.message : String(error)
           this.logger.error(`Doubao WebSocket error: ${message}`)
           this.rejectAll(new Error(message))
@@ -273,8 +273,7 @@ export class DoubaoClientManager {
     const appKey = this.readRequired('TRANSCRIPT_APP_KEY')
     const accessKey = this.readRequired('TRANSCRIPT_ACCESS_KEY')
     const resourceId =
-      this.configService.get<string>('TRANSCRIPT_RESOURCE_ID') ??
-      'volc.seedasr.sauc.concurrent'
+      this.configService.get<string>('TRANSCRIPT_RESOURCE_ID') ?? 'volc.seedasr.sauc.concurrent'
 
     const client = new DoubaoWsClient({
       endpoint,

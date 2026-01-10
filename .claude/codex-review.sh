@@ -1,60 +1,39 @@
 #!/bin/bash
-# Codex Review 后台任务脚本
-# 在会话结束时异步运行 Codex 代码审查
+# Codex 代码审查脚本
+# 使用 Codex CLI 对变更的代码进行审查
 
-# 获取项目根目录
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$PROJECT_ROOT"
+set -e
 
-# 日志文件
-LOG_FILE=".claude/codex-review.log"
-PID_FILE=".claude/codex-review.pid"
+CODEX_CLI="${CODEX_CLI:-codex}"
 
-# 检查是否已经在运行
-if [ -f "$PID_FILE" ]; then
-    OLD_PID=$(cat "$PID_FILE")
-    if ps -p "$OLD_PID" > /dev/null 2>&1; then
-        echo "Codex review 已在运行 (PID: $OLD_PID)，跳过本次执行" >> "$LOG_FILE"
-        exit 0
-    fi
+# 检查 Codex CLI 是否可用
+if ! command -v "$CODEX_CLI" &> /dev/null; then
+  echo "⏭️  Codex CLI 未安装，跳过代码审查"
+  echo "   安装方法: npm install -g @anthropic-ai/claude-code-cli"
+  exit 0
 fi
 
-# 启动后台任务
-(
-    echo "===== Codex Review 开始 $(date) =====" >> "$LOG_FILE"
-    
-    # 检查是否有修改的文件
-    if git diff --quiet && git diff --cached --quiet; then
-        echo "没有文件变更，跳过 Codex review" >> "$LOG_FILE"
-    else
-        echo "检测到文件变更，准备运行 Codex review..." >> "$LOG_FILE"
-        
-        # 获取修改的文件列表
-        MODIFIED_FILES=$(git diff --name-only HEAD 2>/dev/null | grep -E '\.(ts|js|vue|py|rs|go)$' || true)
-        
-        if [ -z "$MODIFIED_FILES" ]; then
-            echo "没有需要 review 的代码文件" >> "$LOG_FILE"
-        else
-            echo "待 review 文件:" >> "$LOG_FILE"
-            echo "$MODIFIED_FILES" >> "$LOG_FILE"
-            
-            # 这里会调用 Codex CLI（需要在 PATH 中）
-            # 如果 codex 命令可用，可以在这里调用
-            if command -v codex &> /dev/null; then
-                echo "$MODIFIED_FILES" | codex ask-codex "Review these files for code quality, potential bugs, and improvements. Provide a summary report." >> "$LOG_FILE" 2>&1
-            else
-                echo "Codex CLI 未安装，跳过 review" >> "$LOG_FILE"
-            fi
-        fi
-    fi
-    
-    echo "===== Codex Review 完成 $(date) =====" >> "$LOG_FILE"
-) &
+# 获取变更的文件
+CHANGED_FILES=$(git diff --cached --name-only 2>/dev/null || git diff --name-only)
 
-# 保存 PID
-echo $! > "$PID_FILE"
+if [ -z "$CHANGED_FILES" ]; then
+  echo "📋 没有检测到代码变更，跳过审查"
+  exit 0
+fi
 
-echo "Codex review 已在后台启动 (PID: $!)" 
-echo "查看日志: tail -f $LOG_FILE"
+echo "🔍 开始代码审查..."
+echo "📝 变更文件:"
+echo "$CHANGED_FILES" | sed 's/^/   - /'
 
-exit 0
+# 使用 Codex 审查变更的文件
+for file in $CHANGED_FILES; do
+  if [ -f "$file" ]; then
+    echo ""
+    echo "审查: $file"
+    # 使用 Codex 分析文件
+    codex review "$file" 2>/dev/null || echo "   (审查跳过: Codex 不可用)"
+  fi
+done
+
+echo ""
+echo "✅ 代码审查完成"

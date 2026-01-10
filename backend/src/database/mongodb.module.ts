@@ -14,12 +14,12 @@ import { MongoDBService } from './mongodb'
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         uri: configService.get<string>('MONGODB_URI') || 'mongodb://localhost:27017/meeting-ai',
-        connectionFactory: (connection) => {
+        connectionFactory: connection => {
           // 连接事件监听
           connection.on('connected', () => {
             console.log('✅ MongoDB connected successfully')
           })
-          connection.on('error', (err) => {
+          connection.on('error', err => {
             console.error('❌ MongoDB connection error:', err)
           })
           connection.on('disconnected', () => {

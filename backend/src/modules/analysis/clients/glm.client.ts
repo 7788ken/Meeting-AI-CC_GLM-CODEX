@@ -16,7 +16,7 @@ export class GlmClient {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly httpService: HttpService,
+    private readonly httpService: HttpService
   ) {
     this.apiKey = this.configService.get<string>('GLM_API_KEY') || ''
     if (!this.apiKey) {
@@ -40,14 +40,17 @@ export class GlmClient {
       return this.parseResponse(response)
     } catch (error) {
       this.logger.error('Failed to call GLM API', error)
-      throw new Error(`GLM API call failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      throw new Error(
+        `GLM API call failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
     }
   }
 
-  private buildPrompt(analysisType: string, speeches: Array<{ content: string; speakerName: string }>): string {
-    const speechesText = speeches
-      .map((s) => `${s.speakerName}: ${s.content}`)
-      .join('\n')
+  private buildPrompt(
+    analysisType: string,
+    speeches: Array<{ content: string; speakerName: string }>
+  ): string {
+    const speechesText = speeches.map(s => `${s.speakerName}: ${s.content}`).join('\n')
 
     const prompts: Record<string, string> = {
       summary: `请根据以下会议发言内容，生成一份简洁的会议摘要：\n\n${speechesText}\n\n要求：\n1. 提取核心讨论内容\n2. 总结主要结论\n3. 使用 Markdown 格式`,

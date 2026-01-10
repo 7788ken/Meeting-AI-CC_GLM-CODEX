@@ -104,12 +104,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        audioData,
-        'session-1',
-        true
-      )
+      const result = await service.processAudio('client-1', audioData, 'session-1', true)
 
       expect(result).not.toBeNull()
       expect(result?.content).toBe('Hello world')
@@ -121,24 +116,14 @@ describe('TranscriptService', () => {
     })
 
     it('should handle empty audio data', async () => {
-      const result = await service.processAudio(
-        'client-1',
-        '',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', '', 'session-1', false)
 
       expect(result).toBeNull()
       expect(mockClient.sendAudio).not.toHaveBeenCalled()
     })
 
     it('should handle invalid base64 data', async () => {
-      const result = await service.processAudio(
-        'client-1',
-        'invalid-base64!!!',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'invalid-base64!!!', 'session-1', false)
 
       // Empty buffer after decode, should return null
       expect(result).toBeNull()
@@ -165,10 +150,7 @@ describe('TranscriptService', () => {
         compression: 0x00,
         payload: {
           result: {
-            utterances: [
-              { text: 'Hello ' },
-              { text: 'world' },
-            ],
+            utterances: [{ text: 'Hello ' }, { text: 'world' }],
           },
         },
         rawPayload: Buffer.from('{}'),
@@ -176,12 +158,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.content).toBe('Hello world')
     })
@@ -202,12 +179,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.content).toBe('Test sentence')
     })
@@ -224,12 +196,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.content).toBe('Direct text payload')
     })
@@ -246,12 +213,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result).toBeNull()
     })
@@ -259,12 +221,7 @@ describe('TranscriptService', () => {
     it('should handle errors gracefully', async () => {
       mockClient.sendAudio.mockRejectedValue(new Error('Network error'))
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result).toBeNull()
     })
@@ -326,10 +283,7 @@ describe('TranscriptService', () => {
 
       await service.endAudio('client-1')
 
-      expect(mockClient.sendAudio).toHaveBeenCalledWith(
-        expect.any(Buffer),
-        true
-      )
+      expect(mockClient.sendAudio).toHaveBeenCalledWith(expect.any(Buffer), true)
     })
 
     it('should close client after ending audio', async () => {
@@ -383,12 +337,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.speakerId).toBe('speaker-123')
       expect(result?.speakerName).toBe('John Doe')
@@ -411,12 +360,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.speakerId).toBe('speaker-456')
       expect(result?.speakerName).toBe('Jane Doe')
@@ -436,12 +380,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.speakerId).toBe('client_client-1')
       expect(result?.speakerName).toBe('发言者')
@@ -472,12 +411,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.isFinal).toBe(true)
     })
@@ -499,12 +433,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.isFinal).toBe(true)
     })
@@ -523,12 +452,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.isFinal).toBe(false)
     })
@@ -555,12 +479,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.confidence).toBe(0.85)
     })
@@ -579,12 +498,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.confidence).toBe(1)
     })
@@ -603,12 +517,7 @@ describe('TranscriptService', () => {
 
       mockClient.nextResponse.mockResolvedValue(mockResponse)
 
-      const result = await service.processAudio(
-        'client-1',
-        'aGVsbG8=',
-        'session-1',
-        false
-      )
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
 
       expect(result?.confidence).toBe(1)
     })

@@ -131,6 +131,7 @@ export interface AnalysisRequest {
   sessionId: string
   speechIds: string[]
   analysisType?: 'summary' | 'action-items' | 'sentiment' | 'keywords' | 'topics' | 'full-report'
+  model?: string
 }
 
 export const analysisApi = {

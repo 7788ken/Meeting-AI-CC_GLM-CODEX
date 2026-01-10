@@ -88,8 +88,13 @@ describe('Transcript E2E (Doubao Speech Recognition)', () => {
 
   describe('DoubaoBinaryCodec', () => {
     it('should work correctly', () => {
-      const { DoubaoBinaryCodec, DoubaoMessageType, DoubaoFlag, DoubaoSerialization, DoubaoCompression } =
-        require('../src/modules/transcript/doubao.codec')
+      const {
+        DoubaoBinaryCodec,
+        DoubaoMessageType,
+        DoubaoFlag,
+        DoubaoSerialization,
+        DoubaoCompression,
+      } = require('../src/modules/transcript/doubao.codec')
 
       const codec = new DoubaoBinaryCodec()
 
