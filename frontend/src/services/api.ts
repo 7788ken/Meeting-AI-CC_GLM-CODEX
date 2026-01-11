@@ -11,6 +11,7 @@ export interface Session {
   endedAt: string | null
   duration: number | null
   isActive: boolean
+  isArchived: boolean
 }
 
 // 发言记录类型
@@ -62,7 +63,15 @@ export const sessionApi = {
 
   // 结束会话
   end: (sessionId: string) =>
-    http.put<ApiResponse<Session>>(`/sessions/${sessionId}/end`),
+    http.post<ApiResponse<Session>>(`/sessions/${sessionId}/end`),
+
+  // 存档会话
+  archive: (sessionId: string) =>
+    http.post<ApiResponse<Session>>(`/sessions/${sessionId}/archive`),
+
+  // 取消存档
+  unarchive: (sessionId: string) =>
+    http.post<ApiResponse<Session>>(`/sessions/${sessionId}/unarchive`),
 
   // 获取会话详情
   get: (sessionId: string) =>
@@ -71,6 +80,10 @@ export const sessionApi = {
   // 获取所有会话
   list: () =>
     http.get<ApiResponse<Session[]>>('/sessions'),
+
+  // 删除会话
+  remove: (sessionId: string) =>
+    http.delete<ApiResponse<{ deleted: boolean }>>(`/sessions/${sessionId}`),
 
   // 更新会话状态
   updateStatus: (sessionId: string, status: string) =>

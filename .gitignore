@@ -31,6 +31,9 @@ coverage/
 # Lock files (optional for monorepo)
 # pnpm-lock.yaml
 
+# Monorepo uses root lockfile only
+backend/pnpm-lock.yaml
+
 # Prisma
 backend/prisma/migrations/
 
@@ -44,3 +47,4 @@ frontend/tests/*
 .claude
 .claude/*
 frontend/e2e*.png
+docs/demo/*

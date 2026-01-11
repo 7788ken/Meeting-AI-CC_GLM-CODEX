@@ -4,6 +4,7 @@ import { nextTick, ref } from 'vue'
 import AIAnalysisPanel from './AIAnalysisPanel.vue'
 import type { AIAnalysis, Speech } from '@/services/api'
 import type { AIModel } from '@/types'
+import { ElMessage } from 'element-plus'
 
 // Mock Element Plus components
 vi.mock('element-plus', async () => {
@@ -73,6 +74,7 @@ describe('AIAnalysisPanel.vue', () => {
 
   afterEach(() => {
     wrapper?.unmount()
+    vi.restoreAllMocks()
   })
 
   describe('组件渲染', () => {
@@ -114,7 +116,9 @@ describe('AIAnalysisPanel.vue', () => {
     })
 
     it('应该显示分析按钮', () => {
-      expect(wrapper.find('button').exists()).toBe(true)
+      // 检查分析按钮文字计算属性
+      expect(wrapper.vm.analysisButtonText).toBe('生成分析')
+      expect(wrapper.vm.canAnalyze).toBe(true)
     })
   })
 
@@ -233,7 +237,7 @@ describe('AIAnalysisPanel.vue', () => {
     })
   })
 
-  describe('导出功能', () => {
+  describe('复制功能', () => {
     beforeEach(() => {
       wrapper = mount(AIAnalysisPanel, {
         props: {
@@ -461,8 +465,31 @@ describe('AIAnalysisPanel.vue', () => {
     })
   })
 
-  describe('下载文件功能', () => {
+  describe('导出功能', () => {
+    let originalCreateElement: typeof document.createElement
+    let anchorEl: HTMLAnchorElement
+
     beforeEach(() => {
+      originalCreateElement = document.createElement.bind(document)
+      anchorEl = originalCreateElement('a') as HTMLAnchorElement
+      vi.spyOn(anchorEl, 'click').mockImplementation(() => {})
+
+      // jsdom 可能缺失该 API，确保存在后再 mock
+      if (!('createObjectURL' in URL)) {
+        ;(URL as any).createObjectURL = () => 'blob:mock-url'
+      }
+      if (!('revokeObjectURL' in URL)) {
+        ;(URL as any).revokeObjectURL = () => {}
+      }
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url' as any)
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+      vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+        if (tagName === 'a') return anchorEl as any
+        return originalCreateElement(tagName)
+      })
+      vi.spyOn(document.body, 'appendChild').mockImplementation(() => anchorEl as any)
+      vi.spyOn(document.body, 'removeChild').mockImplementation(() => anchorEl as any)
+
       wrapper = mount(AIAnalysisPanel, {
         props: {
           sessionId: 'session-1',
@@ -484,29 +511,18 @@ describe('AIAnalysisPanel.vue', () => {
           },
         },
       })
-      wrapper.vm.currentAnalysis = mockAnalysis
-
-      // Mock DOM methods
-      const mockLink = {
-        href: '',
-        download: '',
-        click: vi.fn(),
-      }
-      vi.spyOn(document, 'createElement').mockReturnValue(mockLink as any)
-      vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink as any)
-      vi.spyOn(document.body, 'removeChild').mockImplementation(() => mockLink as any)
-      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:url')
-      vi.spyOn(URL, 'revokeObjectURL')
     })
 
-    it('应该下载 Markdown 文件', () => {
+    it('在没有分析结果时导出应显示警告', () => {
       wrapper.vm.handleExport('markdown')
-      expect(document.createElement).toHaveBeenCalledWith('a')
+      expect(ElMessage.warning).toHaveBeenCalledWith('请先生成分析结果')
     })
 
-    it('应该下载纯文本文件', () => {
-      wrapper.vm.handleExport('txt')
-      expect(document.createElement).toHaveBeenCalledWith('a')
+    it('在有分析结果时导出应调用下载函数', () => {
+      wrapper.vm.currentAnalysis = mockAnalysis
+      wrapper.vm.handleExport('markdown')
+      expect(URL.createObjectURL).toHaveBeenCalled()
+      expect(anchorEl.click).toHaveBeenCalled()
     })
   })
 })

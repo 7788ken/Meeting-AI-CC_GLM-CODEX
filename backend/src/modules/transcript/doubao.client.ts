@@ -18,6 +18,11 @@ interface DoubaoClientOptions {
   resourceId: string
   connectId: string
   userId: string
+  modelName?: string
+  enableItn?: boolean
+  enablePunc?: boolean
+  configGzip?: boolean
+  audioGzip?: boolean
 }
 
 type ResponseWaiter = {
@@ -37,11 +42,29 @@ class DoubaoWsClient {
   private readonly responseQueue: DoubaoDecodedMessage[] = []
   private readonly responseWaiters: ResponseWaiter[] = []
   private readonly logger = new Logger(DoubaoWsClient.name)
+  private openedAtMs: number | null = null
+  private sentConfig = false
+  private sentConfigSeq: number | null = null
+  private sentAudioBytes = 0
+  private closing = false
+  private finalAudioSent = false
 
   constructor(private readonly options: DoubaoClientOptions) {}
 
   async sendAudio(audio: Buffer, isFinal: boolean): Promise<void> {
     await this.ensureReady()
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('Doubao WebSocket not open')
+    }
+
+    if (audio.length > 0) {
+      this.sentAudioBytes += audio.length
+    }
+
+    if (isFinal) {
+      this.finalAudioSent = true
+    }
 
     const flags = isFinal ? DoubaoFlag.LastNegSeq : DoubaoFlag.Seq
     const seq = ++this.sequence
@@ -50,13 +73,14 @@ class DoubaoWsClient {
     const packet = this.codec.encode({
       messageType: DoubaoMessageType.Audio,
       flags,
-      serialization: DoubaoSerialization.None,
-      compression: DoubaoCompression.None,
+      // 参考 Java demo：音频包同样走 gzip（对端若不兼容可用 TRANSCRIPT_AUDIO_GZIP=false 关闭）
+      serialization: DoubaoSerialization.Json,
+      compression: this.options.audioGzip === false ? DoubaoCompression.None : DoubaoCompression.Gzip,
       sequence,
       payload: audio,
     })
 
-    this.ws?.send(packet)
+    this.ws.send(packet)
   }
 
   async nextResponse(timeoutMs = 5000): Promise<DoubaoDecodedMessage | null> {
@@ -91,6 +115,8 @@ class DoubaoWsClient {
     if (!this.ws) {
       return
     }
+
+    this.closing = true
 
     const ws = this.ws
     this.ws = undefined
@@ -130,6 +156,15 @@ class DoubaoWsClient {
 
     if (!this.connectPromise) {
       this.connectPromise = new Promise<void>((resolve, reject) => {
+        // 每次发起新的连接尝试时重置一次连接内状态（避免断线重连后 seq / 统计信息污染）
+        this.sequence = 0
+        this.sentConfig = false
+        this.sentConfigSeq = null
+        this.sentAudioBytes = 0
+        this.openedAtMs = null
+        this.closing = false
+        this.finalAudioSent = false
+
         const headers = {
           'X-Api-App-Key': this.options.appKey,
           'X-Api-Access-Key': this.options.accessKey,
@@ -142,14 +177,23 @@ class DoubaoWsClient {
 
         ws.on('open', () => {
           this.connected = true
+          this.openedAtMs = Date.now()
           this.logger.log(`Doubao connected: ${this.options.connectId}`)
           resolve()
         })
 
         ws.on('message', data => this.handleMessage(data))
         ws.on('error', error => {
+          if (this.closing) {
+            return
+          }
           const message = error instanceof Error ? error.message : String(error)
           this.logger.error(`Doubao WebSocket error: ${message}`)
+          this.connected = false
+          this.configured = false
+          this.connectPromise = undefined
+          this.configPromise = undefined
+          this.ws = undefined
           this.rejectAll(new Error(message))
           if (!this.connected) {
             reject(error)
@@ -157,10 +201,41 @@ class DoubaoWsClient {
         })
 
         ws.on('close', (code, reason) => {
+          const reasonText = reason?.toString() || ''
+          const expectedClose = this.closing || this.finalAudioSent
           this.connected = false
           this.configured = false
-          this.logger.warn(`Doubao closed: ${code} ${reason.toString()}`)
-          this.rejectAll(new Error('Doubao WebSocket closed'))
+          this.connectPromise = undefined
+          this.configPromise = undefined
+          this.ws = undefined
+
+          const openDurationMs =
+            this.openedAtMs === null ? null : Math.max(0, Date.now() - this.openedAtMs)
+
+          const details = [
+            `code=${code}`,
+            reasonText ? `reason=${reasonText}` : null,
+            openDurationMs === null ? null : `openMs=${openDurationMs}`,
+            this.sentConfig ? 'config=sent' : 'config=not_sent',
+            this.sentConfigSeq == null ? null : `configSeq=${this.sentConfigSeq}`,
+            `configGzip=${this.options.configGzip === false ? 'off' : 'on'}`,
+            `audioGzip=${this.options.audioGzip === false ? 'off' : 'on'}`,
+            this.sentAudioBytes > 0 ? `audioBytes=${this.sentAudioBytes}` : 'audioBytes=0',
+            `resourceId=${this.options.resourceId}`,
+            `modelName=${this.options.modelName ?? 'bigmodel'}`,
+          ]
+            .filter(Boolean)
+            .join(' ')
+
+          const message = `Doubao WebSocket closed: ${details}`
+          if (expectedClose) {
+            this.logger.log(message)
+            this.resolveAll(null)
+            return
+          }
+
+          this.logger.warn(message)
+          this.rejectAll(new Error(message))
         })
       })
     }
@@ -175,19 +250,33 @@ class DoubaoWsClient {
 
     const payload = {
       user: { uid: this.options.userId },
-      audio: { format: 'pcm', rate: 16000, bits: 16, channel: 1 },
-      request: { model_name: 'bigmodel', enable_itn: true, enable_punc: true },
+      audio: { format: 'pcm', codec: 'raw', rate: 16000, bits: 16, channel: 1 },
+      request: {
+        model_name: this.options.modelName ?? 'bigmodel',
+        enable_itn: this.options.enableItn ?? true,
+        enable_punc: this.options.enablePunc ?? true,
+        enable_ddc: true,
+        show_utterances: true,
+        enable_nonstream: false,
+      },
     }
+
+    const seq = ++this.sequence
 
     const packet = this.codec.encode({
       messageType: DoubaoMessageType.Config,
-      flags: DoubaoFlag.NoSeq,
+      // Java demo/官方示例使用带序列号的 Config（不带序列号时服务端可能直接断连 1006）
+      flags: DoubaoFlag.Seq,
       serialization: DoubaoSerialization.Json,
-      compression: DoubaoCompression.None,
+      // 豆包/火山流式 ASR 的 Config 通常使用 gzip 压缩 JSON（服务端也可能在不匹配时直接异常断连 1006）
+      compression: this.options.configGzip === false ? DoubaoCompression.None : DoubaoCompression.Gzip,
+      sequence: seq,
       payload,
     })
 
     this.ws.send(packet)
+    this.sentConfig = true
+    this.sentConfigSeq = seq
     this.configured = true
   }
 
@@ -206,6 +295,7 @@ class DoubaoWsClient {
 
     if (decoded.messageType === DoubaoMessageType.Error) {
       const errorMessage = this.formatError(decoded.payload)
+      this.logger.error(errorMessage)
       this.rejectAll(new Error(errorMessage))
       return
     }
@@ -254,6 +344,15 @@ class DoubaoWsClient {
     }
     this.responseQueue.length = 0
   }
+
+  private resolveAll(message: DoubaoDecodedMessage | null) {
+    const waiters = this.responseWaiters.splice(0, this.responseWaiters.length)
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timeoutId)
+      waiter.resolve(message)
+    }
+    this.responseQueue.length = 0
+  }
 }
 
 @Injectable()
@@ -273,7 +372,19 @@ export class DoubaoClientManager {
     const appKey = this.readRequired('TRANSCRIPT_APP_KEY')
     const accessKey = this.readRequired('TRANSCRIPT_ACCESS_KEY')
     const resourceId =
-      this.configService.get<string>('TRANSCRIPT_RESOURCE_ID') ?? 'volc.seedasr.sauc.concurrent'
+      this.configService.get<string>('TRANSCRIPT_RESOURCE_ID') ?? 'volc.bigasr.sauc.duration'
+    const modelName = this.configService.get<string>('TRANSCRIPT_MODEL_NAME') ?? 'bigmodel'
+    const enableItnRaw = this.configService.get<string>('TRANSCRIPT_ENABLE_ITN')
+    const enablePuncRaw = this.configService.get<string>('TRANSCRIPT_ENABLE_PUNC')
+    const configGzipRaw = this.configService.get<string>('TRANSCRIPT_CONFIG_GZIP')
+    const audioGzipRaw = this.configService.get<string>('TRANSCRIPT_AUDIO_GZIP')
+    const enableItn = enableItnRaw == null ? undefined : enableItnRaw === '1' || enableItnRaw === 'true'
+    const enablePunc =
+      enablePuncRaw == null ? undefined : enablePuncRaw === '1' || enablePuncRaw === 'true'
+    const configGzip =
+      configGzipRaw == null ? undefined : configGzipRaw === '1' || configGzipRaw === 'true'
+    const audioGzip =
+      audioGzipRaw == null ? undefined : audioGzipRaw === '1' || audioGzipRaw === 'true'
 
     const client = new DoubaoWsClient({
       endpoint,
@@ -282,6 +393,11 @@ export class DoubaoClientManager {
       resourceId,
       connectId: randomUUID(),
       userId,
+      modelName,
+      enableItn,
+      enablePunc,
+      configGzip,
+      audioGzip,
     })
 
     this.clients.set(clientId, client)

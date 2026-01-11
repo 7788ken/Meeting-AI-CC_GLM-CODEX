@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common'
+import { Injectable, UnauthorizedException, ConflictException, OnModuleInit } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import * as bcrypt from 'bcrypt'
@@ -14,22 +14,27 @@ interface User {
 }
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   private users: Map<string, User> = new Map()
-  private nextUserId = 1
+  private nextUserId = 2
 
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService
   ) {
-    // 创建默认测试用户
-    this.createDefaultUser()
+  }
+
+  async onModuleInit() {
+    // 创建默认测试用户（确保 app.init() 前可用，避免竞态）
+    await this.createDefaultUser()
   }
 
   private async createDefaultUser() {
     const username = this.configService.get<string>('DEFAULT_USERNAME') || 'admin'
     const password = this.configService.get<string>('DEFAULT_PASSWORD') || 'admin123'
     const hashedPassword = await bcrypt.hash(password, 10)
+
+    if (this.users.has('1')) return
 
     this.users.set('1', {
       id: '1',

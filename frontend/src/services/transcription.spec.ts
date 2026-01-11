@@ -5,7 +5,16 @@ import * as websocketModule from './websocket'
 import type { Speech } from './api'
 
 // Mock dependencies
-vi.mock('./audioCapture')
+vi.mock('./audioCapture', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./audioCapture')>()
+  return {
+    ...actual,
+    audioCapture: {
+      startCapture: vi.fn(),
+      stopCapture: vi.fn(),
+    } as any,
+  }
+})
 vi.mock('./websocket')
 
 // Get mock references
@@ -219,18 +228,14 @@ describe('TranscriptionService', () => {
     })
 
     it('应该在未录制时忽略暂停', () => {
-      // 在这个测试中不启动录制，直接调用 stop 和 pause
-      // 由于我们创建了新的 service 实例，它不在录制状态
-      // stop() 会检查 isRecording，如果是 false 则直接返回
-      // pause() 也会检查 isRecording，如果是 false 则直接返回
-      // 所以 stopCapture 不会被调用是正确的行为
+      // 创建一个新的服务实例，确保不在录制状态
+      const idleService = new TranscriptionService()
+      idleService.pause()
 
-      service.pause()
-      service.pause() // 第二次调用也不会触发
-
-      // 因为没有启动录制，所以 stopCapture 不应该被调用
-      // 实际实现中 pause 会先检查 isRecording
+      // 因为没有启动录制，pause 应该直接返回，不会调用 stopCapture
       expect(audioCaptureModule.audioCapture.stopCapture).not.toHaveBeenCalled()
+
+      idleService.dispose()
     })
 
     it('应该在已暂停时忽略暂停', () => {
@@ -394,7 +399,7 @@ describe('TranscriptionService', () => {
       expect(transcript.sessionId).toBe(mockConfig.sessionId)
     })
 
-    it('应该忽略非最终结果', async () => {
+    it('应该处理非最终结果（增量更新）', async () => {
       let messageCallback: ((data: any) => void) | null = null
 
       mockWebsocket.onMessage = vi.fn().mockImplementation((callback) => {
@@ -424,7 +429,7 @@ describe('TranscriptionService', () => {
         messageCallback(nonFinalMessage)
       }
 
-      expect(mockCallbacks.onTranscript).not.toHaveBeenCalled()
+      expect(mockCallbacks.onTranscript).toHaveBeenCalled()
     })
 
     it('应该处理错误消息', async () => {

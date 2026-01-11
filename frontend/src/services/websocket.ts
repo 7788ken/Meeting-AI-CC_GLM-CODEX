@@ -27,13 +27,22 @@ export type ConnectionStatusHandler = (status: ConnectionStatus) => void
 export interface TranscriptMessage {
   type: 'transcript' | 'error' | 'status'
   data: {
+    id?: string
     sessionId?: string
     content?: string
     speakerId?: string
     speakerName?: string
+    speakerColor?: string
     confidence?: number
     isFinal?: boolean
+    startTime?: string
+    endTime?: string
+    duration?: number
+    isEdited?: boolean
+    isMarked?: boolean
+    audioOffset?: number
     timestamp?: number
+    status?: string
     error?: string
   }
 }
@@ -53,7 +62,10 @@ export class WebSocketService {
 
   private lastSessionId: string | null = null
   private lastTranscribeConfig: { language?: string; model?: string } | null = null
+  private lastSpeaker: { speakerId?: string; speakerName?: string } | null = null
   private isTranscribing = false
+
+  private audioSendCount = 0
 
   private onMessageCallback: MessageHandler | null = null
   private onOpenCallback: ConnectionHandler | null = null
@@ -190,6 +202,16 @@ export class WebSocketService {
       return
     }
 
+    if (import.meta.env.DEV) {
+      this.audioSendCount += 1
+      if (this.audioSendCount === 1 || this.audioSendCount % 20 === 0) {
+        console.log('[WebSocket] 发送音频帧', {
+          frames: this.audioSendCount,
+          bytes: pcm16Data.byteLength,
+        })
+      }
+    }
+
     // 直接发送二进制数据
     this.ws.send(pcm16Data.buffer)
   }
@@ -214,6 +236,17 @@ export class WebSocketService {
     this.sendMessage({
       type: 'set_session',
       sessionId,
+    })
+  }
+
+  /**
+   * 设置当前连接的发言者信息（用于区分不同参会者）
+   */
+  setSpeaker(input: { speakerId?: string; speakerName?: string }): void {
+    this.lastSpeaker = input
+    this.sendMessage({
+      type: 'set_speaker',
+      ...input,
     })
   }
 
@@ -286,6 +319,13 @@ export class WebSocketService {
       this.sendMessage({
         type: 'set_session',
         sessionId: this.lastSessionId,
+      })
+    }
+
+    if (this.lastSpeaker) {
+      this.sendMessage({
+        type: 'set_speaker',
+        ...this.lastSpeaker,
       })
     }
 

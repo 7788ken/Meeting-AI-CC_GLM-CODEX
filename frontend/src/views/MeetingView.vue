@@ -208,7 +208,7 @@ onUnmounted(() => {
 async function loadSession() {
   try {
     const response = await sessionApi.get(sessionId.value)
-    sessionInfo.value = response.data?.data || null
+    sessionInfo.value = response.data || null
     sessionEndedOverride.value = !!sessionInfo.value && !sessionInfo.value.isActive
   } catch (error) {
     console.error('加载会话失败:', error)
@@ -219,7 +219,7 @@ async function loadSession() {
 async function loadSpeeches() {
   try {
     const response = await speechApi.list(sessionId.value)
-    speeches.value = response.data?.data || []
+    speeches.value = response.data || []
   } catch (error) {
     console.error('加载发言记录失败:', error)
   }
@@ -301,11 +301,18 @@ async function startRecording() {
       sessionId: sessionId.value,
       model: 'doubao',
       onTranscript: (transcript: Speech) => {
-        speeches.value.push(transcript)
+        const index = speeches.value.findIndex((item) => item.id === transcript.id)
+        if (index >= 0) {
+          speeches.value.splice(index, 1, transcript)
+        } else {
+          speeches.value.push(transcript)
+        }
         scrollToBottom()
       },
       onError: (error: Error) => {
-        ElMessage.error(`转写错误: ${error.message}`)
+        const rawMessage = error?.message || '未知错误'
+        const normalizedMessage = rawMessage.replace(/^(转写错误:\s*)+/g, '')
+        ElMessage.error(`转写错误: ${normalizedMessage}`)
       },
       onStatusChange: (status) => {
         recordingStatus.value = status
@@ -360,7 +367,7 @@ async function generateAnalysis() {
       speechIds: speeches.value.map(s => s.id),
       analysisType: selectedAnalysisType.value as any,
     })
-    currentAnalysis.value = response.data?.data || null
+    currentAnalysis.value = response.data || null
     ElMessage.success('AI分析生成成功')
   } catch (error) {
     console.error('生成分析失败:', error)

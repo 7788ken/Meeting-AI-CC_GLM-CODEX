@@ -51,4 +51,5 @@ enum SessionStatus {
   IN_PROGRESS // 进行中
   PAUSED     // 已暂停
   ENDED      // 已结束
+  ARCHIVED   // 已存档
 }

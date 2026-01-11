@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, HttpCode, HttpStatus } from '@nestjs/common'
+import { Controller, Get, Post, Body, Param, HttpCode, HttpStatus, Delete } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger'
 import { SessionService } from './session.service'
 import { CreateSessionDto, SessionDto } from './dto/session.dto'
@@ -28,10 +28,29 @@ export class SessionController {
 
   @Public()
   @Post(':id/end')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '结束会话' })
   @ApiResponse({ status: 200, type: SessionDto })
   async end(@Param('id') id: string): Promise<SessionDto> {
     return this.sessionService.end(id)
+  }
+
+  @Public()
+  @Post(':id/archive')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '存档会话' })
+  @ApiResponse({ status: 200, type: SessionDto })
+  async archive(@Param('id') id: string): Promise<SessionDto> {
+    return this.sessionService.archive(id)
+  }
+
+  @Public()
+  @Post(':id/unarchive')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '取消存档' })
+  @ApiResponse({ status: 200, type: SessionDto })
+  async unarchive(@Param('id') id: string): Promise<SessionDto> {
+    return this.sessionService.unarchive(id)
   }
 
   @Public()
@@ -40,5 +59,14 @@ export class SessionController {
   @ApiResponse({ status: 200, type: [SessionDto] })
   async findAll(): Promise<SessionDto[]> {
     return this.sessionService.findAll()
+  }
+
+  @Public()
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: '删除会话' })
+  @ApiResponse({ status: 204 })
+  async remove(@Param('id') id: string): Promise<void> {
+    await this.sessionService.remove(id)
   }
 }

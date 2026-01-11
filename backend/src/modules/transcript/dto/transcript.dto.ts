@@ -19,6 +19,9 @@ export class TranscriptResultDto {
   @ApiProperty({ description: '会话ID' })
   sessionId: string
 
+  @ApiPropertyOptional({ description: '段落切分键（用于按 utterance 切段）' })
+  segmentKey?: string
+
   @ApiProperty({ description: '发言者ID' })
   speakerId: string
 

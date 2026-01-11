@@ -40,7 +40,9 @@ export class SessionService {
   }
 
   async findAll(): Promise<SessionDto[]> {
-    const sessions = await this.prisma.session.findMany()
+    const sessions = await this.prisma.session.findMany({
+      orderBy: { startTime: 'desc' },
+    })
     return sessions.map(session => this.toSessionDto(session))
   }
 
@@ -73,6 +75,41 @@ export class SessionService {
     return this.prisma.speaker.findMany({ where: { sessionId } })
   }
 
+  /**
+   * 存档会话（只能存档已结束的会议）
+   */
+  async archive(id: string): Promise<SessionDto> {
+    await this.ensureSessionExists(id)
+    const session = await this.prisma.session.update({
+      where: { id },
+      data: { status: SessionStatus.ARCHIVED },
+    })
+    return this.toSessionDto(session)
+  }
+
+  /**
+   * 取消存档（恢复为已结束状态）
+   */
+  async unarchive(id: string): Promise<SessionDto> {
+    await this.ensureSessionExists(id)
+    const session = await this.prisma.session.update({
+      where: { id },
+      data: { status: SessionStatus.ENDED },
+    })
+    return this.toSessionDto(session)
+  }
+
+  /**
+   * 删除会话（级联删除关联数据）
+   */
+  async remove(id: string): Promise<{ deleted: boolean }> {
+    await this.ensureSessionExists(id)
+    await this.prisma.session.delete({
+      where: { id },
+    })
+    return { deleted: true }
+  }
+
   private async ensureSessionExists(id: string): Promise<void> {
     const session = await this.prisma.session.findUnique({
       where: { id },
@@ -89,10 +126,13 @@ export class SessionService {
 
     return {
       id: session.id,
+      title: session.title,
+      description: session.description ?? undefined,
       startedAt: session.startTime,
       endedAt,
       duration,
-      isActive: session.status !== SessionStatus.ENDED,
+      isActive: session.status !== SessionStatus.ENDED && session.status !== SessionStatus.ARCHIVED,
+      isArchived: session.status === SessionStatus.ARCHIVED,
     }
   }
 

@@ -22,6 +22,12 @@ export class SessionDto {
   @ApiProperty({ description: '会话ID' })
   id: string
 
+  @ApiPropertyOptional({ description: '会话标题' })
+  title?: string
+
+  @ApiPropertyOptional({ description: '会话描述' })
+  description?: string
+
   @ApiProperty({ description: '会话开始时间' })
   startedAt: Date
 
@@ -33,4 +39,7 @@ export class SessionDto {
 
   @ApiProperty({ description: '是否活跃' })
   isActive: boolean
+
+  @ApiProperty({ description: '是否已存档' })
+  isArchived: boolean
 }

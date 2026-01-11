@@ -20,7 +20,7 @@ describe('DoubaoClientManager', () => {
         TRANSCRIPT_ENDPOINT: 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async',
         TRANSCRIPT_APP_KEY: 'test-app-key',
         TRANSCRIPT_ACCESS_KEY: 'test-access-key',
-        TRANSCRIPT_RESOURCE_ID: 'volc.seedasr.sauc.duration',
+        TRANSCRIPT_RESOURCE_ID: 'volc.bigasr.sauc.duration',
       }
       return configs[key] || null
     })

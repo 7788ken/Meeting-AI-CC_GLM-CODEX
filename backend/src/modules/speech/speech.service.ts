@@ -4,6 +4,15 @@ import { Model } from 'mongoose'
 import { Speech, SpeechDocument } from './schemas/speech.schema'
 import { CreateSpeechDto, UpdateSpeechDto, SpeechDto } from './dto/speech.dto'
 
+export type UpdateRealtimeSpeechInput = {
+  content?: string
+  confidence?: number
+  speakerId?: string
+  speakerName?: string
+  speakerColor?: string
+  endTime?: Date
+}
+
 /**
  * 发言记录服务 (B1027)
  * 使用 Mongoose 实现发言记录的持久化
@@ -84,6 +93,49 @@ export class SpeechService {
     }
 
     Object.assign(speech, dto)
+    const updated = await speech.save()
+    return this.toDto(updated)
+  }
+
+  /**
+   * 更新实时转写的发言记录（内部使用，不走 DTO 校验）
+   * - 支持持续刷新内容/置信度/结束时间
+   * - 自动维护 duration
+   */
+  async updateRealtime(id: string, input: UpdateRealtimeSpeechInput): Promise<SpeechDto> {
+    const speech = await this.speechModel.findById(id)
+    if (!speech) {
+      throw new NotFoundException(`Speech ${id} not found`)
+    }
+
+    if (input.content !== undefined) {
+      speech.content = input.content
+    }
+
+    if (input.confidence !== undefined) {
+      speech.confidence = input.confidence
+    }
+
+    if (input.speakerId !== undefined) {
+      speech.speakerId = input.speakerId
+    }
+
+    if (input.speakerName !== undefined) {
+      speech.speakerName = input.speakerName
+    }
+
+    if (input.speakerColor !== undefined) {
+      speech.speakerColor = input.speakerColor
+    }
+
+    if (input.endTime) {
+      speech.endTime = input.endTime
+    } else {
+      speech.endTime = new Date()
+    }
+
+    speech.duration = speech.endTime.getTime() - speech.startTime.getTime()
+
     const updated = await speech.save()
     return this.toDto(updated)
   }

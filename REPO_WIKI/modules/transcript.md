@@ -4,6 +4,15 @@
 
 Transcript 模块实现了基于豆包（Doubao）Speech Recognition API 的流式语音转写功能。该模块通过 WebSocket 协议与豆包服务通信，支持实时语音识别和结果返回。
 
+> 2.0 使用文档：docs/doubao-asr-2.0-guide.md
+
+## 2.0 关键路径
+
+- 二进制音频处理与结束帧：backend/src/modules/transcript/transcript.service.ts:84, backend/src/modules/transcript/transcript.service.ts:123
+- Config/Audio 包发送：backend/src/modules/transcript/doubao.client.ts:54
+- 协议编解码：backend/src/modules/transcript/doubao.codec.ts:50
+- 前端 PCM 转换与发送：frontend/src/services/audioCapture.ts:148、frontend/src/services/websocket.ts:199
+
 ## 技术栈
 
 - **NestJS** - 后端框架
@@ -171,8 +180,14 @@ TRANSCRIPT_ENDPOINT=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
 TRANSCRIPT_APP_KEY=your_app_key
 TRANSCRIPT_ACCESS_KEY=your_access_key
 
-# 资源ID（可选，默认 volc.seedasr.sauc.concurrent）
-TRANSCRIPT_RESOURCE_ID=volc.seedasr.sauc.duration
+# 资源ID（可选；按你开通的规格选择）
+# - Java demo（sauc/bigmodel_async）：volc.bigasr.sauc.duration
+# - 其他规格（以你实际开通为准）：volc.seedasr.sauc.duration / volc.seedasr.sauc.concurrent
+TRANSCRIPT_RESOURCE_ID=volc.bigasr.sauc.duration
+
+# Config/音频压缩开关（默认 true；若服务端不兼容可设为 false）
+TRANSCRIPT_CONFIG_GZIP=true
+TRANSCRIPT_AUDIO_GZIP=true
 
 # 响应超时时间（毫秒，默认 5000）
 TRANSCRIPT_RESPONSE_TIMEOUT_MS=5000

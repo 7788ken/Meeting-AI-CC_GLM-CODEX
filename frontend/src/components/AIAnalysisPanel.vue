@@ -310,7 +310,7 @@ async function handleAnalysis() {
       model: selectedModel.value,
     })
 
-    const analysis = response.data?.data
+    const analysis = response.data
     if (analysis) {
       currentAnalysis.value = analysis
       analysisStatus.value = 'success'

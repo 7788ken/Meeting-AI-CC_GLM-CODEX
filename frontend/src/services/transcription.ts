@@ -3,7 +3,7 @@
  * 整合音频捕获和 WebSocket，处理实时转写
  */
 
-import { audioCapture, type AudioDataCallback } from './audioCapture'
+import { AudioCaptureService, audioCapture, type AudioDataCallback } from './audioCapture'
 import { websocket, type ConnectionStatus, type TranscriptMessage } from './websocket'
 import type { Speech } from './api'
 
@@ -11,6 +11,8 @@ export interface TranscriptionConfig {
   sessionId: string
   language?: string
   model?: string
+  speakerId?: string
+  speakerName?: string
   onTranscript?: (transcript: Speech) => void
   onError?: (error: Error) => void
   onStatusChange?: (status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error') => void
@@ -22,6 +24,9 @@ export class TranscriptionService {
   private isPaused = false
   private currentSessionId = ''
   private status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error' = 'idle'
+
+  private segmentCounterBySpeaker = new Map<string, number>()
+  private activeSegmentBySpeaker = new Map<string, { id: string; startTime: string }>()
 
   private onTranscriptCallback?: (transcript: Speech) => void
   private onErrorCallback?: (error: Error) => void
@@ -40,6 +45,11 @@ export class TranscriptionService {
       throw new Error('转写已在进行中')
     }
 
+    if (this.currentSessionId && this.currentSessionId !== config.sessionId) {
+      this.segmentCounterBySpeaker.clear()
+      this.activeSegmentBySpeaker.clear()
+    }
+
     this.currentSessionId = config.sessionId
     this.onTranscriptCallback = config.onTranscript
     this.onErrorCallback = config.onError
@@ -56,6 +66,14 @@ export class TranscriptionService {
 
       // 设置会话
       websocket.setSession(config.sessionId)
+
+      // 设置当前发言者（可选：用于多人会议区分）
+      if (config.speakerId || config.speakerName) {
+        websocket.setSpeaker({
+          speakerId: config.speakerId,
+          speakerName: config.speakerName,
+        })
+      }
 
       // 开始转写
       websocket.startTranscribe({
@@ -123,12 +141,7 @@ export class TranscriptionService {
     return new Promise((resolve, reject) => {
       const onAudioData: AudioDataCallback = (audioData) => {
         // 转换为 PCM 16-bit
-        const float32Array = audioData.data
-        const pcm16 = new Int16Array(float32Array.length)
-        for (let i = 0; i < float32Array.length; i++) {
-          const sample = Math.max(-1, Math.min(1, float32Array[i]))
-          pcm16[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
-        }
+        const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
         // 发送到 WebSocket
         websocket.sendAudioData(pcm16)
       }
@@ -145,8 +158,12 @@ export class TranscriptionService {
    */
   private setupWebSocketHandlers(): void {
     websocket.onMessage((data: TranscriptMessage) => {
-      if (data.type === 'transcript' && data.data.isFinal) {
+      if (data.type === 'transcript' && data.data.content) {
         this.handleTranscript(data.data)
+      } else if (data.type === 'status') {
+        if (import.meta.env.DEV) {
+          console.log('[Transcription] 状态消息', data.data)
+        }
       } else if (data.type === 'error') {
         this.handleError(new Error(data.data.error || '转写错误'))
       }
@@ -183,21 +200,45 @@ export class TranscriptionService {
   private handleTranscript(data: TranscriptMessage['data']): void {
     if (!this.onTranscriptCallback) return
 
+    const speakerId = data.speakerId || 'unknown'
+    const isFinal = Boolean(data.isFinal)
+
+    let active = this.activeSegmentBySpeaker.get(speakerId)
+    if (!active) {
+      const nextIndex = (this.segmentCounterBySpeaker.get(speakerId) ?? 0) + 1
+      this.segmentCounterBySpeaker.set(speakerId, nextIndex)
+
+      active = {
+        id: data.id || `${this.currentSessionId}:${speakerId}:${nextIndex}`,
+        startTime: data.startTime || new Date().toISOString(),
+      }
+      this.activeSegmentBySpeaker.set(speakerId, active)
+    } else if (data.id && active.id !== data.id) {
+      // 后端落库后会返回稳定的 speechId，优先使用，确保后续分析/查询可用
+      active.id = data.id
+    }
+
     const transcript: Speech = {
-      id: Date.now().toString(),
+      id: active.id,
       sessionId: this.currentSessionId,
       speakerId: data.speakerId || 'unknown',
       speakerName: data.speakerName || '未知发言者',
+      speakerColor: data.speakerColor,
       content: data.content || '',
       confidence: data.confidence || 0,
-      startTime: new Date(data.timestamp || Date.now()).toISOString(),
-      endTime: new Date().toISOString(),
-      duration: 0,
-      isEdited: false,
-      isMarked: false,
+      startTime: data.startTime || active.startTime,
+      endTime: data.endTime || new Date().toISOString(),
+      duration: data.duration || 0,
+      isEdited: Boolean(data.isEdited),
+      isMarked: Boolean(data.isMarked),
+      audioOffset: data.audioOffset,
     }
 
     this.onTranscriptCallback(transcript)
+
+    if (isFinal) {
+      this.activeSegmentBySpeaker.delete(speakerId)
+    }
   }
 
   /**
@@ -236,6 +277,8 @@ export class TranscriptionService {
     this.stop()
     websocket.disconnect()
     websocket.removeAllListeners()
+    this.segmentCounterBySpeaker.clear()
+    this.activeSegmentBySpeaker.clear()
   }
 }
 

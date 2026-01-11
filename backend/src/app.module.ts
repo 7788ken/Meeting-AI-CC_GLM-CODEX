@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
-import { APP_GUARD } from '@nestjs/core'
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { ConfigurationService } from './config/configuration.service'
 import configuration from './config/configuration'
 import { PrismaModule } from './database/prisma.module'
@@ -11,6 +11,7 @@ import { AnalysisModule } from './modules/analysis/analysis.module'
 import { TranscriptModule } from './modules/transcript/transcript.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
+import { TransformInterceptor } from './common/interceptors/transform.interceptor'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 
@@ -33,6 +34,10 @@ import { AppService } from './app.service'
   providers: [
     AppService,
     ConfigurationService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TransformInterceptor,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
