@@ -50,6 +50,7 @@ defineProps<{
 .turn-segments-panel {
   height: 100%;
   overflow: auto;
+  padding: 0 8px;
 }
 
 .panel-meta {
