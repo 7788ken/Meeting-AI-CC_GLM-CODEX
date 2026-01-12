@@ -7,9 +7,20 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter'
 import * as http from 'http'
 import * as WebSocket from 'ws'
 import { TranscriptService } from './modules/transcript/transcript.service'
+import { TranscriptStreamService } from './modules/transcript-stream/transcript-stream.service'
+import { TurnSegmentationService } from './modules/turn-segmentation/turn-segmentation.service'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { SpeakerService } from './modules/speech/speaker.service'
+import {
+  AnonymousSpeakerCluster,
+  SpeakerEmbedding,
+  TurnAudioSnapshot,
+  TurnDetector,
+  getDefaultTurnModeConfig,
+} from './modules/transcript/turn-mode'
+import { isSegmentKeyRollback } from './modules/transcript/segment-key'
+import { shouldSplitByContent, shouldSplitBySegmentKeyChange } from './modules/transcript/realtime-split'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -80,6 +91,12 @@ async function bootstrap() {
   const transcriptService = app.get(TranscriptService)
   const speechService = app.get(SpeechService)
   const speakerService = app.get(SpeakerService)
+  const transcriptStreamService = app.get(TranscriptStreamService)
+  const turnSegmentationService = app.get(TurnSegmentationService)
+
+  const transcriptPipeline = process.env.TRANSCRIPT_PIPELINE || 'raw_llm'
+  const rawEventStreamEnabled = true // 默认启用原文事件流
+  const turnSegmentationEnabled = rawEventStreamEnabled
 
   // WebSocket Logger
   const wsLogger = new Logger('WebSocket')
@@ -106,6 +123,28 @@ async function bootstrap() {
   const speakerMetaBySessionClient = new Map<string, { speakerId: string; speakerName: string }>()
   const speakerNameBySessionSpeakerId = new Map<string, string>()
   const speakerIndexBySession = new Map<string, number>()
+
+  // raw_llm：segmentKey -> eventIndex 映射（每 session + client）
+  const segmentKeyToEventIndexBySessionClient = new Map<string, Map<string, number>>()
+
+  const turnModeEnabled = process.env.TRANSCRIPT_TURN_MODE === '1'
+  const turnModeConfig = getDefaultTurnModeConfig()
+  const turnDetectorByClientId = new Map<string, TurnDetector>()
+  const speakerClusterBySession = new Map<string, AnonymousSpeakerCluster>()
+  const lastSpeakerIdBySession = new Map<string, string>()
+
+  // raw_llm：分段调度（按 session 去抖 + 强触发）
+  const turnSegmentationTimerBySession = new Map<string, ReturnType<typeof setTimeout>>()
+  const turnSegmentationInFlight = new Set<string>()
+  const turnSegmentationPending = new Set<string>()
+  const turnSegmentationIntervalMs = readNumberFromEnv(
+    'TRANSCRIPT_SEGMENT_INTERVAL_MS',
+    3000,
+    value => value >= 0 && value <= 10 * 60 * 1000
+  )
+  const triggerSegmentationOnEndTurn = process.env.TRANSCRIPT_SEGMENT_TRIGGER_ON_END_TURN !== '0'
+  const triggerSegmentationOnStopTranscribe =
+    process.env.TRANSCRIPT_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE !== '0'
 
   wss.on('connection', (ws: WebSocket) => {
     const clientId = createClientId()
@@ -135,6 +174,7 @@ async function bootstrap() {
               const previousSessionId = clientSessions.get(ws)
               if (previousSessionId && previousSessionId !== nextSessionId) {
                 removeClientFromSession(previousSessionId, ws)
+                segmentKeyToEventIndexBySessionClient.delete(getSegmentKeyMapKey(previousSessionId, clientId))
               }
 
               clientSessions.set(ws, nextSessionId)
@@ -223,7 +263,13 @@ async function bootstrap() {
               const clientId = getClientId(ws)
               if (clientId) {
                 const sessionId = clientSessions.get(ws)
-                if (sessionId) {
+                if (turnModeEnabled) {
+                  if (sessionId) {
+                    await finalizeTurnForClient(sessionId, clientId)
+                  } else {
+                    await transcriptService.endAudio(clientId)
+                  }
+                } else if (sessionId) {
                   const result = await transcriptService.finalizeAudio(clientId, sessionId, {
                     propagateError: true,
                   })
@@ -236,6 +282,19 @@ async function bootstrap() {
                       speakerName: result.speakerName,
                       segmentKey: result.segmentKey,
                     })
+
+                    await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
+                      content: result.content,
+                      isFinal: true,
+                      speakerId: result.speakerId,
+                      speakerName: result.speakerName,
+                      segmentKey: result.segmentKey,
+                      asrTimestampMs: Date.now(),
+                    })
+
+                    if (triggerSegmentationOnStopTranscribe) {
+                      triggerTurnSegmentationNow(sessionId, 'stop_transcribe')
+                    }
                   } else {
                     // 没有返回转写结果，也要关闭当前活跃段落，避免前端一直认为该段落未结束
                     await finalizeActiveSpeechForClient(clientId)
@@ -251,6 +310,31 @@ async function bootstrap() {
                 data: { status: 'transcribe_stopped' },
               })
             )
+            break
+
+          case 'end_turn':
+            {
+              if (!turnModeEnabled) {
+                break
+              }
+
+              const clientId = getClientId(ws)
+              const sessionId = clientSessions.get(ws)
+              if (!clientId || !sessionId) {
+                break
+              }
+
+              await finalizeTurnForClient(sessionId, clientId)
+              if (triggerSegmentationOnEndTurn) {
+                triggerTurnSegmentationNow(sessionId, 'end_turn')
+              }
+              ws.send(
+                JSON.stringify({
+                  type: 'status',
+                  data: { status: 'turn_finalized' },
+                })
+              )
+            }
             break
         }
       } catch {
@@ -290,12 +374,14 @@ async function bootstrap() {
             )
           }
 
-          const result = await transcriptService.processBinaryAudio(
-            clientId,
-            data as Buffer,
-            sessionId,
-            { propagateError: true }
-          )
+          if (turnModeEnabled) {
+            await handleTurnModePcmChunk(sessionId, clientId, data as Buffer)
+            return
+          }
+
+          const result = await transcriptService.processBinaryAudio(clientId, data as Buffer, sessionId, {
+            propagateError: true,
+          })
 
           if (result) {
             await persistAndBroadcastTranscript(sessionId, clientId, {
@@ -305,6 +391,15 @@ async function bootstrap() {
               speakerId: result.speakerId,
               speakerName: result.speakerName,
               segmentKey: result.segmentKey,
+            })
+
+            await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
+              content: result.content,
+              isFinal: result.isFinal,
+              speakerId: result.speakerId,
+              speakerName: result.speakerName,
+              segmentKey: result.segmentKey,
+              asrTimestampMs: Date.now(),
             })
           }
         } catch (error) {
@@ -324,9 +419,13 @@ async function bootstrap() {
       wsLogger.log(`Client disconnected, clientId: ${clientId}`)
       if (clientId) {
         transcriptService.removeClient(clientId)
+        turnDetectorByClientId.delete(clientId)
         void finalizeActiveSpeechForClient(clientId)
       }
       const sessionId = clientSessions.get(ws)
+      if (clientId && sessionId) {
+        segmentKeyToEventIndexBySessionClient.delete(getSegmentKeyMapKey(sessionId, clientId))
+      }
       if (sessionId) {
         removeClientFromSession(sessionId, ws)
       }
@@ -387,6 +486,20 @@ async function bootstrap() {
 
   function getSpeakerDirectoryKey(sessionId: string, speakerId: string): string {
     return `${sessionId}:${speakerId}`
+  }
+
+  function getSegmentKeyMapKey(sessionId: string, clientId: string): string {
+    return `${sessionId}:${clientId}`
+  }
+
+  function getSegmentKeyMap(sessionId: string, clientId: string): Map<string, number> {
+    const key = getSegmentKeyMapKey(sessionId, clientId)
+    const existing = segmentKeyToEventIndexBySessionClient.get(key)
+    if (existing) return existing
+
+    const created = new Map<string, number>()
+    segmentKeyToEventIndexBySessionClient.set(key, created)
+    return created
   }
 
   function ensureSpeakerMeta(
@@ -459,6 +572,165 @@ async function bootstrap() {
     return index
   }
 
+  function getTurnDetector(clientId: string): TurnDetector {
+    const existing = turnDetectorByClientId.get(clientId)
+    if (existing) return existing
+    const created = new TurnDetector(turnModeConfig)
+    turnDetectorByClientId.set(clientId, created)
+    return created
+  }
+
+  function getSpeakerCluster(sessionId: string): AnonymousSpeakerCluster {
+    const existing = speakerClusterBySession.get(sessionId)
+    if (existing) return existing
+
+    const sameTh = readNumberFromEnv('TRANSCRIPT_TURN_SPK_SAME_TH', 0.75, value => value > 0 && value <= 1)
+    const newTh = readNumberFromEnv('TRANSCRIPT_TURN_SPK_NEW_TH', 0.6, value => value >= 0 && value < 1)
+
+    const created = new AnonymousSpeakerCluster(sessionId, { sameTh, newTh })
+    speakerClusterBySession.set(sessionId, created)
+    return created
+  }
+
+  async function handleTurnModePcmChunk(
+    sessionId: string,
+    clientId: string,
+    chunk: Buffer
+  ): Promise<void> {
+    const detector = getTurnDetector(clientId)
+    const nowMs = Date.now()
+    const { shouldFinalizeTurn } = detector.pushPcmChunk(chunk, nowMs)
+
+    if (detector.hasActiveTurn()) {
+      // turn 模式下仍使用豆包流式链路喂音频，但不广播中间结果
+      await transcriptService.processBinaryAudio(clientId, chunk, sessionId, { propagateError: true })
+    }
+
+    if (!shouldFinalizeTurn) {
+      return
+    }
+
+    await finalizeTurn(sessionId, clientId, detector.snapshot())
+    detector.reset()
+  }
+
+  async function finalizeTurnForClient(sessionId: string, clientId: string): Promise<void> {
+    const detector = turnDetectorByClientId.get(clientId)
+    if (!detector?.hasActiveTurn()) {
+      await transcriptService.endAudio(clientId)
+      return
+    }
+
+    await finalizeTurn(sessionId, clientId, detector.snapshot())
+    detector.reset()
+  }
+
+  async function finalizeTurn(
+    sessionId: string,
+    clientId: string,
+    snapshot: TurnAudioSnapshot | null
+  ): Promise<void> {
+    const result = await transcriptService.finalizeAudio(clientId, sessionId, { propagateError: true })
+    if (!result?.content) {
+      return
+    }
+
+    const speakerId = await resolveAnonymousSpeakerId(sessionId, clientId, snapshot)
+
+    await persistAndBroadcastTranscript(sessionId, clientId, {
+      content: result.content,
+      confidence: result.confidence,
+      isFinal: true,
+      speakerId,
+      speakerName: '',
+      segmentKey: undefined,
+    })
+
+    await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
+      content: result.content,
+      isFinal: true,
+      speakerId,
+      speakerName: '',
+      segmentKey: undefined,
+      asrTimestampMs: Date.now(),
+    })
+  }
+
+  async function resolveAnonymousSpeakerId(
+    sessionId: string,
+    clientId: string,
+    snapshot: TurnAudioSnapshot | null
+  ): Promise<string> {
+    const fallback = lastSpeakerIdBySession.get(sessionId) ?? ensureSpeakerMeta(sessionId, clientId).speakerId
+
+    const embedUrl = process.env.TRANSCRIPT_TURN_EMBEDDING_URL
+    if (!embedUrl) {
+      return fallback
+    }
+
+    if (!snapshot || snapshot.voicedMs < turnModeConfig.minEmbeddingVoicedMs) {
+      return fallback
+    }
+
+    const embedding = await fetchSpeakerEmbedding(embedUrl, snapshot.pcm)
+    if (!embedding || embedding.length === 0) {
+      return fallback
+    }
+
+    const cluster = getSpeakerCluster(sessionId)
+    const speakerId = cluster.assign(embedding)
+    lastSpeakerIdBySession.set(sessionId, speakerId)
+    return speakerId
+  }
+
+  async function fetchSpeakerEmbedding(url: string, pcm: Buffer): Promise<SpeakerEmbedding | null> {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          format: 'pcm_s16le',
+          sampleRate: 16000,
+          channels: 1,
+          audioBase64: pcm.toString('base64'),
+        }),
+      })
+
+      if (!response.ok) {
+        wsLogger.warn(`Embedding service failed: status=${response.status}`)
+        return null
+      }
+
+      const data = (await response.json()) as { embedding?: unknown }
+      const embedding = data?.embedding
+      if (!Array.isArray(embedding)) return null
+
+      const values: number[] = []
+      for (const item of embedding) {
+        const value = Number(item)
+        if (!Number.isFinite(value)) return null
+        values.push(value)
+      }
+      return values
+    } catch (error) {
+      wsLogger.warn(
+        `Embedding request failed: ${error instanceof Error ? error.message : String(error)}`
+      )
+      return null
+    }
+  }
+
+  function readNumberFromEnv(
+    key: string,
+    defaultValue: number,
+    isValid: (value: number) => boolean
+  ): number {
+    const raw = process.env[key]
+    if (!raw) return defaultValue
+    const value = Number(raw)
+    return Number.isFinite(value) && isValid(value) ? value : defaultValue
+  }
+
   async function finalizeActiveSpeechForClient(clientId: string): Promise<void> {
     const active = activeSpeechByClientId.get(clientId)
     if (!active) return
@@ -501,11 +773,20 @@ async function bootstrap() {
     const nowMs = Date.now()
     const active = activeSpeechByClientId.get(clientId)
 
+    if (isSegmentKeyRollback(active?.segmentKey, input.segmentKey)) {
+      // 部分流式 ASR 会偶发回传“更早的 utterance 更新”（数组重排/回写），直接落库会导致前端出现插入/重复段落。
+      // 这里选择忽略回退段落，优先保证实时展示稳定；最终文本以 stop_transcribe/finalizeAudio 为准。
+      return
+    }
+
     if (
       active &&
       (active.sessionId !== sessionId ||
         active.speakerId !== assigned.id ||
-        (input.segmentKey && active.segmentKey && input.segmentKey !== active.segmentKey) ||
+        (input.segmentKey &&
+          active.segmentKey &&
+          input.segmentKey !== active.segmentKey &&
+          shouldSplitBySegmentKeyChange(active.lastContent, input.content)) ||
         (active.segmentKey == null &&
           input.segmentKey == null &&
           nowMs - active.lastUpdateAtMs >= getAutoSplitGapMs()) ||
@@ -565,17 +846,148 @@ async function bootstrap() {
     })
   }
 
-  function shouldSplitByContent(previous: string, next: string): boolean {
-    const prev = previous?.trim?.() ?? ''
-    const cur = next?.trim?.() ?? ''
-    if (!prev || !cur) return false
-    if (prev === cur) return false
+  async function persistAndBroadcastTranscriptEvent(
+    sessionId: string,
+    clientId: string,
+    input: {
+      content: string
+      isFinal: boolean
+      speakerId: string
+      speakerName: string
+      segmentKey?: string
+      asrTimestampMs?: number
+    }
+  ): Promise<void> {
+    if (!rawEventStreamEnabled) return
+    if (!input.content) return
 
-    // 常见流式 ASR 会在进入下一句/下一段时“重置文本”，用轻量启发式检测
-    if (cur.startsWith(prev) || prev.startsWith(cur)) return false
+    const resolved = resolveSpeaker(sessionId, clientId, input.speakerId, input.speakerName)
 
-    // 避免轻微改写触发切段：只有在长度明显回退时才切段
-    return cur.length <= Math.max(6, Math.floor(prev.length * 0.6))
+    const segmentKey = input.segmentKey?.trim?.() ? input.segmentKey.trim() : undefined
+    const segmentKeyMap = segmentKey ? getSegmentKeyMap(sessionId, clientId) : null
+    const existingEventIndex = segmentKey ? segmentKeyMap?.get(segmentKey) : undefined
+
+    try {
+      const result = await transcriptStreamService.upsertEvent({
+        sessionId,
+        eventIndex: existingEventIndex,
+        speakerId: resolved.speakerId,
+        speakerName: resolved.speakerName,
+        content: input.content,
+        isFinal: input.isFinal,
+        segmentKey,
+        asrTimestampMs: input.asrTimestampMs,
+      })
+
+      if (segmentKey && segmentKeyMap && existingEventIndex == null) {
+        segmentKeyMap.set(segmentKey, result.event.eventIndex)
+      }
+
+      broadcastToSession(sessionId, {
+        type: 'transcript_event_upsert',
+        data: {
+          sessionId,
+          revision: result.revision,
+          event: result.event,
+        },
+      })
+
+      scheduleTurnSegmentation(sessionId)
+    } catch (error) {
+      wsLogger.warn(
+        `Persist transcript event failed, sessionId=${sessionId}, clientId=${clientId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    }
+  }
+
+  function scheduleTurnSegmentation(sessionId: string): void {
+    if (!turnSegmentationEnabled) return
+    if (!turnSegmentationIntervalMs || turnSegmentationIntervalMs <= 0) {
+      void runTurnSegmentation(sessionId, { force: false, reason: 'interval_disabled' })
+      return
+    }
+
+    const existing = turnSegmentationTimerBySession.get(sessionId)
+    if (existing) {
+      clearTimeout(existing)
+    }
+
+    const timer = setTimeout(() => {
+      turnSegmentationTimerBySession.delete(sessionId)
+      void runTurnSegmentation(sessionId, { force: false, reason: 'debounce' })
+    }, turnSegmentationIntervalMs)
+
+    turnSegmentationTimerBySession.set(sessionId, timer)
+  }
+
+  function triggerTurnSegmentationNow(sessionId: string, reason: string): void {
+    if (!turnSegmentationEnabled) return
+
+    const existing = turnSegmentationTimerBySession.get(sessionId)
+    if (existing) {
+      clearTimeout(existing)
+      turnSegmentationTimerBySession.delete(sessionId)
+    }
+
+    void runTurnSegmentation(sessionId, { force: true, reason })
+  }
+
+  async function runTurnSegmentation(
+    sessionId: string,
+    input: { force: boolean; reason: string }
+  ): Promise<void> {
+    if (turnSegmentationInFlight.has(sessionId)) {
+      turnSegmentationPending.add(sessionId)
+      return
+    }
+
+    turnSegmentationInFlight.add(sessionId)
+    try {
+      const state = await transcriptStreamService.getState({ sessionId })
+      const snapshot = await turnSegmentationService.getSnapshot(sessionId)
+
+      if (!input.force) {
+        if (snapshot.status === 'processing' && snapshot.targetRevision === state.revision) {
+          return
+        }
+        if (snapshot.targetRevision >= state.revision) {
+          return
+        }
+      }
+
+      const processing = await turnSegmentationService.markProcessing({
+        sessionId,
+        targetRevision: state.revision,
+      })
+
+      broadcastToSession(sessionId, {
+        type: 'turn_segments_upsert',
+        data: processing,
+      })
+
+      const result = await turnSegmentationService.segmentAndPersist({
+        sessionId,
+        targetRevision: state.revision,
+      })
+
+      broadcastToSession(sessionId, {
+        type: 'turn_segments_upsert',
+        data: result,
+      })
+    } catch (error) {
+      wsLogger.warn(
+        `Turn segmentation task failed, sessionId=${sessionId}, reason=${input.reason}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    } finally {
+      turnSegmentationInFlight.delete(sessionId)
+      if (turnSegmentationPending.delete(sessionId)) {
+        void runTurnSegmentation(sessionId, { force: false, reason: 'pending' })
+      }
+    }
   }
 
   function getAutoSplitGapMs(): number {

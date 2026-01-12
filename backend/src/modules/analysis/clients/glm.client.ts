@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
-import * as crypto from 'crypto'
+import { extractGlmTextContent, getGlmAuthorizationToken } from '../../../common/llm/glm'
 
 /**
  * GLM (智谱AI) 模型客户端
@@ -13,6 +13,7 @@ export class GlmClient {
   private readonly logger = new Logger(GlmClient.name)
   private readonly apiKey: string
   private readonly baseURL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+  private readonly model = 'glm-4.6v-flash'
 
   constructor(
     private readonly configService: ConfigService,
@@ -71,15 +72,20 @@ export class GlmClient {
 
   private async callGlmAPI(prompt: string): Promise<any> {
     const requestBody = {
-      model: 'glm-4',
+      model: this.model,
       messages: [
         {
           role: 'system',
-          content: '你是一个专业的会议助手，擅长分析会议内容并生成结构化的报告。',
+          content: [
+            {
+              type: 'text',
+              text: '你是一个专业的会议助手，擅长分析会议内容并生成结构化的报告。',
+            },
+          ],
         },
         {
           role: 'user',
-          content: prompt,
+          content: [{ type: 'text', text: prompt }],
         },
       ],
       temperature: 0.7,
@@ -97,7 +103,7 @@ export class GlmClient {
       this.httpService.post(this.baseURL, requestBody, { headers })
     )
 
-    if (response.data?.choices?.[0]?.message?.content) {
+    if (extractGlmTextContent(response.data?.choices?.[0]?.message?.content)) {
       this.logger.log('GLM API call successful')
       return response.data
     }
@@ -106,50 +112,12 @@ export class GlmClient {
   }
 
   private parseResponse(response: any): string {
-    return response?.choices?.[0]?.message?.content || '无法解析 AI 响应'
+    const text = extractGlmTextContent(response?.choices?.[0]?.message?.content)
+    return text || '无法解析 AI 响应'
   }
 
   private getAuthorizationToken(): string {
-    const rawKey = this.apiKey.trim()
-    const parts = rawKey.split('.')
-
-    if (parts.length === 2) {
-      const [apiKey, apiSecret] = parts
-      return this.signJwt(apiKey, apiSecret)
-    }
-
-    return rawKey
-  }
-
-  private signJwt(apiKey: string, apiSecret: string): string {
-    const header = { alg: 'HS256', sign_type: 'SIGN' }
-    const timestamp = Date.now()
-    const payload = {
-      api_key: apiKey,
-      exp: timestamp + 60 * 60 * 1000,
-      timestamp,
-    }
-
-    const encodedHeader = this.base64UrlEncode(JSON.stringify(header))
-    const encodedPayload = this.base64UrlEncode(JSON.stringify(payload))
-    const data = `${encodedHeader}.${encodedPayload}`
-    const signature = crypto
-      .createHmac('sha256', apiSecret)
-      .update(data)
-      .digest('base64')
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-
-    return `${data}.${signature}`
-  }
-
-  private base64UrlEncode(content: string): string {
-    return Buffer.from(content)
-      .toString('base64')
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
+    return getGlmAuthorizationToken(this.apiKey)
   }
 
   async healthCheck(): Promise<boolean> {
@@ -162,8 +130,10 @@ export class GlmClient {
         this.httpService.post(
           this.baseURL,
           {
-            model: 'glm-4',
-            messages: [{ role: 'user', content: 'Hi' }],
+            model: this.model,
+            messages: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }],
+            temperature: 0,
+            max_tokens: 16,
           },
           {
             headers: { Authorization: `Bearer ${this.getAuthorizationToken()}` },
@@ -171,7 +141,7 @@ export class GlmClient {
           }
         )
       )
-      return !!response.data?.choices?.[0]?.message?.content
+      return !!extractGlmTextContent(response.data?.choices?.[0]?.message?.content)
     } catch {
       return false
     }

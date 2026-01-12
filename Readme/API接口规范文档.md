@@ -547,7 +547,7 @@
 - **请求体**：
 ```json
 {
-  "model_name": "glm-4",
+  "model_name": "glm-4.6v-flash",
   "prompt": "请分析以下发言内容的核心要点："
 }
 ```
@@ -560,7 +560,7 @@
   "_id": "objectid",
   "speech_id": "objectid",
   "session_id": "uuid",
-  "model_name": "glm-4",
+  "model_name": "glm-4.6v-flash",
   "core_analysis": "核心要点分析",
   "brief_answer": "简要回答",
   "deep_answer": "深度回答",
@@ -591,7 +591,7 @@
     "_id": "objectid",
     "speech_id": "objectid",
     "session_id": "uuid",
-    "model_name": "glm-4",
+    "model_name": "glm-4.6v-flash",
     "core_analysis": "核心要点分析",
     "brief_answer": "简要回答",
     "deep_answer": "深度回答",
@@ -631,7 +631,7 @@
   "_id": "objectid",
   "speech_id": "objectid",
   "session_id": "uuid",
-  "model_name": "glm-4",
+  "model_name": "glm-4.6v-flash",
   "core_analysis": "核心要点分析",
   "brief_answer": "简要回答",
   "deep_answer": "深度回答",
@@ -675,8 +675,8 @@
     "cost_per_1k_tokens": 0.2
   },
   {
-    "name": "glm-4",
-    "display_name": "智谱GLM-4",
+    "name": "glm-4.6v-flash",
+    "display_name": "智谱GLM-4.6V-Flash",
     "description": "智谱AI推出的大语言模型",
     "is_default": false,
     "cost_per_1k_tokens": 0.2

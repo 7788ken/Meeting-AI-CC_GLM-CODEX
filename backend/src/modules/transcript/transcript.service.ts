@@ -334,13 +334,20 @@ export class TranscriptService {
       return { key, source: 'record' }
     }
 
-    const resultCandidates = [
-      readScalar((result as any).payload_sequence),
-      readScalar((result as any).payloadSequence),
+    // result 级别稳定字段兜底（避免使用 payload_sequence 这类“每帧变化”的字段导致过度切段/重复）
+    const stableResultCandidates = [
+      readScalar((result as any).utterance_id),
+      readScalar((result as any).utteranceId),
+      readScalar((result as any).utt_id),
+      readScalar((result as any).uttId),
+      readScalar((result as any).start_time),
+      readScalar((result as any).startTime),
+      readScalar((result as any).begin_time),
+      readScalar((result as any).beginTime),
     ].filter(Boolean) as string[]
 
-    if (resultCandidates.length > 0) {
-      return { key: resultCandidates[0], source: 'result' }
+    if (stableResultCandidates.length > 0) {
+      return { key: stableResultCandidates[0], source: 'result' }
     }
 
     // 兜底：若 utterances 为累积数组，则最后一项的下标可作为稳定切段键

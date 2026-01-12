@@ -1,0 +1,86 @@
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
+import { transcriptStreamApi, type TranscriptEvent } from '@/services/api'
+import { websocket, type TranscriptMessage } from '@/services/websocket'
+
+export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
+  const sessionId = ref<string>('')
+  const revision = ref<number>(0)
+  const nextEventIndex = ref<number>(0)
+  const eventsByIndex = ref<Map<number, TranscriptEvent>>(new Map())
+
+  const events = computed(() =>
+    Array.from(eventsByIndex.value.values()).sort((a, b) => a.eventIndex - b.eventIndex)
+  )
+
+  let bound = false
+
+  async function loadSnapshot(targetSessionId: string): Promise<void> {
+    if (!targetSessionId) {
+      reset()
+      return
+    }
+
+    sessionId.value = targetSessionId
+    const response = await transcriptStreamApi.getSnapshot(targetSessionId)
+    const snapshot = response.data
+    if (!snapshot) return
+
+    revision.value = snapshot.revision ?? 0
+    nextEventIndex.value = snapshot.nextEventIndex ?? 0
+
+    const map = new Map<number, TranscriptEvent>()
+    for (const event of snapshot.events || []) {
+      map.set(event.eventIndex, event)
+    }
+    eventsByIndex.value = map
+  }
+
+  function bindWebSocket(): void {
+    if (bound) return
+    bound = true
+
+    websocket.onMessage((message: TranscriptMessage) => {
+      if (message.type !== 'transcript_event_upsert') return
+      if (!message.data?.sessionId) return
+      if (sessionId.value && message.data.sessionId !== sessionId.value) return
+      applyUpsert(message.data.revision, message.data.event)
+    })
+  }
+
+  function applyUpsert(nextRevision: number, event: TranscriptEvent): void {
+    if (!event) return
+    revision.value = Math.max(revision.value, Number(nextRevision) || 0)
+    eventsByIndex.value.set(event.eventIndex, event)
+  }
+
+  function getTextByRange(startEventIndex: number, endEventIndex: number): string {
+    const start = Math.max(0, Math.floor(Number(startEventIndex) || 0))
+    const end = Math.max(start, Math.floor(Number(endEventIndex) || 0))
+
+    const parts: string[] = []
+    for (let idx = start; idx <= end; idx += 1) {
+      const event = eventsByIndex.value.get(idx)
+      if (event?.content) parts.push(event.content)
+    }
+    return parts.join('')
+  }
+
+  function reset(): void {
+    sessionId.value = ''
+    revision.value = 0
+    nextEventIndex.value = 0
+    eventsByIndex.value = new Map()
+  }
+
+  return {
+    sessionId,
+    revision,
+    nextEventIndex,
+    events,
+    loadSnapshot,
+    bindWebSocket,
+    getTextByRange,
+    reset,
+  }
+})

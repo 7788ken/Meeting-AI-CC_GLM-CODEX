@@ -247,8 +247,8 @@ AI 模型选择器组件。
 **可用模型**:
 - `qianwen` - 千问
 - `doubao` - 豆包
-- `glm-4` - 千问 GLM-4
-- `glm-4-flash` - 千问 GLM-4 Flash
+- `glm` - 智谱 GLM（当前配置：glm-4.6v-flash）
+- `glm-4.6v-flash` - 智谱 GLM-4.6V-Flash（兼容别名）
 
 ---
 

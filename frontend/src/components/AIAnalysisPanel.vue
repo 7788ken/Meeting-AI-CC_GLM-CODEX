@@ -236,9 +236,11 @@ const statusClass = computed(() => {
 const modelText = computed(() => {
   if (!currentAnalysis.value) return ''
   const modelMap: Record<string, string> = {
-    'glm-4': '千问 GLM-4',
+    'glm': '智谱 GLM-4.6V-Flash',
+    'glm-4.6v-flash': '智谱 GLM-4.6V-Flash',
+    'glm-4': '智谱 GLM-4.6V-Flash',
     'doubao': '豆包',
-    'glm-4-flash': '千问 GLM-4 Flash',
+    'glm-4-flash': '智谱 GLM-4.6V-Flash',
     'qianwen': '千问',
   }
   return modelMap[currentAnalysis.value.modelUsed] || currentAnalysis.value.modelUsed
@@ -265,9 +267,10 @@ const renderedMarkdown = computed(() => {
 /**
  * 简单的 Markdown 渲染（使用 DOMPurify 清理 HTML 防止 XSS）
  */
-function renderMarkdown(text: string): string {
+function renderMarkdown(text: string | null | undefined): string {
+  const source = typeof text === 'string' ? text : ''
   const rawHtml = (
-    text
+    source
       // 标题
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')

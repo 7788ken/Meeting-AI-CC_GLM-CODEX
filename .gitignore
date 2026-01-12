@@ -48,3 +48,4 @@ frontend/tests/*
 .claude/*
 frontend/e2e*.png
 docs/demo/*
+backend/.en-bak

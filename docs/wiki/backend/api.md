@@ -235,7 +235,7 @@ Content-Type: application/json
   "sessionId": "session-1",
   "speechIds": ["speech-1", "speech-2"],
   "analysisType": "summary",
-  "model": "qianwen"
+  "model": "glm"
 }
 ```
 
@@ -248,10 +248,10 @@ Content-Type: application/json
 - `full-report` - 完整报告
 
 **支持的模型**:
-- `qianwen` - 千问 GLM-4
+- `qianwen` - 千问
 - `doubao` - 豆包
-- `glm-4` - 千问 GLM-4
-- `glm-4-flash` - 千问 GLM-4 Flash
+- `glm` - 智谱 GLM（当前配置：glm-4.6v-flash）
+- `glm-4.6v-flash` - 智谱 GLM-4.6V-Flash（兼容别名）
 
 **响应**:
 ```json
@@ -260,7 +260,7 @@ Content-Type: application/json
     "id": "analysis-1",
     "sessionId": "session-1",
     "analysisType": "summary",
-    "modelUsed": "qianwen",
+    "modelUsed": "glm",
     "result": "## 会议摘要\n\n今天讨论了项目进度...",
     "status": "completed",
     "processingTime": 1500,

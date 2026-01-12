@@ -9,6 +9,8 @@ import { SessionModule } from './modules/session/session.module'
 import { SpeechModule } from './modules/speech/speech.module'
 import { AnalysisModule } from './modules/analysis/analysis.module'
 import { TranscriptModule } from './modules/transcript/transcript.module'
+import { TranscriptStreamModule } from './modules/transcript-stream/transcript-stream.module'
+import { TurnSegmentationModule } from './modules/turn-segmentation/turn-segmentation.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
 import { TransformInterceptor } from './common/interceptors/transform.interceptor'
@@ -29,6 +31,8 @@ import { AppService } from './app.service'
     SpeechModule,
     AnalysisModule,
     TranscriptModule,
+    TranscriptStreamModule,
+    TurnSegmentationModule,
   ],
   controllers: [AppController],
   providers: [

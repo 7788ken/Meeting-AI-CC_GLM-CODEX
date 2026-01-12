@@ -24,28 +24,57 @@ export interface ConnectionStatus {
 
 export type ConnectionStatusHandler = (status: ConnectionStatus) => void
 
-export interface TranscriptMessage {
-  type: 'transcript' | 'error' | 'status'
-  data: {
-    id?: string
-    sessionId?: string
-    content?: string
-    speakerId?: string
-    speakerName?: string
-    speakerColor?: string
-    confidence?: number
-    isFinal?: boolean
-    startTime?: string
-    endTime?: string
-    duration?: number
-    isEdited?: boolean
-    isMarked?: boolean
-    audioOffset?: number
-    timestamp?: number
-    status?: string
-    error?: string
+export type LegacyTranscriptData = {
+  id?: string
+  sessionId?: string
+  content?: string
+  speakerId?: string
+  speakerName?: string
+  speakerColor?: string
+  confidence?: number
+  isFinal?: boolean
+  startTime?: string
+  endTime?: string
+  duration?: number
+  isEdited?: boolean
+  isMarked?: boolean
+  audioOffset?: number
+  timestamp?: number
+}
+
+export type TranscriptEventData = {
+  sessionId: string
+  revision: number
+  event: {
+    eventIndex: number
+    speakerId: string
+    speakerName: string
+    content: string
+    isFinal: boolean
+    segmentKey?: string
+    asrTimestampMs?: number
   }
 }
+
+export type TurnSegmentsUpsertData = {
+  sessionId: string
+  revision: number
+  status: 'processing' | 'completed' | 'failed'
+  segments?: Array<{
+    speakerId: string
+    speakerName: string
+    startEventIndex: number
+    endEventIndex: number
+  }>
+  error?: string
+}
+
+export type TranscriptMessage =
+  | { type: 'transcript'; data: LegacyTranscriptData }
+  | { type: 'status'; data: { status?: string; sessionId?: string; speakerId?: string; speakerName?: string } }
+  | { type: 'error'; data: { error?: string } }
+  | { type: 'transcript_event_upsert'; data: TranscriptEventData }
+  | { type: 'turn_segments_upsert'; data: TurnSegmentsUpsertData }
 
 export class WebSocketService {
   private ws: WebSocket | null = null
@@ -67,7 +96,7 @@ export class WebSocketService {
 
   private audioSendCount = 0
 
-  private onMessageCallback: MessageHandler | null = null
+  private messageListeners = new Set<MessageHandler>()
   private onOpenCallback: ConnectionHandler | null = null
   private onCloseCallback: ConnectionHandler | null = null
   private onErrorCallback: ErrorHandler | null = null
@@ -131,7 +160,9 @@ export class WebSocketService {
         this.ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data)
-            this.onMessageCallback?.(data)
+            for (const listener of this.messageListeners) {
+              listener(data)
+            }
           } catch (error) {
             console.error('[WebSocket] 消息解析失败:', error)
           }
@@ -361,7 +392,11 @@ export class WebSocketService {
    * 事件监听器
    */
   onMessage(callback: MessageHandler): void {
-    this.onMessageCallback = callback
+    this.messageListeners.add(callback)
+  }
+
+  offMessage(callback: MessageHandler): void {
+    this.messageListeners.delete(callback)
   }
 
   onOpen(callback: ConnectionHandler): void {
@@ -384,7 +419,7 @@ export class WebSocketService {
    * 移除所有监听器
    */
   removeAllListeners(): void {
-    this.onMessageCallback = null
+    this.messageListeners.clear()
     this.onOpenCallback = null
     this.onCloseCallback = null
     this.onErrorCallback = null

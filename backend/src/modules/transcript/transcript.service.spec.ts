@@ -164,6 +164,29 @@ describe('TranscriptService', () => {
       expect(result?.segmentKey).toBe('u1')
     })
 
+    it('should ignore payload sequence for segmentKey selection', async () => {
+      const mockResponse: DoubaoDecodedMessage = {
+        messageType: 0x09,
+        flags: 0x00,
+        serialization: 0x01,
+        compression: 0x00,
+        payload: {
+          result: {
+            payload_sequence: 999,
+            utterances: [{ text: 'Hello ' }, { text: 'world' }],
+          },
+        },
+        rawPayload: Buffer.from('{}'),
+      }
+
+      mockClient.nextResponse.mockResolvedValue(mockResponse)
+
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
+
+      expect(result?.content).toBe('world')
+      expect(result?.segmentKey).toBe('u1')
+    })
+
     it('should extract utterance segment when speaker info is present', async () => {
       const mockResponse: DoubaoDecodedMessage = {
         messageType: 0x09,

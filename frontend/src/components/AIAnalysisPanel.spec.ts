@@ -196,7 +196,7 @@ describe('AIAnalysisPanel.vue', () => {
 
     it('应该调用 API 生成分析', async () => {
       vi.mocked(analysisApi.getOrCreate).mockResolvedValue({
-        data: { data: mockAnalysis },
+        data: mockAnalysis,
       } as any)
 
       await wrapper.vm.handleAnalysis()
@@ -210,7 +210,7 @@ describe('AIAnalysisPanel.vue', () => {
 
     it('应该在成功后设置分析结果', async () => {
       vi.mocked(analysisApi.getOrCreate).mockResolvedValue({
-        data: { data: mockAnalysis },
+        data: mockAnalysis,
       } as any)
 
       await wrapper.vm.handleAnalysis()
@@ -449,9 +449,9 @@ describe('AIAnalysisPanel.vue', () => {
       })
     })
 
-    it('应该正确显示千问模型名称', () => {
+    it('应该正确显示 GLM 模型名称', () => {
       wrapper.vm.currentAnalysis = { ...mockAnalysis, modelUsed: 'glm-4' }
-      expect(wrapper.vm.modelText).toBe('千问 GLM-4')
+      expect(wrapper.vm.modelText).toBe('智谱 GLM-4.6V-Flash')
     })
 
     it('应该正确显示豆包模型名称', () => {

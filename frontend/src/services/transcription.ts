@@ -4,7 +4,7 @@
  */
 
 import { AudioCaptureService, audioCapture, type AudioDataCallback } from './audioCapture'
-import { websocket, type ConnectionStatus, type TranscriptMessage } from './websocket'
+import { websocket, type ConnectionStatus, type LegacyTranscriptData, type TranscriptMessage } from './websocket'
 import type { Speech } from './api'
 
 export interface TranscriptionConfig {
@@ -139,7 +139,40 @@ export class TranscriptionService {
    */
   private async startAudioCapture(): Promise<void> {
     return new Promise((resolve, reject) => {
+      const vadStartThreshold = Number(import.meta.env.VITE_TRANSCRIPT_VAD_START_TH ?? 0.015)
+      const vadStopThreshold = Number(import.meta.env.VITE_TRANSCRIPT_VAD_STOP_TH ?? 0.01)
+      const vadGapMs = Number(import.meta.env.VITE_TRANSCRIPT_VAD_GAP_MS ?? 900)
+
+      let sending = false
+      let silentMs = 0
+
       const onAudioData: AudioDataCallback = (audioData) => {
+        const sampleRate = Number(audioData.sampleRate) || 16000
+        const frameMs = Math.max(0, Math.floor((audioData.data.length / sampleRate) * 1000))
+        const energy = AudioCaptureService.getAudioEnergy(audioData.data)
+
+        if (!sending) {
+          // 仅在检测到“开始说话”时启动发包，避免持续发送静音帧
+          if (energy < vadStartThreshold) {
+            return
+          }
+          sending = true
+          silentMs = 0
+        }
+
+        // speaking 状态：遇到持续静音则触发 end_turn 并停止发包
+        if (energy < vadStopThreshold) {
+          silentMs += frameMs
+          if (silentMs >= vadGapMs) {
+            websocket.sendMessage({ type: 'end_turn' })
+            sending = false
+            silentMs = 0
+          }
+          return
+        }
+
+        silentMs = 0
+
         // 转换为 PCM 16-bit
         const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
         // 发送到 WebSocket
@@ -197,7 +230,7 @@ export class TranscriptionService {
   /**
    * 处理转写结果
    */
-  private handleTranscript(data: TranscriptMessage['data']): void {
+  private handleTranscript(data: LegacyTranscriptData): void {
     if (!this.onTranscriptCallback) return
 
     const speakerId = data.speakerId || 'unknown'
@@ -275,10 +308,14 @@ export class TranscriptionService {
    */
   dispose(): void {
     this.stop()
-    websocket.disconnect()
     websocket.removeAllListeners()
+    websocket.disconnect()
     this.segmentCounterBySpeaker.clear()
     this.activeSegmentBySpeaker.clear()
+    this.onTranscriptCallback = undefined
+    this.onErrorCallback = undefined
+    this.onStatusChangeCallback = undefined
+    this.onConnectionStatusChangeCallback = undefined
   }
 }
 

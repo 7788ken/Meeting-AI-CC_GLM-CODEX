@@ -102,7 +102,7 @@ export class ModelManagerService {
       {
         type: AIModelType.GLM,
         name: '智谱 GLM',
-        version: 'glm-4',
+        version: 'glm-4.6v-flash',
         enabled: this.isModelEnabled('GLM'),
         priority: this.getModelPriority('GLM', 1),
         maxTokens: 2000,

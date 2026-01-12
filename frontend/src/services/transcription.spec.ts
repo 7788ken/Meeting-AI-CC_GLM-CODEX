@@ -25,6 +25,7 @@ const mockWebsocket = {
   startTranscribe: vi.fn(),
   stopTranscribe: vi.fn(),
   sendAudioData: vi.fn(),
+  sendMessage: vi.fn(),
   onMessage: vi.fn(),
   onConnectionStatus: vi.fn(),
   onError: vi.fn(),
@@ -59,6 +60,7 @@ describe('TranscriptionService', () => {
     mockWebsocket.startTranscribe.mockReset()
     mockWebsocket.stopTranscribe.mockReset()
     mockWebsocket.sendAudioData.mockReset()
+    mockWebsocket.sendMessage.mockReset()
     mockWebsocket.onMessage.mockReset()
     mockWebsocket.onConnectionStatus.mockReset()
     mockWebsocket.onError.mockReset()
@@ -352,6 +354,49 @@ describe('TranscriptionService', () => {
       // PCM16 的最大值是 32767，最小值是 -32768
       expect(sentData[0]).toBeLessThanOrEqual(32767)
       expect(sentData[1]).toBeGreaterThanOrEqual(-32768)
+    })
+
+    it('应该在静音达到阈值后发送 end_turn 并停止发包', async () => {
+      let audioDataCallback: ((data: any) => void) | null = null
+
+      vi.mocked(audioCaptureModule.audioCapture).startCapture = vi.fn().mockImplementation(
+        (onData, onError) => {
+          audioDataCallback = onData
+          return Promise.resolve()
+        }
+      )
+
+      await service.start({
+        ...mockConfig,
+        onTranscript: mockCallbacks.onTranscript,
+        onError: mockCallbacks.onError,
+        onStatusChange: mockCallbacks.onStatusChange,
+        onConnectionStatusChange: mockCallbacks.onConnectionStatusChange,
+      })
+
+      const sampleRate = 16000
+      const voicedFrame = {
+        data: new Float32Array(1600).fill(0.2), // ~100ms voiced
+        sampleRate,
+      }
+      const silentFrame = {
+        data: new Float32Array(1600).fill(0), // ~100ms silence
+        sampleRate,
+      }
+
+      if (audioDataCallback) {
+        audioDataCallback(voicedFrame)
+        for (let i = 0; i < 9; i += 1) {
+          audioDataCallback(silentFrame)
+        }
+        // 静音后仍持续回调，不应重复发送 end_turn
+        for (let i = 0; i < 5; i += 1) {
+          audioDataCallback(silentFrame)
+        }
+      }
+
+      expect(mockWebsocket.sendAudioData).toHaveBeenCalledTimes(1)
+      expect(mockWebsocket.sendMessage).toHaveBeenCalledWith({ type: 'end_turn' })
     })
   })
 

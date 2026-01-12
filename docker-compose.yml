@@ -1,13 +1,25 @@
-version: '3.8'
+# === 使用说明 ===
+#
+# 开发模式（仅启动数据库）：
+#   docker compose --profile dev up
+#
+# 生产模式（启动全部服务）：
+#   docker compose --profile prod up
+#   或：docker compose up
+#
+# 停止并清理：
+#   docker compose down
+#   docker compose down -v  # 同时删除数据卷
 
 services:
-  # PostgreSQL 数据库
+  # PostgreSQL 数据库（Prisma ORM：会话、用户等）
   postgres:
     image: postgres:15-alpine
     container_name: meeting-ai-postgres
+    profiles: [dev, prod]
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: quickchatbox
+      POSTGRES_PASSWORD: quickchatbox
       POSTGRES_DB: meeting_ai
     ports:
       - '5432:5432'
@@ -15,69 +27,71 @@ services:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - meeting-ai-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U quickchatbox']
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # MongoDB 数据库
+  # MongoDB 数据库（Mongoose：Speech / Analysis / transcript_events / turn_segments）
   mongo:
     image: mongo:6
     container_name: meeting-ai-mongo
+    profiles: [dev, prod]
     ports:
       - '27017:27017'
     volumes:
       - mongo-data:/data/db
     networks:
       - meeting-ai-network
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', 'db.adminCommand("ping")']
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # Redis 缓存
-  redis:
-    image: redis:7-alpine
-    container_name: meeting-ai-redis
-    ports:
-      - '6379:6379'
-    networks:
-      - meeting-ai-network
-
-  # RabbitMQ 消息队列
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: meeting-ai-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin
-    ports:
-      - '5672:5672'
-      - '15672:15672'
-    networks:
-      - meeting-ai-network
-
-  # 后端服务
+  # === 生产模式：后端服务 ===
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: meeting-ai-backend
+    profiles: [prod]
     environment:
       NODE_ENV: production
-      PORT: 3000
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/meeting_ai
+      PORT: 8000
+      API_PREFIX: api
+      CORS_ORIGIN: '*'
+      DATABASE_URL: postgresql://quickchatbox:quickchatbox@postgres:5432/meeting_ai
       MONGODB_URI: mongodb://mongo:27017/meeting_ai
-      REDIS_URI: redis://redis:6379
-      JWT_SECRET: your-secret-key-change-in-production
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      # 转写配置（豆包 ASR）
+      TRANSCRIPT_ENDPOINT: ${TRANSCRIPT_ENDPOINT}
+      TRANSCRIPT_APP_KEY: ${TRANSCRIPT_APP_KEY}
+      TRANSCRIPT_ACCESS_KEY: ${TRANSCRIPT_ACCESS_KEY}
+      TRANSCRIPT_RESOURCE_ID: ${TRANSCRIPT_RESOURCE_ID}
+      TRANSCRIPT_RESPONSE_TIMEOUT_MS: ${TRANSCRIPT_RESPONSE_TIMEOUT_MS:-5000}
+      # GLM 配置
+      GLM_API_KEY: ${GLM_API_KEY}
+      GLM_ENDPOINT: ${GLM_ENDPOINT}
     ports:
-      - '3000:3000'
+      - '8000:8000'
     depends_on:
-      - postgres
-      - mongo
-      - redis
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
     networks:
       - meeting-ai-network
     restart: unless-stopped
 
-  # 前端服务
+  # === 生产模式：前端服务 ===
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: meeting-ai-frontend
+    profiles: [prod]
     ports:
       - '80:80'
     depends_on:

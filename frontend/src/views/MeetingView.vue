@@ -49,36 +49,52 @@
       </div>
     </template>
 
-    <!-- 左侧：转写显示区 -->
-    <section class="transcript-panel">
-      <div class="panel-header">
-        <h2>实时转写</h2>
-        <el-button-group size="small">
-          <el-button @click="loadSpeeches">刷新</el-button>
-          <el-button @click="speeches = []">清空</el-button>
-        </el-button-group>
+    <!-- 上部：原文流（豆包语音识别） -->
+    <section class="realtime-transcript-bar">
+      <div class="realtime-header">
+        <h3>原文流</h3>
+        <div class="realtime-status">
+          <el-tag v-if="recordingStatus === 'recording'" type="success" size="small">录制中</el-tag>
+          <el-tag v-else-if="recordingStatus === 'paused'" type="warning" size="small">已暂停</el-tag>
+          <el-tag v-else type="info" size="small">未录制</el-tag>
+          <el-tag type="info" size="small">事件数: {{ transcriptStreamStore.events.length }}</el-tag>
+        </div>
       </div>
-      <div ref="transcriptRef" class="transcript-list">
-        <div
-          v-for="speech in speeches"
-          :key="speech.id"
-          :class="['speech-item', { selected: speech.id === selectedSpeechId }]"
-          :style="{ borderLeftColor: speech.speakerColor }"
-          @click="selectSpeech(speech.id)"
-        >
-          <div class="speech-header">
-            <span class="speaker-name" :style="{ backgroundColor: speech.speakerColor || '#1890ff' }">
-              {{ speech.speakerName }}
-            </span>
-            <span class="speech-time">{{ formatTime(speech.startTime) }}</span>
-            <span v-if="speech.isMarked" class="mark-badge">已标记</span>
+      <div class="realtime-content">
+        <div v-if="transcriptStreamStore.events.length === 0" class="realtime-placeholder">
+          暂无实时转写内容
+        </div>
+        <div v-else class="realtime-events-scroll">
+          <div
+            v-for="event in transcriptStreamStore.events.slice().reverse()"
+            :key="event.eventIndex"
+            class="realtime-event-item"
+          >
+            <span class="event-speaker">{{ event.speakerName }}</span>
+            <span class="event-text">{{ event.content }}</span>
+            <span v-if="event.isFinal" class="event-final">final</span>
           </div>
-          <div class="speech-content">{{ speech.content }}</div>
-          <div v-if="speech.isEdited" class="edited-badge">已编辑</div>
         </div>
-        <div v-if="speeches.length === 0" class="empty-state">
-          <el-empty description="暂无转写内容，点击右上角开始录音" />
-        </div>
+      </div>
+    </section>
+
+    <!-- 下部：左右分栏 -->
+    <div class="content-area">
+      <!-- 下左：GLM 拆分后的独立发言 -->
+      <section class="transcript-panel">
+      <div class="panel-header">
+        <h2>语义分段</h2>
+      </div>
+
+      <div class="transcript-content">
+        <TurnSegmentsPanel
+          :status="turnSegmentationStore.status"
+          :revision="turnSegmentationStore.revision"
+          :targetRevision="turnSegmentationStore.targetRevision"
+          :segments="turnSegmentationStore.segments"
+          :error="turnSegmentationStore.status === 'failed' ? turnSegmentationStore.error : ''"
+          :getTextByRange="transcriptStreamStore.getTextByRange"
+        />
       </div>
     </section>
 
@@ -117,6 +133,7 @@
         </div>
       </div>
     </section>
+    </div>
   </MainLayout>
 </template>
 
@@ -128,9 +145,12 @@ import { sessionApi, speechApi, analysisApi, type Session, type Speech, type AIA
 import { exportAnalysis as exportAnalysisService, type ExportFormat } from '@/services/export'
 import { transcription } from '@/services/transcription'
 import type { ConnectionStatus } from '@/services/websocket'
+import { useTranscriptStreamStore } from '@/stores/transcriptStream'
+import { useTurnSegmentationStore } from '@/stores/turnSegmentation'
 import MainLayout from '@/components/MainLayout.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import RecordButton from '@/components/RecordButton.vue'
+import TurnSegmentsPanel from '@/components/TurnSegmentsPanel.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -149,6 +169,8 @@ const transcriptRef = ref<HTMLElement>()
 const endingSession = ref(false)
 const sessionEndedOverride = ref(false)
 const wsConnectionStatus = ref<ConnectionStatus | null>(null)
+const transcriptStreamStore = useTranscriptStreamStore()
+const turnSegmentationStore = useTurnSegmentationStore()
 
 // 计算属性
 const statusText = computed(() => {
@@ -197,11 +219,17 @@ onMounted(async () => {
   if (sessionId.value) {
     await loadSession()
     await loadSpeeches()
+    transcriptStreamStore.bindWebSocket()
+    await transcriptStreamStore.loadSnapshot(sessionId.value)
+    turnSegmentationStore.bindWebSocket()
+    await turnSegmentationStore.loadSnapshot(sessionId.value)
   }
 })
 
 onUnmounted(() => {
   transcription.dispose()
+  transcriptStreamStore.reset()
+  turnSegmentationStore.reset()
 })
 
 // 加载会话信息
@@ -448,6 +476,106 @@ function scrollToBottom() {
   gap: 8px;
 }
 
+/* 实时转写固定区域（上部） */
+.realtime-transcript-bar {
+  flex-shrink: 0;
+  height:200px;
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.realtime-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e8e8e8;
+  background-color: #fafafa;
+}
+
+.realtime-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.realtime-status {
+  display: flex;
+  gap: 8px;
+}
+
+.realtime-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.realtime-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999;
+  font-size: 13px;
+}
+
+.realtime-events-scroll {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  padding: 8px 16px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.realtime-event-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.event-speaker {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: #e6f4ff;
+  color: #1677ff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.event-text {
+  flex: 1;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-final {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: #e6f4ff;
+  color: #1677ff;
+  font-size: 11px;
+}
+
+/* 下部内容区域（左右分栏） */
+.content-area {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  overflow: hidden;
+}
+
 /* 转写面板 */
 .transcript-panel {
   flex: 6;
@@ -455,6 +583,11 @@ function scrollToBottom() {
   flex-direction: column;
   background-color: #fff;
   border-radius: 8px;
+  overflow: hidden;
+}
+
+.transcript-content {
+  flex: 1;
   overflow: hidden;
 }
 
