@@ -314,17 +314,44 @@ async function bootstrap() {
 
           case 'end_turn':
             {
-              if (!turnModeEnabled) {
-                break
-              }
-
               const clientId = getClientId(ws)
-              const sessionId = clientSessions.get(ws)
+              const sessionId =
+                clientSessions.get(ws) ??
+                (typeof message.sessionId === 'string' && message.sessionId.trim().length > 0
+                  ? message.sessionId.trim()
+                  : undefined)
               if (!clientId || !sessionId) {
                 break
               }
 
-              await finalizeTurnForClient(sessionId, clientId)
+              if (turnModeEnabled) {
+                await finalizeTurnForClient(sessionId, clientId)
+              } else {
+                const result = await transcriptService.finalizeAudio(clientId, sessionId, {
+                  propagateError: true,
+                })
+                if (result) {
+                  await persistAndBroadcastTranscript(sessionId, clientId, {
+                    content: result.content,
+                    confidence: result.confidence,
+                    isFinal: true,
+                    speakerId: result.speakerId,
+                    speakerName: result.speakerName,
+                    segmentKey: result.segmentKey,
+                  })
+
+                  await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
+                    content: result.content,
+                    isFinal: true,
+                    speakerId: result.speakerId,
+                    speakerName: result.speakerName,
+                    segmentKey: result.segmentKey,
+                    asrTimestampMs: Date.now(),
+                  })
+                } else {
+                  await finalizeActiveSpeechForClient(clientId)
+                }
+              }
               if (triggerSegmentationOnEndTurn) {
                 triggerTurnSegmentationNow(sessionId, 'end_turn')
               }

@@ -24,6 +24,7 @@ const mockWebsocket = {
   setSession: vi.fn(),
   startTranscribe: vi.fn(),
   stopTranscribe: vi.fn(),
+  endTurn: vi.fn(),
   sendAudioData: vi.fn(),
   sendMessage: vi.fn(),
   onMessage: vi.fn(),
@@ -59,6 +60,7 @@ describe('TranscriptionService', () => {
     mockWebsocket.setSession.mockReset()
     mockWebsocket.startTranscribe.mockReset()
     mockWebsocket.stopTranscribe.mockReset()
+    mockWebsocket.endTurn.mockReset()
     mockWebsocket.sendAudioData.mockReset()
     mockWebsocket.sendMessage.mockReset()
     mockWebsocket.onMessage.mockReset()
@@ -396,7 +398,7 @@ describe('TranscriptionService', () => {
       }
 
       expect(mockWebsocket.sendAudioData).toHaveBeenCalledTimes(1)
-      expect(mockWebsocket.sendMessage).toHaveBeenCalledWith({ type: 'end_turn' })
+      expect(mockWebsocket.endTurn).toHaveBeenCalled()
     })
   })
 

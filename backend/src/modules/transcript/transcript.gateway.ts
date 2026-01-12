@@ -75,4 +75,19 @@ export class TranscriptGateway implements OnGatewayConnection, OnGatewayDisconne
     await this.transcriptService.endAudio(client.id)
     client.emit('audio:ended')
   }
+
+  @SubscribeMessage('end_turn')
+  async handleEndTurn(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
+    const sessionId = data?.sessionId
+    if (!sessionId) {
+      return
+    }
+
+    const result = await this.transcriptService.finalizeAudio(client.id, sessionId, {
+      propagateError: true,
+    })
+    if (result) {
+      this.server.to(`session:${sessionId}`).emit('transcript:result', result)
+    }
+  }
 }

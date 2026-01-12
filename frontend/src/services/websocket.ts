@@ -304,6 +304,23 @@ export class WebSocketService {
   }
 
   /**
+   * 结束当前发言段落
+   */
+  endTurn(sessionId?: string): void {
+    const trimmedSessionId = typeof sessionId === 'string' ? sessionId.trim() : ''
+    const resolvedSessionId = trimmedSessionId || this.lastSessionId
+    const payload: Record<string, unknown> = {
+      type: 'end_turn',
+    }
+
+    if (resolvedSessionId) {
+      payload.sessionId = resolvedSessionId
+    }
+
+    this.sendMessage(payload)
+  }
+
+  /**
    * 自动重连
    */
   private attemptReconnect(): void {

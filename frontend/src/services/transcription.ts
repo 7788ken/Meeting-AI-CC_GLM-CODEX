@@ -164,7 +164,7 @@ export class TranscriptionService {
         if (energy < vadStopThreshold) {
           silentMs += frameMs
           if (silentMs >= vadGapMs) {
-            websocket.sendMessage({ type: 'end_turn' })
+            websocket.endTurn()
             sending = false
             silentMs = 0
           }
