@@ -9,6 +9,7 @@ import * as WebSocket from 'ws'
 import { TranscriptService } from './modules/transcript/transcript.service'
 import { TranscriptStreamService } from './modules/transcript-stream/transcript-stream.service'
 import { TurnSegmentationService } from './modules/turn-segmentation/turn-segmentation.service'
+import { TranscriptAnalysisService } from './modules/transcript-analysis/transcript-analysis.service'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { SpeakerService } from './modules/speech/speaker.service'
@@ -60,13 +61,14 @@ async function bootstrap() {
     .addTag('speeches', '发言记录')
     .addTag('analysis', 'AI分析')
     .addTag('transcript', '实时转写')
+    .addTag('debug-errors', '会话调试报错')
     .addBearerAuth()
     .build()
 
   const document = SwaggerModule.createDocument(app, config)
   SwaggerModule.setup('api/docs', app, document)
 
-  const port = process.env.PORT ? Number(process.env.PORT) : 8000
+  const port = process.env.PORT ? Number(process.env.PORT) : 5181
 
   // 获取底层 HTTP 服务器
   const server = http.createServer()
@@ -93,6 +95,7 @@ async function bootstrap() {
   const speakerService = app.get(SpeakerService)
   const transcriptStreamService = app.get(TranscriptStreamService)
   const turnSegmentationService = app.get(TurnSegmentationService)
+  const transcriptAnalysisService = app.get(TranscriptAnalysisService)
 
   const transcriptPipeline = process.env.TRANSCRIPT_PIPELINE || 'raw_llm'
   const rawEventStreamEnabled = true // 默认启用原文事件流
@@ -124,7 +127,7 @@ async function bootstrap() {
   const speakerNameBySessionSpeakerId = new Map<string, string>()
   const speakerIndexBySession = new Map<string, number>()
 
-  // raw_llm：segmentKey -> eventIndex 映射（每 session + client）
+  // raw_llm：segmentKey -> eventIndex 映射（每 session + client，用于原文流 upsert）
   const segmentKeyToEventIndexBySessionClient = new Map<string, Map<string, number>>()
 
   const turnModeEnabled = process.env.TRANSCRIPT_TURN_MODE === '1'
@@ -295,6 +298,7 @@ async function bootstrap() {
                     if (triggerSegmentationOnStopTranscribe) {
                       triggerTurnSegmentationNow(sessionId, 'stop_transcribe')
                     }
+                    triggerTranscriptAnalysisNow(sessionId)
                   } else {
                     // 没有返回转写结果，也要关闭当前活跃段落，避免前端一直认为该段落未结束
                     await finalizeActiveSpeechForClient(clientId)
@@ -355,6 +359,7 @@ async function bootstrap() {
               if (triggerSegmentationOnEndTurn) {
                 triggerTurnSegmentationNow(sessionId, 'end_turn')
               }
+              triggerTranscriptAnalysisNow(sessionId)
               ws.send(
                 JSON.stringify({
                   type: 'status',
@@ -883,6 +888,7 @@ async function bootstrap() {
       speakerName: string
       segmentKey?: string
       asrTimestampMs?: number
+      eventIndex?: number
     }
   ): Promise<void> {
     if (!rawEventStreamEnabled) return
@@ -890,24 +896,25 @@ async function bootstrap() {
 
     const resolved = resolveSpeaker(sessionId, clientId, input.speakerId, input.speakerName)
 
-    const segmentKey = input.segmentKey?.trim?.() ? input.segmentKey.trim() : undefined
-    const segmentKeyMap = segmentKey ? getSegmentKeyMap(sessionId, clientId) : null
-    const existingEventIndex = segmentKey ? segmentKeyMap?.get(segmentKey) : undefined
-
+    // 原文流：优先按 segmentKey 更新同一句话；无 segmentKey 时追加新事件
     try {
+      const segmentKeyMap = input.segmentKey ? getSegmentKeyMap(sessionId, clientId) : null
+      const existingEventIndex = input.segmentKey ? segmentKeyMap?.get(input.segmentKey) : undefined
+      const shouldMarkRollback = input.eventIndex != null || existingEventIndex != null
+
       const result = await transcriptStreamService.upsertEvent({
         sessionId,
-        eventIndex: existingEventIndex,
+        eventIndex: input.eventIndex ?? existingEventIndex,
         speakerId: resolved.speakerId,
         speakerName: resolved.speakerName,
         content: input.content,
         isFinal: input.isFinal,
-        segmentKey,
+        segmentKey: input.segmentKey, // 保留用于调试和追溯
         asrTimestampMs: input.asrTimestampMs,
       })
 
-      if (segmentKey && segmentKeyMap && existingEventIndex == null) {
-        segmentKeyMap.set(segmentKey, result.event.eventIndex)
+      if (segmentKeyMap && input.segmentKey) {
+        segmentKeyMap.set(input.segmentKey, result.event.eventIndex)
       }
 
       broadcastToSession(sessionId, {
@@ -919,7 +926,12 @@ async function bootstrap() {
         },
       })
 
+      if (shouldMarkRollback) {
+        await transcriptAnalysisService.markRollback(sessionId, result.event.eventIndex)
+      }
+
       scheduleTurnSegmentation(sessionId)
+      transcriptAnalysisService.schedule(sessionId)
     } catch (error) {
       wsLogger.warn(
         `Persist transcript event failed, sessionId=${sessionId}, clientId=${clientId}: ${
@@ -959,6 +971,10 @@ async function bootstrap() {
     }
 
     void runTurnSegmentation(sessionId, { force: true, reason })
+  }
+
+  function triggerTranscriptAnalysisNow(sessionId: string): void {
+    transcriptAnalysisService.schedule(sessionId, { force: true })
   }
 
   async function runTurnSegmentation(

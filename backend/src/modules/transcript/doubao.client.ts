@@ -256,7 +256,7 @@ class DoubaoWsClient {
         enable_itn: this.options.enableItn ?? true,
         enable_punc: this.options.enablePunc ?? true,
         enable_ddc: true,
-        show_utterances: true,
+        show_utterances: true, // 启用 utterances，支持 segmentKey 流式更新
         enable_nonstream: false,
       },
     }

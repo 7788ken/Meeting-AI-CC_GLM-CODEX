@@ -104,11 +104,9 @@ export class WebSocketService {
 
   constructor(config?: WebSocketConfig) {
     const getWsUrl = () => {
-      // 开发环境直接连接后端 WebSocket，生产环境使用当前 host
-      if (import.meta.env.DEV) {
-        return 'ws://127.0.0.1:8000/transcript'
-      }
-      return (globalThis as any).__VITE_WS_URL__ || `ws://${location.host}/transcript`
+      const envUrl = (globalThis as any).__VITE_WS_URL__ || import.meta.env.VITE_WS_URL
+      if (envUrl) return envUrl
+      return `ws://${location.host}/transcript`
     }
 
     this.url = config?.url || getWsUrl()

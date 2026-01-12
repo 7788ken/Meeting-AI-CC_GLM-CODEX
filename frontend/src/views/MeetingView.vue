@@ -46,6 +46,17 @@
         </el-tag>
 
         <el-button size="small" type="success" @click="generateAnalysis">生成分析</el-button>
+
+        <el-button
+          size="small"
+          type="warning"
+          plain
+          class="debug-trigger"
+          :disabled="!sessionId"
+          @click="debugDrawerVisible = true"
+        >
+          调试
+        </el-button>
       </div>
     </template>
 
@@ -134,11 +145,13 @@
       </div>
     </section>
     </div>
+
+    <DebugDrawer v-model="debugDrawerVisible" :session-id="sessionId" />
   </MainLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { sessionApi, speechApi, analysisApi, type Session, type Speech, type AIAnalysis } from '@/services/api'
@@ -151,6 +164,7 @@ import MainLayout from '@/components/MainLayout.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import RecordButton from '@/components/RecordButton.vue'
 import TurnSegmentsPanel from '@/components/TurnSegmentsPanel.vue'
+import DebugDrawer from '@/components/DebugDrawer.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -169,6 +183,7 @@ const transcriptRef = ref<HTMLElement>()
 const endingSession = ref(false)
 const sessionEndedOverride = ref(false)
 const wsConnectionStatus = ref<ConnectionStatus | null>(null)
+const debugDrawerVisible = ref(false)
 const transcriptStreamStore = useTranscriptStreamStore()
 const turnSegmentationStore = useTurnSegmentationStore()
 
@@ -212,6 +227,45 @@ const wsReconnectTag = computed(() => {
 
   return null
 })
+
+let hasInitializedSession = false
+
+watch(
+  () => route.params.id,
+  async (nextId) => {
+    const paramId = Array.isArray(nextId) ? nextId[0] : nextId
+    const queryId = Array.isArray(route.query.id) ? route.query.id[0] : route.query.id
+    const nextSessionId = (paramId as string) || (queryId as string) || ''
+
+    if (!hasInitializedSession) {
+      sessionId.value = nextSessionId
+      hasInitializedSession = true
+      return
+    }
+
+    if (nextSessionId === sessionId.value) return
+
+    if (recordingStatus.value !== 'idle') {
+      stopRecording()
+    }
+
+    sessionId.value = nextSessionId
+    transcriptStreamStore.reset()
+    turnSegmentationStore.reset()
+
+    if (!sessionId.value) return
+
+    // 重新绑定 WebSocket（reset 会解绑，需要重新绑定）
+    transcriptStreamStore.bindWebSocket()
+    turnSegmentationStore.bindWebSocket()
+
+    await loadSession()
+    await loadSpeeches()
+    await transcriptStreamStore.loadSnapshot(sessionId.value)
+    await turnSegmentationStore.loadSnapshot(sessionId.value)
+  },
+  { immediate: true },
+)
 
 // 初始化
 onMounted(async () => {
@@ -476,6 +530,18 @@ function scrollToBottom() {
   gap: 8px;
 }
 
+.debug-trigger {
+  border-color: #f2a661;
+  color: #b45a12;
+  background: #fff4e5;
+}
+
+.debug-trigger:hover {
+  border-color: #ef8e38;
+  color: #8a420d;
+  background: #ffe4c6;
+}
+
 /* 实时转写固定区域（上部） */
 .realtime-transcript-bar {
   flex-shrink: 0;
@@ -578,7 +644,7 @@ function scrollToBottom() {
 
 /* 转写面板 */
 .transcript-panel {
-  flex: 6;
+  flex: 4;
   display: flex;
   flex-direction: column;
   background-color: #fff;

@@ -19,8 +19,10 @@ export function buildTurnSegmentationPrompt(input: {
     '',
     '分段规则：',
     '- segments 必须覆盖输入范围：startEventIndex..endEventIndex（无缺口、无重叠，按时间顺序）。',
+    '- 相邻 segment 必须严格连续：后一段 startEventIndex = 前一段 endEventIndex + 1。',
     '- 每个 segment 内必须保持同一 speakerId（同一 speaker 连续轮次）。',
     '- speakerId / speakerName 必须来自输入事件（不可编造）。',
+    '- 若无法保证以上规则，请输出 1 个 segment 覆盖整个范围，speakerId/speakerName 取输入事件列表的第一条。',
   ].join('\n')
 
   const user = JSON.stringify(
@@ -42,4 +44,3 @@ export function buildTurnSegmentationPrompt(input: {
 
   return { system, user }
 }
-

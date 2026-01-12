@@ -11,7 +11,9 @@ import { AnalysisModule } from './modules/analysis/analysis.module'
 import { TranscriptModule } from './modules/transcript/transcript.module'
 import { TranscriptStreamModule } from './modules/transcript-stream/transcript-stream.module'
 import { TurnSegmentationModule } from './modules/turn-segmentation/turn-segmentation.module'
+import { TranscriptAnalysisModule } from './modules/transcript-analysis/transcript-analysis.module'
 import { AuthModule } from './modules/auth/auth.module'
+import { DebugErrorModule } from './modules/debug-error/debug-error.module'
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
 import { TransformInterceptor } from './common/interceptors/transform.interceptor'
 import { AppController } from './app.controller'
@@ -33,6 +35,8 @@ import { AppService } from './app.service'
     TranscriptModule,
     TranscriptStreamModule,
     TurnSegmentationModule,
+    TranscriptAnalysisModule,
+    DebugErrorModule,
   ],
   controllers: [AppController],
   providers: [

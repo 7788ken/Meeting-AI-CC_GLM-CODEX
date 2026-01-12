@@ -10,7 +10,7 @@ export class ConfigurationService {
   }
 
   get port(): number {
-    return this.configService.get<number>('port') || 3000
+    return this.configService.get<number>('port') || 5181
   }
 
   get apiPrefix(): string {

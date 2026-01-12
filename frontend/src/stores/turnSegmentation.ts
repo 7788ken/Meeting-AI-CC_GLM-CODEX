@@ -13,7 +13,7 @@ export const useTurnSegmentationStore = defineStore('turnSegmentation', () => {
 
   const hasSegments = computed(() => segments.value.length > 0)
 
-  let bound = false
+  let messageHandler: ((message: TranscriptMessage) => void) | null = null
 
   async function loadSnapshot(targetSessionId: string): Promise<void> {
     if (!targetSessionId) {
@@ -34,15 +34,26 @@ export const useTurnSegmentationStore = defineStore('turnSegmentation', () => {
   }
 
   function bindWebSocket(): void {
-    if (bound) return
-    bound = true
+    // 如果已经绑定，先解绑
+    if (messageHandler) {
+      unbindWebSocket()
+    }
 
-    websocket.onMessage((message: TranscriptMessage) => {
+    messageHandler = (message: TranscriptMessage) => {
       if (message.type !== 'turn_segments_upsert') return
       if (!message.data?.sessionId) return
       if (sessionId.value && message.data.sessionId !== sessionId.value) return
       applyUpsert(message.data)
-    })
+    }
+
+    websocket.onMessage(messageHandler)
+  }
+
+  function unbindWebSocket(): void {
+    if (messageHandler) {
+      websocket.offMessage(messageHandler)
+      messageHandler = null
+    }
   }
 
   function applyUpsert(data: {
@@ -69,6 +80,7 @@ export const useTurnSegmentationStore = defineStore('turnSegmentation', () => {
   }
 
   function reset(): void {
+    unbindWebSocket()
     sessionId.value = ''
     targetRevision.value = 0
     revision.value = 0

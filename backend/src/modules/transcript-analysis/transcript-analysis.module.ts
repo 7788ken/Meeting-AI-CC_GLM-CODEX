@@ -1,0 +1,28 @@
+import { Module } from '@nestjs/common'
+import { HttpModule } from '@nestjs/axios'
+import { MongooseModule } from '@nestjs/mongoose'
+import { TranscriptStreamModule } from '../transcript-stream/transcript-stream.module'
+import { TranscriptAnalysisGlmClient } from './transcript-analysis.glm-client'
+import { TranscriptAnalysisService } from './transcript-analysis.service'
+import {
+  TranscriptAnalysisChunk,
+  TranscriptAnalysisChunkSchema,
+} from './schemas/transcript-analysis-chunk.schema'
+import {
+  TranscriptAnalysisState,
+  TranscriptAnalysisStateSchema,
+} from './schemas/transcript-analysis-state.schema'
+
+@Module({
+  imports: [
+    HttpModule,
+    TranscriptStreamModule,
+    MongooseModule.forFeature([
+      { name: TranscriptAnalysisChunk.name, schema: TranscriptAnalysisChunkSchema },
+      { name: TranscriptAnalysisState.name, schema: TranscriptAnalysisStateSchema },
+    ]),
+  ],
+  providers: [TranscriptAnalysisService, TranscriptAnalysisGlmClient],
+  exports: [TranscriptAnalysisService],
+})
+export class TranscriptAnalysisModule {}

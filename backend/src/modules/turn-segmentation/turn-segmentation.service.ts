@@ -136,8 +136,9 @@ export class TurnSegmentationService {
     const model = input.forceModel ?? this.pickModel()
 
     let segmented: TurnSegmentRange[]
+    let modelUsed: 'glm' | 'heuristic'
     try {
-      segmented = await this.segmentRange({
+      const result = await this.segmentRange({
         sessionId,
         targetRevision,
         startEventIndex,
@@ -145,9 +146,14 @@ export class TurnSegmentationService {
         events,
         model,
       })
+      segmented = result.segments
+      modelUsed = result.modelUsed
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      this.logger.warn(`Turn segmentation failed, sessionId=${sessionId}, rev=${targetRevision}: ${message}`)
+      this.logger.error(
+        `Turn segmentation failed, sessionId=${sessionId}, rev=${targetRevision}: ${message}`,
+        error instanceof Error ? error.stack : undefined
+      )
 
       await this.turnSegmentsModel
         .findOneAndUpdate(
@@ -177,7 +183,7 @@ export class TurnSegmentationService {
             targetRevision,
             status: 'completed',
             segments: merged,
-            model,
+            model: modelUsed,
             generatedAt: new Date(),
             error: undefined,
           },
@@ -223,7 +229,7 @@ export class TurnSegmentationService {
   private readWindowSize(): number {
     const raw = this.configService.get<string>('TRANSCRIPT_SEGMENT_WINDOW_EVENTS') ?? process.env.TRANSCRIPT_SEGMENT_WINDOW_EVENTS
     const value = Number(raw)
-    if (!Number.isFinite(value)) return 200
+    if (!Number.isFinite(value)) return 120
     return Math.max(20, Math.min(2000, Math.floor(value)))
   }
 
@@ -258,22 +264,28 @@ export class TurnSegmentationService {
     endEventIndex: number
     events: TranscriptEventDTO[]
     model: 'glm' | 'heuristic'
-  }): Promise<TurnSegmentRange[]> {
+  }): Promise<{ segments: TurnSegmentRange[]; modelUsed: 'glm' | 'heuristic' }> {
     if (input.model === 'heuristic') {
-      return heuristicSegmentBySpeaker({
-        events: input.events,
-        startEventIndex: input.startEventIndex,
-        endEventIndex: input.endEventIndex,
-      })
+      return {
+        segments: heuristicSegmentBySpeaker({
+          events: input.events,
+          startEventIndex: input.startEventIndex,
+          endEventIndex: input.endEventIndex,
+        }),
+        modelUsed: 'heuristic',
+      }
     }
 
     const apiKey = (this.configService.get<string>('GLM_API_KEY') || '').trim()
     if (!apiKey) {
-      return heuristicSegmentBySpeaker({
-        events: input.events,
-        startEventIndex: input.startEventIndex,
-        endEventIndex: input.endEventIndex,
-      })
+      return {
+        segments: heuristicSegmentBySpeaker({
+          events: input.events,
+          startEventIndex: input.startEventIndex,
+          endEventIndex: input.endEventIndex,
+        }),
+        modelUsed: 'heuristic',
+      }
     }
 
     const prompt = buildTurnSegmentationPrompt({
@@ -284,14 +296,39 @@ export class TurnSegmentationService {
       events: input.events,
     })
 
-    const raw = await this.glmClient.generateStructuredJson(prompt)
-    const parsed = parseTurnSegmentsJson(raw)
+    const maxAttempts = 2
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const raw = await this.glmClient.generateStructuredJson(prompt)
+        const parsed = parseTurnSegmentsJson(raw)
+        return {
+          segments: validateAndNormalizeSegments({
+            events: input.events,
+            startEventIndex: input.startEventIndex,
+            endEventIndex: input.endEventIndex,
+            segments: parsed.segments,
+          }),
+          modelUsed: 'glm',
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.logger.error(
+          `GLM segmentation failed, sessionId=${input.sessionId}, rev=${input.targetRevision}, attempt=${attempt}/${maxAttempts}: ${message}`,
+          error instanceof Error ? error.stack : undefined
+        )
+      }
+    }
 
-    return validateAndNormalizeSegments({
-      events: input.events,
-      startEventIndex: input.startEventIndex,
-      endEventIndex: input.endEventIndex,
-      segments: parsed.segments,
-    })
+    this.logger.warn(
+      `GLM segmentation fallback to heuristic, sessionId=${input.sessionId}, rev=${input.targetRevision}`
+    )
+    return {
+      segments: heuristicSegmentBySpeaker({
+        events: input.events,
+        startEventIndex: input.startEventIndex,
+        endEventIndex: input.endEventIndex,
+      }),
+      modelUsed: 'heuristic',
+    }
   }
 }

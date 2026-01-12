@@ -8,12 +8,15 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
   const revision = ref<number>(0)
   const nextEventIndex = ref<number>(0)
   const eventsByIndex = ref<Map<number, TranscriptEvent>>(new Map())
+  // 按 segmentKey 分组，用于流式显示：同一 segmentKey 只显示最新一条
+  const eventsByKey = ref<Map<string, TranscriptEvent>>(new Map())
 
+  // 流式显示：按 segmentKey 分组后的最新结果
   const events = computed(() =>
-    Array.from(eventsByIndex.value.values()).sort((a, b) => a.eventIndex - b.eventIndex)
+    Array.from(eventsByKey.value.values()).sort((a, b) => a.eventIndex - b.eventIndex)
   )
 
-  let bound = false
+  let messageHandler: ((message: TranscriptMessage) => void) | null = null
 
   async function loadSnapshot(targetSessionId: string): Promise<void> {
     if (!targetSessionId) {
@@ -29,29 +32,52 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
     revision.value = snapshot.revision ?? 0
     nextEventIndex.value = snapshot.nextEventIndex ?? 0
 
-    const map = new Map<number, TranscriptEvent>()
+    const indexMap = new Map<number, TranscriptEvent>()
+    const keyMap = new Map<string, TranscriptEvent>()
     for (const event of snapshot.events || []) {
-      map.set(event.eventIndex, event)
+      indexMap.set(event.eventIndex, event)
+      // 按 segmentKey 分组：同一 key 只保留最新的（eventIndex 最大的）
+      const key = event.segmentKey || `idx_${event.eventIndex}`
+      const existing = keyMap.get(key)
+      if (!existing || event.eventIndex > existing.eventIndex) {
+        keyMap.set(key, event)
+      }
     }
-    eventsByIndex.value = map
+    eventsByIndex.value = indexMap
+    eventsByKey.value = keyMap
   }
 
   function bindWebSocket(): void {
-    if (bound) return
-    bound = true
+    // 如果已经绑定，先解绑
+    if (messageHandler) {
+      unbindWebSocket()
+    }
 
-    websocket.onMessage((message: TranscriptMessage) => {
+    messageHandler = (message: TranscriptMessage) => {
       if (message.type !== 'transcript_event_upsert') return
       if (!message.data?.sessionId) return
       if (sessionId.value && message.data.sessionId !== sessionId.value) return
       applyUpsert(message.data.revision, message.data.event)
-    })
+    }
+
+    websocket.onMessage(messageHandler)
+  }
+
+  function unbindWebSocket(): void {
+    if (messageHandler) {
+      websocket.offMessage(messageHandler)
+      messageHandler = null
+    }
   }
 
   function applyUpsert(nextRevision: number, event: TranscriptEvent): void {
     if (!event) return
     revision.value = Math.max(revision.value, Number(nextRevision) || 0)
     eventsByIndex.value.set(event.eventIndex, event)
+
+    // 按 segmentKey 流式更新：同一 key 只保留最新的
+    const key = event.segmentKey || `idx_${event.eventIndex}`
+    eventsByKey.value.set(key, event)
   }
 
   function getTextByRange(startEventIndex: number, endEventIndex: number): string {
@@ -67,10 +93,12 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
   }
 
   function reset(): void {
+    unbindWebSocket()
     sessionId.value = ''
     revision.value = 0
     nextEventIndex.value = 0
     eventsByIndex.value = new Map()
+    eventsByKey.value = new Map()
   }
 
   return {

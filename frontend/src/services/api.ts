@@ -93,6 +93,22 @@ export interface TurnSegmentsSnapshot {
   generatedAt?: string
 }
 
+// ==================== 会话调试错误 ====================
+
+export interface DebugError {
+  id: string
+  sessionId: string
+  level: 'info' | 'warn' | 'error' | 'fatal'
+  message: string
+  source?: string
+  category?: string
+  errorCode?: string
+  stack?: string
+  context?: unknown
+  occurredAt?: string
+  createdAt: string
+}
+
 // ==================== 会话 API ====================
 
 export const sessionApi = {
@@ -224,4 +240,10 @@ export const turnSegmentationApi = {
   // 获取会话轮次分段快照（用于刷新恢复）
   getSnapshot: (sessionId: string) =>
     get<ApiResponse<TurnSegmentsSnapshot>>(`/turn-segmentation/session/${sessionId}`),
+}
+
+export const debugErrorApi = {
+  // 获取会话的调试错误列表
+  listBySession: (sessionId: string) =>
+    get<ApiResponse<DebugError[]>>(`/debug-errors/session/${sessionId}`),
 }

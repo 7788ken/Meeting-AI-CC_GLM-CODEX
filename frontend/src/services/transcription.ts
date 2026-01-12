@@ -22,6 +22,7 @@ export interface TranscriptionConfig {
 export class TranscriptionService {
   private isRecording = false
   private isPaused = false
+  private isSendingAudio = false // 控制是否发送音频到 WebSocket
   private currentSessionId = ''
   private status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error' = 'idle'
 
@@ -86,6 +87,7 @@ export class TranscriptionService {
 
       this.isRecording = true
       this.isPaused = false
+      this.isSendingAudio = true
       this.setStatus('recording')
     } catch (error) {
       this.setStatus('error')
@@ -101,7 +103,7 @@ export class TranscriptionService {
     if (!this.isRecording || this.isPaused) return
 
     this.isPaused = true
-    audioCapture.stopCapture()
+    this.isSendingAudio = false
     this.setStatus('paused')
   }
 
@@ -112,7 +114,7 @@ export class TranscriptionService {
     if (!this.isRecording || !this.isPaused) return
 
     try {
-      await this.startAudioCapture()
+      this.isSendingAudio = true
       this.isPaused = false
       this.setStatus('recording')
     } catch (error) {
@@ -128,6 +130,7 @@ export class TranscriptionService {
 
     this.isRecording = false
     this.isPaused = false
+    this.isSendingAudio = false
     audioCapture.stopCapture()
     websocket.stopTranscribe()
     this.setStatus('idle')
@@ -185,6 +188,24 @@ export class TranscriptionService {
         const sampleRate = Number(audioData.sampleRate) || 16000
         const frameMs = Math.max(0, Math.floor((audioData.data.length / sampleRate) * 1000))
         const energy = AudioCaptureService.getAudioEnergy(audioData.data)
+
+        // 软暂停模式：如果未发送音频，仍然更新 VAD 状态以便恢复时无缝衔接
+        if (!this.isSendingAudio) {
+          // 仅在 idle 状态时检测是否要自动进入 speaking 状态，为恢复做准备
+          if (state === 'idle' && energy >= vadStartThreshold) {
+            state = 'speaking'
+            silentMs = 0
+          } else if (state === 'speaking' && energy < vadStopThreshold) {
+            silentMs += frameMs
+            if (silentMs >= vadGapMs) {
+              // 进入确认状态但立即取消（因为不发送音频）
+              silentMs = vadGapMs // 保持在边界
+            }
+          } else if (state === 'speaking' && energy >= vadStopThreshold) {
+            silentMs = 0
+          }
+          return
+        }
 
         if (state === 'idle') {
           // 空闲状态：仅在检测到足够大的声音时开始

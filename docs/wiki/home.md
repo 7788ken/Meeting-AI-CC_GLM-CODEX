@@ -151,7 +151,7 @@ cd backend && pnpm test:e2e
 
 - [MVP 任务清单](../../MVP任务清单.md)
 - [GitHub Issues](https://github.com/your-repo/issues)
-- [API 文档](http://localhost:3000/api/docs) (本地运行时访问)
+- [API 文档](http://localhost:5181/api/docs) (本地运行时访问)
 
 ---
 

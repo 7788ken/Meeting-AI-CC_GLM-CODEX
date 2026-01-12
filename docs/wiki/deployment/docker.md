@@ -17,7 +17,7 @@
 ┌───────────────┐               ┌───────────────┐
 │   Frontend    │               │    Backend    │
 │   (Vue SPA)   │◄─────────────►│   (NestJS)    │
-│   Port: 8080  │   HTTP/WS     │   Port: 3000  │
+│   Port: 8080  │   HTTP/WS     │   Port: 5181  │
 └───────────────┘               └───────┬───────┘
                                          │
         ┌────────────────────────────────┴────────┐
@@ -52,8 +52,8 @@ docker-compose logs -f
 
 访问：
 - 前端: http://localhost:8080
-- 后端 API: http://localhost:3000
-- API 文档: http://localhost:3000/api/docs
+- 后端 API: http://localhost:5181
+- API 文档: http://localhost:5181/api/docs
 
 ## 配置说明
 
@@ -109,9 +109,9 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://meeting_user:meeting_pass@postgres:5432/meeting_ai
       MONGODB_URI: mongodb://meeting_user:meeting_pass@mongodb:27017/meeting_ai?authSource=admin
-      PORT: 3000
+      PORT: 5181
     ports:
-      - "3000:3000"
+      - "5181:5181"
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,8 +129,8 @@ services:
       dockerfile: Dockerfile
     container_name: meeting-ai-frontend
     environment:
-      VITE_API_BASE_URL: http://localhost:3000/api
-      VITE_WS_URL: ws://localhost:3000
+      VITE_API_BASE_URL: http://localhost:5181/api
+      VITE_WS_URL: ws://localhost:5181/transcript
     ports:
       - "8080:80"
     depends_on:
@@ -188,7 +188,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
-EXPOSE 3000
+EXPOSE 5181
 
 CMD ["pnpm", "run", "start:prod"]
 ```
@@ -247,7 +247,7 @@ server {
 
     # API 代理 (可选)
     location /api/ {
-        proxy_pass http://backend:3000/api/;
+        proxy_pass http://backend:5181/api/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -257,7 +257,7 @@ server {
 
     # WebSocket 代理 (可选)
     location /ws/ {
-        proxy_pass http://backend:3000/ws/;
+        proxy_pass http://backend:5181/ws/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -328,7 +328,7 @@ docker-compose exec mongodb mongosh -u meeting_user -p meeting_pass
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `NODE_ENV` | `production` | 运行环境 |
-| `PORT` | `3000` | 服务端口 |
+| `PORT` | `5181` | 服务端口 |
 | `DATABASE_URL` | - | PostgreSQL 连接字符串 |
 | `MONGODB_URI` | - | MongoDB 连接字符串 |
 | `GLM_API_KEY` | - | 千问 API 密钥 |
@@ -339,7 +339,7 @@ docker-compose exec mongodb mongosh -u meeting_user -p meeting_pass
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `VITE_API_BASE_URL` | `/api` | API 基础路径 |
-| `VITE_WS_URL` | `ws://localhost:3000` | WebSocket 地址 |
+| `VITE_WS_URL` | `ws://localhost:5181/transcript` | WebSocket 地址 |
 
 ## 生产部署建议
 
@@ -359,7 +359,7 @@ DOUBAO_API_KEY=your_api_key
 
 ```nginx
 upstream backend {
-    server backend:3000;
+    server backend:5181;
 }
 
 upstream frontend {
@@ -405,7 +405,7 @@ volumes:
 
 ```yaml
 healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+  test: ["CMD", "curl", "-f", "http://localhost:5181/health"]
   interval: 30s
   timeout: 10s
   retries: 3
@@ -424,7 +424,7 @@ docker-compose ps
 docker-compose logs backend
 
 # 检查端口占用
-lsof -i :3000
+lsof -i :5181
 ```
 
 ### 数据库连接失败

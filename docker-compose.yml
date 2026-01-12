@@ -59,7 +59,7 @@ services:
     profiles: [prod]
     environment:
       NODE_ENV: production
-      PORT: 8000
+      PORT: 5181
       API_PREFIX: api
       CORS_ORIGIN: '*'
       DATABASE_URL: postgresql://quickchatbox:quickchatbox@postgres:5432/meeting_ai
@@ -75,7 +75,7 @@ services:
       GLM_API_KEY: ${GLM_API_KEY}
       GLM_ENDPOINT: ${GLM_ENDPOINT}
     ports:
-      - '8000:8000'
+      - '5181:5181'
     depends_on:
       postgres:
         condition: service_healthy

@@ -235,7 +235,7 @@ cd backend && npm run test:cov
 ```typescript
 import { io } from 'socket.io-client'
 
-const socket = io('ws://localhost:3000/ws')
+const socket = io('ws://localhost:5181/transcript')
 
 // 开始会话
 socket.emit('session:start', { sessionId: 'meeting-123' })

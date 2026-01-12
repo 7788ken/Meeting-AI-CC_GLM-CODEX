@@ -22,7 +22,7 @@
 - 版本控制：通过URL路径中的版本号控制（如 `/api/v1/sessions`）
 
 ### 2.2 基础URL
-- 开发环境：`http://localhost:3000/api/v1`
+- 开发环境：`http://localhost:5181/api`
 - 测试环境：`https://test-api.example.com/api/v1`
 - 生产环境：`https://api.example.com/api/v1`
 

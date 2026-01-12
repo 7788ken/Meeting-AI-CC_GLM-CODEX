@@ -2,7 +2,7 @@
 
 ## 基础信息
 
-- **Base URL**: `http://localhost:3000/api`
+- **Base URL**: `http://localhost:5181/api`
 - **Content-Type**: `application/json`
 - **认证方式**: JWT (待实现)
 
@@ -317,7 +317,7 @@ DELETE /analysis/session/:sessionId
 ### 连接
 
 ```
-ws://localhost:3000/ws/transcript
+ws://localhost:5181/transcript
 ```
 
 ### 客户端 → 服务器消息

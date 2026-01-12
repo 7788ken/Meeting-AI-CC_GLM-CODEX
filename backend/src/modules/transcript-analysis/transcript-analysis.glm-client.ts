@@ -5,8 +5,8 @@ import { firstValueFrom } from 'rxjs'
 import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/llm/glm'
 
 @Injectable()
-export class TurnSegmentationGlmClient {
-  private readonly logger = new Logger(TurnSegmentationGlmClient.name)
+export class TranscriptAnalysisGlmClient {
+  private readonly logger = new Logger(TranscriptAnalysisGlmClient.name)
 
   constructor(
     private readonly configService: ConfigService,
@@ -23,8 +23,7 @@ export class TurnSegmentationGlmClient {
       (this.configService.get<string>('GLM_ENDPOINT') || '').trim() ||
       'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 
-    const model = (process.env.GLM_TURN_SEGMENT_MODEL || '').trim() || 'glm-4.6v-flash'
-
+    const model = this.readModel()
     const maxTokens = this.readMaxTokens()
     const useJsonMode = this.shouldUseJsonMode()
     const requestBody = {
@@ -42,7 +41,7 @@ export class TurnSegmentationGlmClient {
       'Content-Type': 'application/json',
     }
 
-    this.logger.debug(`Calling GLM for turn segmentation, model=${model}`)
+    this.logger.debug(`Calling GLM for transcript analysis, model=${model}`)
 
     try {
       const response = await firstValueFrom(
@@ -71,15 +70,22 @@ export class TurnSegmentationGlmClient {
     return content
   }
 
+  private readModel(): string {
+    const raw = (process.env.GLM_TRANSCRIPT_ANALYSIS_MODEL || '').trim()
+    if (raw) return raw
+    const fallback = (process.env.GLM_TURN_SEGMENT_MODEL || '').trim()
+    return fallback || 'glm-4.6v-flash'
+  }
+
   private readMaxTokens(): number {
-    const raw = (process.env.GLM_TURN_SEGMENT_MAX_TOKENS || '').trim()
+    const raw = (process.env.GLM_TRANSCRIPT_ANALYSIS_MAX_TOKENS || '').trim()
     const value = Number(raw)
     if (Number.isFinite(value) && value >= 256) return Math.floor(value)
     return 2000
   }
 
   private shouldUseJsonMode(): boolean {
-    const raw = (process.env.GLM_TURN_SEGMENT_JSON_MODE || '').trim().toLowerCase()
+    const raw = (process.env.GLM_TRANSCRIPT_ANALYSIS_JSON_MODE || '').trim().toLowerCase()
     if (!raw) return true
     return raw !== '0' && raw !== 'false'
   }
