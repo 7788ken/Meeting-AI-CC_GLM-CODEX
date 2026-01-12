@@ -136,47 +136,105 @@ export class TranscriptionService {
 
   /**
    * 开始音频捕获
+   * 使用两阶段 VAD：静音检测 + 确认延迟，避免短暂停顿导致句子断裂
    */
   private async startAudioCapture(): Promise<void> {
     return new Promise((resolve, reject) => {
       const vadStartThreshold = Number(import.meta.env.VITE_TRANSCRIPT_VAD_START_TH ?? 0.015)
       const vadStopThreshold = Number(import.meta.env.VITE_TRANSCRIPT_VAD_STOP_TH ?? 0.01)
       const vadGapMs = Number(import.meta.env.VITE_TRANSCRIPT_VAD_GAP_MS ?? 900)
+      // 确认延迟：检测到静音后再等待一段时间，确认是否真的结束了
+      const vadConfirmMs = Number(import.meta.env.VITE_TRANSCRIPT_VAD_CONFIRM_MS ?? 500)
 
-      let sending = false
+      // VAD 状态机
+      type VADState = 'idle' | 'speaking' | 'confirming'
+      let state: VADState = 'idle'
       let silentMs = 0
+      let confirmTimer: ReturnType<typeof setTimeout> | null = null
+
+      /**
+       * 进入确认状态：启动定时器，如果在确认期间没有新声音则真正结束
+       */
+      const startConfirming = () => {
+        state = 'confirming'
+        if (confirmTimer) {
+          clearTimeout(confirmTimer)
+        }
+        confirmTimer = setTimeout(() => {
+          // 确认期结束，真的没有新声音，发送 end_turn
+          websocket.endTurn()
+          state = 'idle'
+          silentMs = 0
+          confirmTimer = null
+        }, vadConfirmMs)
+      }
+
+      /**
+       * 取消确认：在确认期间检测到新声音，回到 speaking 状态
+       */
+      const cancelConfirming = () => {
+        if (confirmTimer) {
+          clearTimeout(confirmTimer)
+          confirmTimer = null
+        }
+        state = 'speaking'
+        silentMs = 0
+      }
 
       const onAudioData: AudioDataCallback = (audioData) => {
         const sampleRate = Number(audioData.sampleRate) || 16000
         const frameMs = Math.max(0, Math.floor((audioData.data.length / sampleRate) * 1000))
         const energy = AudioCaptureService.getAudioEnergy(audioData.data)
 
-        if (!sending) {
-          // 仅在检测到“开始说话”时启动发包，避免持续发送静音帧
+        if (state === 'idle') {
+          // 空闲状态：仅在检测到足够大的声音时开始
           if (energy < vadStartThreshold) {
             return
           }
-          sending = true
+          state = 'speaking'
           silentMs = 0
-        }
-
-        // speaking 状态：遇到持续静音则触发 end_turn 并停止发包
-        if (energy < vadStopThreshold) {
-          silentMs += frameMs
-          if (silentMs >= vadGapMs) {
-            websocket.endTurn()
-            sending = false
-            silentMs = 0
-          }
+          // 转换并发送第一帧
+          const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
+          websocket.sendAudioData(pcm16)
           return
         }
 
-        silentMs = 0
+        if (state === 'speaking') {
+          // 说话状态：检测静音累积
+          if (energy < vadStopThreshold) {
+            silentMs += frameMs
+            // 静音持续足够久，进入确认期（此时继续发送音频，但准备结束）
+            if (silentMs >= vadGapMs) {
+              startConfirming()
+            }
+            // 仍然发送静音帧（让 ASR 知道有短暂停顿）
+            const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
+            websocket.sendAudioData(pcm16)
+            return
+          }
 
-        // 转换为 PCM 16-bit
-        const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
-        // 发送到 WebSocket
-        websocket.sendAudioData(pcm16)
+          // 检测到声音，重置静音计数
+          silentMs = 0
+          const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
+          websocket.sendAudioData(pcm16)
+          return
+        }
+
+        if (state === 'confirming') {
+          // 确认状态：检测是否有新声音
+          if (energy >= vadStopThreshold) {
+            // 检测到新声音，取消结束，继续说话
+            cancelConfirming()
+            const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
+            websocket.sendAudioData(pcm16)
+            return
+          }
+
+          // 仍在静音中，继续发送音频帧（ASR 可能会返回最终结果）
+          const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
+          websocket.sendAudioData(pcm16)
+          return
+        }
       }
 
       audioCapture
