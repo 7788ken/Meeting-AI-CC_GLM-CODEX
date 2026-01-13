@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Param } from '@nestjs/common'
+import { BadRequestException, Controller, Get, Param, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Public } from '../auth/decorators/public.decorator'
 import {
@@ -25,5 +25,17 @@ export class TranscriptEventSegmentationController {
       throw new BadRequestException('sessionId is required')
     }
     return this.transcriptEventSegmentationService.getSnapshot(normalized)
+  }
+
+  @Public()
+  @Post('session/:sessionId/rebuild')
+  @ApiOperation({ summary: '重拆：清空并从事件 1 重新生成语句拆分结果' })
+  @ApiResponse({ status: 200 })
+  async rebuild(@Param('sessionId') sessionId: string): Promise<{ started: boolean }> {
+    const normalized = sessionId?.trim()
+    if (!normalized) {
+      throw new BadRequestException('sessionId is required')
+    }
+    return this.transcriptEventSegmentationService.rebuildFromStart(normalized)
   }
 }

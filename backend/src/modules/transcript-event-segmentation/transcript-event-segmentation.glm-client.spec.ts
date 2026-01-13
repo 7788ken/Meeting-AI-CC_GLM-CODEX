@@ -5,6 +5,7 @@ import type { HttpService } from '@nestjs/axios'
 
 describe('TranscriptEventSegmentationGlmClient', () => {
   const originalEnv = process.env
+  const defaultBumpMaxTokensTo = 4096
 
   let configService: jest.Mocked<ConfigService>
   let httpService: jest.Mocked<HttpService>
@@ -117,7 +118,67 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     expect(httpService.post).toHaveBeenCalledTimes(2)
 
     const secondBody = (httpService.post.mock.calls[1] as any)[1]
-    expect(secondBody.max_tokens).toBe(2000)
+    expect(secondBody.max_tokens).toBe(defaultBumpMaxTokensTo)
+  })
+
+  it('finish_reason=length 但 content 已是完整 JSON 时，直接返回不重试', async () => {
+    httpService.post.mockReturnValueOnce(
+      of({
+        status: 200,
+        data: {
+          choices: [
+            {
+              finish_reason: 'length',
+              message: { content: '{ "nextSentence": "ok" }' },
+            },
+          ],
+        },
+      } as any)
+    )
+
+    const client = new TranscriptEventSegmentationGlmClient(configService, httpService)
+    const result = await client.generateStructuredJson({ system: 's', user: 'u' })
+
+    expect(result).toBe('{ "nextSentence": "ok" }')
+    expect(httpService.post).toHaveBeenCalledTimes(1)
+  })
+
+  it('默认 max_tokens=2000 时，finish_reason=length 会提升到 bump 上限再重试', async () => {
+    httpService.post
+      .mockReturnValueOnce(
+        of({
+          status: 200,
+          data: {
+            choices: [
+              {
+                finish_reason: 'length',
+                message: { content: '', reasoning_content: '...' },
+              },
+            ],
+          },
+        } as any)
+      )
+      .mockReturnValueOnce(
+        of({
+          status: 200,
+          data: {
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{ "nextSentence": "ok" }' },
+              },
+            ],
+          },
+        } as any)
+      )
+
+    const client = new TranscriptEventSegmentationGlmClient(configService, httpService)
+    const result = await client.generateStructuredJson({ system: 's', user: 'u' })
+
+    expect(result).toBe('{ "nextSentence": "ok" }')
+    expect(httpService.post).toHaveBeenCalledTimes(2)
+
+    const secondBody = (httpService.post.mock.calls[1] as any)[1]
+    expect(secondBody.max_tokens).toBe(defaultBumpMaxTokensTo)
   })
 })
-

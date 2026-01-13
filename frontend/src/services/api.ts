@@ -74,26 +74,6 @@ export interface TranscriptStreamSnapshot {
   events: TranscriptEvent[]
 }
 
-// ==================== 轮次分段（Phase 2） ====================
-
-export interface TurnSegmentRange {
-  speakerId: string
-  speakerName: string
-  startEventIndex: number
-  endEventIndex: number
-}
-
-export interface TurnSegmentsSnapshot {
-  sessionId: string
-  revision: number
-  targetRevision: number
-  status: 'processing' | 'completed' | 'failed'
-  segments: TurnSegmentRange[]
-  error?: string
-  model?: string
-  generatedAt?: string
-}
-
 // ==================== 语句拆分（transcript_events_segments） ====================
 
 export interface TranscriptEventSegment {
@@ -266,16 +246,19 @@ export const transcriptEventSegmentationApi = {
     get<ApiResponse<TranscriptEventSegmentsSnapshot>>(
       `/transcript-event-segmentation/session/${sessionId}`
     ),
-}
-
-export const turnSegmentationApi = {
-  // 获取会话轮次分段快照（用于刷新恢复）
-  getSnapshot: (sessionId: string) =>
-    get<ApiResponse<TurnSegmentsSnapshot>>(`/turn-segmentation/session/${sessionId}`),
+  // 重拆：清空并从事件 1 重新生成语句拆分结果
+  rebuild: (sessionId: string) =>
+    post<ApiResponse<{ started: boolean }>>(
+      `/transcript-event-segmentation/session/${sessionId}/rebuild`,
+      {}
+    ),
 }
 
 export const debugErrorApi = {
   // 获取会话的调试错误列表
   listBySession: (sessionId: string) =>
     get<ApiResponse<DebugError[]>>(`/debug-errors/session/${sessionId}`),
+  // 清空会话的调试错误列表
+  clearBySession: (sessionId: string) =>
+    del<ApiResponse<{ deletedCount: number }>>(`/debug-errors/session/${sessionId}`),
 }

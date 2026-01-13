@@ -628,9 +628,7 @@ export class TranscriptAnalysisService {
 
   private readGlmModelName(): string {
     const raw = (process.env.GLM_TRANSCRIPT_ANALYSIS_MODEL || '').trim()
-    if (raw) return raw
-    const fallback = (process.env.GLM_TURN_SEGMENT_MODEL || '').trim()
-    return fallback || 'glm-4.6v-flash'
+    return raw || 'glm-4.6v-flash'
   }
 
   private readChunkSize(): number {

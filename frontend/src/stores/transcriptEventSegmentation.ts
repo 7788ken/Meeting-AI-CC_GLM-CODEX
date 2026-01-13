@@ -34,10 +34,20 @@ export const useTranscriptEventSegmentationStore = defineStore('transcriptEventS
     }
 
     messageHandler = (message: TranscriptMessage) => {
-      if (message.type !== 'transcript_event_segment_upsert') return
-      if (!message.data?.sessionId) return
-      if (sessionId.value && message.data.sessionId !== sessionId.value) return
-      applyUpsert(message.data)
+      if (message.type === 'transcript_event_segment_upsert') {
+        if (!message.data?.sessionId) return
+        if (sessionId.value && message.data.sessionId !== sessionId.value) return
+        applyUpsert(message.data)
+        return
+      }
+
+      if (message.type === 'transcript_event_segment_reset') {
+        const targetSessionId = message.data?.sessionId
+        if (!targetSessionId) return
+        if (sessionId.value && targetSessionId !== sessionId.value) return
+        clearSegments()
+        void loadSnapshot(targetSessionId)
+      }
     }
 
     websocket.onMessage(messageHandler)
@@ -63,6 +73,10 @@ export const useTranscriptEventSegmentationStore = defineStore('transcriptEventS
     segments.value = segments.value.slice().sort(sortBySequenceDesc)
   }
 
+  function clearSegments(): void {
+    segments.value = []
+  }
+
   function reset(): void {
     unbindWebSocket()
     sessionId.value = ''
@@ -79,6 +93,7 @@ export const useTranscriptEventSegmentationStore = defineStore('transcriptEventS
     hasSegments,
     loadSnapshot,
     bindWebSocket,
+    clearSegments,
     reset,
   }
 })

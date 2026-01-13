@@ -2,6 +2,8 @@
 
 > 创建时间: 2026-01-13
 > 来源: Claude Code + Codex CLI + 用户讨论
+>
+> ⚠️ 说明：本文为历史设计稿，`transcript-analysis` 链路已从运行链路中移除；当前语句拆分以 `transcript-event-segmentation` 为准（`TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE`）。
 
 ---
 

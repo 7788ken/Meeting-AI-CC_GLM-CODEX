@@ -111,14 +111,24 @@
     <!-- 下部：左右分栏 -->
     <div class="content-area">
       <!-- 下左：GLM 拆分后的独立发言 -->
-      <section class="transcript-panel">
-      <div class="panel-header">
-        <h2>语句拆分</h2>
-        <div class="panel-actions">
-          <el-tooltip
-            :content="transcriptSegmentOrder === 'desc' ? '切换为正序（旧→新）' : '切换为倒序（新→旧）'"
-            placement="bottom"
-          >
+	      <section class="transcript-panel">
+	      <div class="panel-header">
+	        <h2>语句拆分</h2>
+	        <div class="panel-actions">
+	          <el-button
+	            size="small"
+	            type="danger"
+	            plain
+	            :loading="rebuildingTranscriptSegments"
+	            :disabled="!sessionId || rebuildingTranscriptSegments"
+	            @click="rebuildTranscriptSegments"
+	          >
+	            重拆
+	          </el-button>
+	          <el-tooltip
+	            :content="transcriptSegmentOrder === 'desc' ? '切换为正序（旧→新）' : '切换为倒序（新→旧）'"
+	            placement="bottom"
+	          >
             <el-button
               size="small"
               class="segment-order-trigger"
@@ -184,8 +194,16 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Setting } from '@element-plus/icons-vue'
-import { sessionApi, speechApi, analysisApi, type Session, type Speech, type AIAnalysis } from '@/services/api'
+	import { Setting } from '@element-plus/icons-vue'
+	import {
+	  sessionApi,
+	  speechApi,
+	  analysisApi,
+	  transcriptEventSegmentationApi,
+	  type Session,
+	  type Speech,
+	  type AIAnalysis,
+	} from '@/services/api'
 import { exportAnalysis as exportAnalysisService, type ExportFormat } from '@/services/export'
 import { transcription } from '@/services/transcription'
 import type { ConnectionStatus } from '@/services/websocket'
@@ -217,11 +235,12 @@ const transcriptRef = ref<HTMLElement>()
 const endingSession = ref(false)
 const sessionEndedOverride = ref(false)
 const wsConnectionStatus = ref<ConnectionStatus | null>(null)
-const debugDrawerVisible = ref(false)
-const settingsDrawerVisible = ref(false)
-const transcriptSegmentOrder = ref<'asc' | 'desc'>('desc')
-const transcriptStreamStore = useTranscriptStreamStore()
-const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
+	const debugDrawerVisible = ref(false)
+	const settingsDrawerVisible = ref(false)
+	const transcriptSegmentOrder = ref<'asc' | 'desc'>('desc')
+	const rebuildingTranscriptSegments = ref(false)
+	const transcriptStreamStore = useTranscriptStreamStore()
+	const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
 
 // 计算属性
 const statusText = computed(() => {
@@ -347,45 +366,76 @@ async function loadSpeeches() {
   }
 }
 
-// 结束会话
-async function endSession() {
-  if (!sessionId.value || isSessionEnded.value) return
+	// 结束会话
+	async function endSession() {
+	  if (!sessionId.value || isSessionEnded.value) return
 
-  try {
-    await ElMessageBox.confirm(
-      '确定要结束当前会话吗？结束后将无法继续录音。',
-      '结束会话确认',
-      {
-        confirmButtonText: '结束会话',
-        cancelButtonText: '取消',
-        type: 'warning',
-      },
-    )
-  } catch {
-    return
-  }
+	  try {
+	    await ElMessageBox.confirm(
+	      '确定要结束当前会话吗？结束后将无法继续录音。',
+	      '结束会话确认',
+	      {
+	        confirmButtonText: '结束会话',
+	        cancelButtonText: '取消',
+	        type: 'warning',
+	      },
+	    )
+	  } catch {
+	    return
+	  }
 
-  try {
-    endingSession.value = true
+	  try {
+	    endingSession.value = true
 
-    if (recordingStatus.value !== 'idle') {
-      transcription.stop()
-      recordingStatus.value = 'idle'
-      isPaused.value = false
-      wsConnectionStatus.value = null
-    }
+	    if (recordingStatus.value !== 'idle') {
+	      transcription.stop()
+	      recordingStatus.value = 'idle'
+	      isPaused.value = false
+	      wsConnectionStatus.value = null
+	    }
 
-    await sessionApi.end(sessionId.value)
-    sessionEndedOverride.value = true
-    await loadSession()
-    ElMessage.success('会话已结束')
-  } catch (error) {
-    console.error('结束会话失败:', error)
-    ElMessage.error('结束会话失败')
-  } finally {
-    endingSession.value = false
-  }
-}
+	    await sessionApi.end(sessionId.value)
+	    sessionEndedOverride.value = true
+	    await loadSession()
+	    ElMessage.success('会话已结束')
+	  } catch (error) {
+	    console.error('结束会话失败:', error)
+	    ElMessage.error('结束会话失败')
+	  } finally {
+	    endingSession.value = false
+	  }
+	}
+
+	async function rebuildTranscriptSegments(): Promise<void> {
+	  if (!sessionId.value) return
+	  if (rebuildingTranscriptSegments.value) return
+
+	  try {
+	    await ElMessageBox.confirm(
+	      '这将清空当前会话的语句拆分结果，并从事件 1 重新生成。确定继续吗？',
+	      '重拆确认',
+	      {
+	        confirmButtonText: '重拆',
+	        cancelButtonText: '取消',
+	        type: 'warning',
+	      },
+	    )
+	  } catch {
+	    return
+	  }
+
+	  try {
+	    rebuildingTranscriptSegments.value = true
+	    transcriptEventSegmentationStore.clearSegments()
+	    await transcriptEventSegmentationApi.rebuild(sessionId.value)
+	    ElMessage.success('已开始重拆')
+	  } catch (error) {
+	    console.error('重拆失败:', error)
+	    ElMessage.error('重拆失败')
+	  } finally {
+	    rebuildingTranscriptSegments.value = false
+	  }
+	}
 
 // 选择发言
 function selectSpeech(id: string) {

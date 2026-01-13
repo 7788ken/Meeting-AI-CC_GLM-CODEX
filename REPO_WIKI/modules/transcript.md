@@ -5,8 +5,6 @@
 Transcript 模块实现了基于豆包（Doubao）Speech Recognition API 的流式语音转写功能。该模块通过 WebSocket 协议与豆包服务通信，支持实时语音识别和结果返回。
 
 > 2.0 使用文档：docs/doubao-asr-2.0-guide.md
->
-> 重构方案（ASR 原文流 + GLM 轮次分段）：docs/realtime-turn-segmentation-refactor.md
 
 ## 2.0 关键路径
 

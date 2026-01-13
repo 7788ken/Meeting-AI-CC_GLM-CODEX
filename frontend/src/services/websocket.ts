@@ -64,19 +64,6 @@ export type TranscriptEventData = {
   }
 }
 
-export type TurnSegmentsUpsertData = {
-  sessionId: string
-  revision: number
-  status: 'processing' | 'completed' | 'failed'
-  segments?: Array<{
-    speakerId: string
-    speakerName: string
-    startEventIndex: number
-    endEventIndex: number
-  }>
-  error?: string
-}
-
 export type TranscriptEventSegmentUpsertData = {
   id: string
   sessionId: string
@@ -93,13 +80,17 @@ export type TranscriptEventSegmentUpsertData = {
   createdAt?: string
 }
 
+export type TranscriptEventSegmentResetData = {
+  sessionId: string
+}
+
 export type TranscriptMessage =
   | { type: 'transcript'; data: LegacyTranscriptData }
   | { type: 'status'; data: { status?: string; sessionId?: string; speakerId?: string; speakerName?: string } }
   | { type: 'error'; data: { error?: string } }
   | { type: 'transcript_event_upsert'; data: TranscriptEventData }
-  | { type: 'turn_segments_upsert'; data: TurnSegmentsUpsertData }
   | { type: 'transcript_event_segment_upsert'; data: TranscriptEventSegmentUpsertData }
+  | { type: 'transcript_event_segment_reset'; data: TranscriptEventSegmentResetData }
 
 export class WebSocketService {
   private ws: WebSocket | null = null

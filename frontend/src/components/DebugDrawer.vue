@@ -13,12 +13,22 @@
         <div class="header-title">
           <div class="title">会话调试台</div>
           <div class="subtitle">Session ID: {{ sessionId || '未绑定' }}</div>
-        </div>
-        <div class="header-actions">
-          <el-button size="small" class="ghost-button" @click="loadErrors">
-            <el-icon><Refresh /></el-icon>
-            刷新
-          </el-button>
+	        </div>
+	        <div class="header-actions">
+	          <el-button
+	            size="small"
+	            class="ghost-button danger-button"
+	            :disabled="!sessionId || clearing"
+	            :loading="clearing"
+	            @click="clearErrors"
+	          >
+	            <el-icon><Delete /></el-icon>
+	            清空报错
+	          </el-button>
+	          <el-button size="small" class="ghost-button" @click="loadErrors">
+	            <el-icon><Refresh /></el-icon>
+	            刷新
+	          </el-button>
           <el-button size="small" class="ghost-button" @click="visibleProxy = false">
             关闭
           </el-button>
@@ -124,10 +134,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
-import { debugErrorApi, type DebugError } from '@/services/api'
+	import { computed, ref, watch } from 'vue'
+	import { ElMessage, ElMessageBox } from 'element-plus'
+	import { Delete, Refresh } from '@element-plus/icons-vue'
+	import { debugErrorApi, type DebugError } from '@/services/api'
 
 const props = withDefaults(
   defineProps<{
@@ -148,10 +158,11 @@ const visibleProxy = computed({
   set: (value) => emit('update:modelValue', value),
 })
 
-const errors = ref<DebugError[]>([])
-const loading = ref(false)
-const selectedId = ref('')
-const lastUpdated = ref('')
+	const errors = ref<DebugError[]>([])
+	const loading = ref(false)
+	const clearing = ref(false)
+	const selectedId = ref('')
+	const lastUpdated = ref('')
 
 const activeError = computed(() => {
   if (selectedId.value) {
@@ -178,7 +189,7 @@ watch(
   }
 )
 
-async function loadErrors() {
+	async function loadErrors() {
   if (!props.sessionId) {
     errors.value = []
     selectedId.value = ''
@@ -196,8 +207,43 @@ async function loadErrors() {
     ElMessage.error('加载调试错误失败')
   } finally {
     loading.value = false
-  }
-}
+	  }
+	}
+
+	async function clearErrors() {
+	  const currentSessionId = props.sessionId?.trim()
+	  if (!currentSessionId) return
+	  if (clearing.value) return
+
+	  try {
+	    await ElMessageBox.confirm(
+	      '将删除该会话所有调试报错记录（不可恢复）。确定继续吗？',
+	      '清空报错确认',
+	      {
+	        confirmButtonText: '清空',
+	        cancelButtonText: '取消',
+	        type: 'warning',
+	      }
+	    )
+	  } catch {
+	    return
+	  }
+
+	  try {
+	    clearing.value = true
+	    const response = await debugErrorApi.clearBySession(currentSessionId)
+	    const deletedCount = response.data?.deletedCount ?? 0
+	    errors.value = []
+	    selectedId.value = ''
+	    lastUpdated.value = new Date().toISOString()
+	    ElMessage.success(`已清空 ${deletedCount} 条报错`)
+	  } catch (error) {
+	    console.error('清空调试错误失败:', error)
+	    ElMessage.error('清空调试错误失败')
+	  } finally {
+	    clearing.value = false
+	  }
+	}
 
 function selectError(id: string) {
   selectedId.value = id
@@ -319,10 +365,15 @@ function formatContext(context: DebugError['context']) {
   color: var(--debug-ink);
 }
 
-.ghost-button:hover {
-  border-color: var(--debug-accent);
-  color: #b3541e;
-}
+	.ghost-button:hover {
+	  border-color: var(--debug-accent);
+	  color: #b3541e;
+	}
+
+	.danger-button:hover {
+	  border-color: rgba(219, 90, 76, 0.6);
+	  color: #b33d35;
+	}
 
 .debug-body {
   display: grid;

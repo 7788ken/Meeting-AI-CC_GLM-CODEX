@@ -8,7 +8,7 @@ export function buildTranscriptEventSegmentationPrompt(input: {
   events: TranscriptEventDTO[]
 }): { system: string; user: string } {
   const system = [
-    '你是“会议语句拆分器”。你的任务是：基于上一句与当前窗口原文内容，推理出下一句内容。',
+    '你是“会议语句拆分器”。你的任务是：基于上一句与当前窗口原文内容，输出当前说话人的下一句内容。',
     '',
     '输入说明：',
     '- previousSentence: 本会话上一句内容（可能为空）',

@@ -1,7 +1,9 @@
 # 语句拆分模块 Debug 分析文档
 
 > 文档创建时间: 2026-01-12
-> 分析范围: TranscriptAnalysisService (语句拆分/转写语句拆分分析模块)
+> 分析范围: TranscriptEventSegmentationService（语句拆分：A + B → C，落库 transcript_events_segments）
+>
+> 说明：`transcript-analysis` 链路已从运行链路中移除；本文后半部分保留其历史分析作为参考。
 
 ---
 
@@ -39,56 +41,53 @@
 │  - 维护 eventIndex (单调递增)    │
 └────────┬────────────────────────┘
          │
-         │ schedule(sessionId)  ────────┐
-         │                                │
-         ▼                                │
-┌─────────────────────────────────┐       │
-│  TranscriptAnalysisService      │       │
-│  - processSession()             │       │
-│  - analyzeEvents()              │       │
-│  - 按 CHUNK_SIZE=5 分块处理     │       │
-└────────┬────────────────────────┘       │
-         │ GLM API Call                   │
-         ▼                                │
-┌─────────────────────────────────┐       │
-│  GLM-4.6v-flash                 │       │
-│  - 接收结构化 JSON 输出          │       │
-└────────┬────────────────────────┘       │
-         │                                │
-         ▼                                │
-┌─────────────────────────────────┐       │
-│  transcript_analysis_chunks     │       │
-│  - dialogues[]                  │       │
-│  - startEventIndex/endEventIndex│       │
-└─────────────────────────────────┘       │
-                                          │
-                                    每个事件触发
-                                    schedule(sessionId)
+	         │ schedule(sessionId)  ────────┐
+	         │                                │
+	         ▼                                │
+	┌──────────────────────────────────────────┐
+	│  TranscriptEventSegmentationService      │
+	│  - previousSentence(A) + events(B) → C   │
+	│  - append segment into transcript_events_segments │
+	└────────┬─────────────────────────────────┘
+	         │ GLM API Call
+	         ▼
+	┌─────────────────────────────────┐
+	│  GLM-4.6v-flash                 │
+	│  - 生成下一句 nextSentence       │
+	└────────┬────────────────────────┘
+	         │
+	         ▼
+	┌──────────────────────────────────────────┐
+	│  transcript_events_segments              │
+	│  - sequence / content                    │
+	│  - sourceStartEventIndex/sourceEndEventIndex │
+	└──────────────────────────────────────────┘
 ```
 
 ### 2.2 核心文件清单
 
 | 文件路径 | 职责 |
 |---------|------|
-| `backend/src/modules/transcript-analysis/transcript-analysis.service.ts` | 核心服务：调度、处理、落库 |
-| `backend/src/modules/transcript-analysis/transcript-analysis.prompt.ts` | LLM Prompt 构建 |
-| `backend/src/modules/transcript-analysis/transcript-analysis.validation.ts` | 结果校验 + 启发式fallback |
-| `backend/src/modules/transcript-analysis/transcript-analysis.glm-client.ts` | GLM API 客户端 |
-| `backend/src/modules/transcript-analysis/schemas/transcript-analysis-chunk.schema.ts` | MongoDB Schema |
+| `backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.service.ts` | 核心服务：调度、生成、落库 |
+| `backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.prompt.ts` | LLM Prompt 构建 |
+| `backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.validation.ts` | 结果校验 |
+| `backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.glm-client.ts` | GLM API 客户端 |
+| `backend/src/modules/transcript-event-segmentation/schemas/transcript-event-segment.schema.ts` | MongoDB Schema |
 | `backend/src/modules/transcript-stream/transcript-stream.service.ts` | 原文事件流存储 |
 
 ### 2.3 环境配置项
 
 ```bash
 # .env 配置
-TRANSCRIPT_ANALYSIS_CHUNK_SIZE=5              # 每次处理事件数
-TRANSCRIPT_ANALYSIS_CONCURRENCY=3             # 最大并发会话数
-TRANSCRIPT_ANALYSIS_REQUIRE_FINAL=0           # 是否只处理 isFinal=true 事件
+TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE=120       # 取尾部 N 条事件作为上下文
+TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS=3000     # 去抖间隔（毫秒）
+TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_END_TURN=1
+TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE=1
 
 GLM_API_KEY=...                               # GLM API Key
-GLM_TRANSCRIPT_ANALYSIS_MODEL=glm-4.6v-flash  # 模型名称
-GLM_TRANSCRIPT_ANALYSIS_MAX_TOKENS=2000       # 输出 token 上限
-GLM_TRANSCRIPT_ANALYSIS_JSON_MODE=1           # JSON 模式
+GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL=glm-4.6v-flash
+GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS=2000
+GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE=1
 ```
 
 ---
@@ -182,14 +181,7 @@ const system = [
 
 ### 4.2 术语混乱
 
-代码中存在两个相似但不同的模块：
-
-| 模块 | 文件路径 | 功能 |
-|-----|---------|------|
-| **TurnSegmentationService** | `turn-segmentation/` | 按 speaker turn 分段 |
-| **TranscriptAnalysisService** | `transcript-analysis/` | 也叫"语句拆分"（旧称"语义分段"），实际也是按 speaker 分段 |
-
-这两个模块功能高度重复，都只是按说话人合并，真正的"语义分析"缺失。
+历史上同时存在“轮次分段（turn-segmentation）”与“语句拆分/语义分段（transcript-analysis）”两条链路，概念与输出高度相似，容易造成误用与调试噪音；轮次分段模块已从工程中移除。
 
 ### 4.3 缺失功能
 
@@ -337,18 +329,14 @@ if (this.queuedSessions.has(sessionId)) {
 
 ### 6.5 前端缺失
 
-**没有对应的 API 端点**:
-- `GET /api/transcript-analysis/session/:sessionId` → 不存在
-- 前端无法查询分析结果
-- `TurnSegmentsPanel.vue` 显示的是 `TurnSegmentationService` 的结果，不是 `TranscriptAnalysisService`
+**当前可用的 API 端点**:
+- `GET /api/transcript-event-segmentation/session/:sessionId` → 获取 `transcript_events_segments` 快照（用于刷新恢复）
 
 ### 6.6 WebSocket 消息
 
-后端**不推送**语义分析结果，只推送:
+后端推送:
 - `transcript_event_upsert` (原文事件)
-- `turn_segments_upsert` (轮次分段)
-
-**建议新增**: `transcript_analysis_upsert` 消息类型，实时推送分析结果。
+- `transcript_event_segment_upsert` (语句拆分结果)
 
 ---
 
@@ -424,7 +412,7 @@ const system = [
 
 将 `TranscriptAnalysisService` 改造为真正的语义分析模块:
 
-1. **调用链解耦**: 与 TurnSegmentationService 分离职责
+1. **调用链解耦**: 与历史轮次分段链路解耦（turn-segmentation 已移除）
 2. **新增 Controller**: `TranscriptAnalysisController`
 3. **前端集成**: 新增组件展示翻译结果
 
@@ -518,7 +506,7 @@ db.transcript_analysis_chunks.findOne(
 
 **翻译应该独立** — 翻译与分段是两个职责，应该解耦为独立模块。
 
-**代码重复严重** — `TranscriptAnalysisService` 与 `TurnSegmentationService` 重复度 85%-95%。
+**代码重复严重（历史问题）** — `transcript-analysis` 与 `turn-segmentation` 重复度 85%-95%，后者已移除。
 
 ### 10.3 新架构设计
 
@@ -707,9 +695,8 @@ TRANSLATION_ON_DEMAND=true               # 按需翻译
 
 **Phase 5: 清理** (1天)
 ```
-1. 评估 TurnSegmentationService 是否保留
-2. 如果废弃，迁移历史数据
-3. 删除重复代码
+1. 清理历史遗留链路（轮次分段已移除）
+2. 删除重复代码
 ```
 
 ### 10.10 方案对比
@@ -727,7 +714,6 @@ TRANSLATION_ON_DEMAND=true               # 按需翻译
 
 | 问题 | 选项 | 影响 |
 |-----|------|------|
-| TurnSegmentationService 是否保留？ | A: 废弃迁移 / B: 保留 | 前端兼容性 |
 | 翻译是否必需？ | A: 默认开启 / B: 按需开启 | 成本和复杂度 |
 | 是否需要引入真正的语义分段（按话题分段）？ | 按话题分段（需LLM） | 未来需求 |
 
@@ -895,12 +881,11 @@ function normalizePunctuation(content: string): string {
 #### 触发条件
 - 规则阶段输出的 segments 中存在 `low_conf` 或 `conflict` 标记
 - 连续段长度差异 > 2倍
-- 目标轮次数与说话人人次统计不匹配
 
 #### Prompt 设计
 ```typescript
 const SYSTEM_PROMPT = `
-你是"会议转写轮次分段校正器"。你的任务是基于规则预分段结果，进行边界微调。
+你是"会议转写语句拆分校正器"。你的任务是基于规则预拆分结果，进行边界微调。
 
 输入包含：
 - events: 原始ASR事件（含timestamp、speakerId、content、confidence）

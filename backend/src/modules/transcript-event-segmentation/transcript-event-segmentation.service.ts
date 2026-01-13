@@ -1,8 +1,9 @@
-import { Injectable, Logger, Optional } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
 import { ConfigService } from '@nestjs/config'
 import { TranscriptStreamService } from '../transcript-stream/transcript-stream.service'
+import type { TranscriptEventDTO } from '../transcript-stream/transcript-stream.service'
 import { DebugErrorService } from '../debug-error/debug-error.service'
 import { TranscriptEventSegmentationGlmClient } from './transcript-event-segmentation.glm-client'
 import { buildTranscriptEventSegmentationPrompt } from './transcript-event-segmentation.prompt'
@@ -34,10 +35,18 @@ export type TranscriptEventSegmentsSnapshotDTO = {
 }
 
 type TranscriptEventSegmentUpdateHandler = (data: TranscriptEventSegmentDTO) => void
+type TranscriptEventSegmentResetHandler = (sessionId: string) => void
+type PersistedTranscriptEventSegment = {
+  dto: TranscriptEventSegmentDTO
+  createdId: TranscriptEventSegmentDocument['_id']
+}
 
 @Injectable()
 export class TranscriptEventSegmentationService {
   private readonly logger = new Logger(TranscriptEventSegmentationService.name)
+  private onSegmentUpdate?: TranscriptEventSegmentUpdateHandler
+  private onSegmentReset?: TranscriptEventSegmentResetHandler
+  private readonly rebuildInFlightBySession = new Set<string>()
 
   constructor(
     @InjectModel(TranscriptEventSegment.name)
@@ -45,9 +54,22 @@ export class TranscriptEventSegmentationService {
     private readonly transcriptStreamService: TranscriptStreamService,
     private readonly glmClient: TranscriptEventSegmentationGlmClient,
     private readonly debugErrorService: DebugErrorService,
-    private readonly configService: ConfigService,
-    @Optional() private readonly onSegmentUpdate?: TranscriptEventSegmentUpdateHandler
+    private readonly configService: ConfigService
   ) {}
+
+  setOnSegmentUpdate(handler?: TranscriptEventSegmentUpdateHandler | null): void {
+    this.onSegmentUpdate = handler ?? undefined
+  }
+
+  setOnSegmentReset(handler?: TranscriptEventSegmentResetHandler | null): void {
+    this.onSegmentReset = handler ?? undefined
+  }
+
+  isRebuildInFlight(sessionId: string): boolean {
+    const normalized = typeof sessionId === 'string' ? sessionId.trim() : ''
+    if (!normalized) return false
+    return this.rebuildInFlightBySession.has(normalized)
+  }
 
   async getSnapshot(sessionId: string): Promise<TranscriptEventSegmentsSnapshotDTO> {
     const segments = await this.segmentModel
@@ -81,7 +103,7 @@ export class TranscriptEventSegmentationService {
       return null
     }
 
-    const windowSize = this.readWindowSize()
+    const windowSize = this.readChunkSize()
     const startEventIndex = Math.max(0, endEventIndex - windowSize + 1)
     const events = await this.transcriptStreamService.getEventsInRange({
       sessionId,
@@ -90,67 +112,55 @@ export class TranscriptEventSegmentationService {
     })
     if (!events.length) return null
 
-    const prompt = buildTranscriptEventSegmentationPrompt({
-      sessionId,
-      previousSentence: lastSegment?.content ?? '',
-      startEventIndex,
-      endEventIndex,
-      events,
-    })
-    const promptLength = prompt.system.length + prompt.user.length
     const modelName = this.readModelName()
 
-    try {
-      const raw = await this.glmClient.generateStructuredJson(prompt)
-      const parsed = parseTranscriptEventSegmentJson(raw)
+    const nextSequence = (lastSegment?.sequence ?? 0) + 1
+    const created = await this.generateAndPersistSegment({
+      sessionId,
+      previousSentence: lastSegment?.content ?? '',
+      prevSegmentId: lastSegment?._id,
+      nextSequence,
+      sourceStartEventIndex: startEventIndex,
+      sourceEndEventIndex: endEventIndex,
+      sourceRevision: state.revision,
+      events,
+      modelName,
+    })
 
-      const nextSequence = (lastSegment?.sequence ?? 0) + 1
-      const created = await this.segmentModel.create({
-        sessionId,
-        sequence: nextSequence,
-        content: parsed.nextSentence,
-        sourceStartEventIndex: startEventIndex,
-        sourceEndEventIndex: endEventIndex,
-        sourceRevision: state.revision,
-        prevSegmentId: lastSegment?._id,
-        status: 'completed',
-        model: modelName,
-        generatedAt: new Date(),
-      })
+    return created?.dto ?? null
+  }
 
-      const dto = this.toDTO(created)
-      this.emitSegmentUpdate(dto)
-      return dto
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      this.logger.warn(
-        `Transcript event segmentation failed, sessionId=${sessionId}: ${message}`
-      )
-      const glmErrorContext = this.buildGlmErrorContext(error)
-      void this.debugErrorService.recordError({
-        sessionId,
-        level: 'error',
-        message: `Transcript event segmentation failed: ${message}`,
-        source: 'glm-api',
-        category: 'transcript-event-segmentation',
-        error,
-        context: {
-          model: modelName,
-          promptLength,
-          revision: state.revision,
-          startEventIndex,
-          endEventIndex,
-          ...(glmErrorContext ? { glm: glmErrorContext } : {}),
-        },
-        occurredAt: new Date(),
-      })
-      return null
-    }
+  async rebuildFromStart(sessionId: string): Promise<{ started: boolean }> {
+    const normalized = typeof sessionId === 'string' ? sessionId.trim() : ''
+    if (!normalized) return { started: false }
+    if (this.rebuildInFlightBySession.has(normalized)) return { started: false }
+
+    this.rebuildInFlightBySession.add(normalized)
+    void this.runRebuildFromStart(normalized).finally(() => {
+      this.rebuildInFlightBySession.delete(normalized)
+    })
+
+    return { started: true }
+  }
+
+  async markRollback(sessionId: string, eventIndex: number): Promise<void> {
+    const trimmedSessionId = typeof sessionId === 'string' ? sessionId.trim() : ''
+    if (!trimmedSessionId) return
+
+    const threshold = Math.max(0, Math.floor(eventIndex))
+    await this.segmentModel
+      .deleteMany({ sessionId: trimmedSessionId, sourceEndEventIndex: { $gte: threshold } })
+      .exec()
+
+    this.emitSegmentReset(trimmedSessionId)
   }
 
   private emitSegmentUpdate(data: TranscriptEventSegmentDTO): void {
-    if (!this.onSegmentUpdate) return
-    this.onSegmentUpdate(data)
+    this.onSegmentUpdate?.(data)
+  }
+
+  private emitSegmentReset(sessionId: string): void {
+    this.onSegmentReset?.(sessionId)
   }
 
   private toDTO(segment: TranscriptEventSegmentDocument): TranscriptEventSegmentDTO {
@@ -171,9 +181,15 @@ export class TranscriptEventSegmentationService {
     }
   }
 
-  private readWindowSize(): number {
+  private readChunkSize(): number {
     const raw =
-      this.configService.get<string>('TRANSCRIPT_EVENTS_SEGMENT_WINDOW_EVENTS') ??
+      this.configService.get<string>('TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE') ||
+      process.env.TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE ||
+      this.configService.get<string>('TRANSCRIPT_ANALYSIS_CHUNK_SIZE') ||
+      process.env.TRANSCRIPT_ANALYSIS_CHUNK_SIZE ||
+      this.configService.get<string>('TRANSCRIPT_ANALYSIS_WINDOW_SIZE') ||
+      process.env.TRANSCRIPT_ANALYSIS_WINDOW_SIZE ||
+      this.configService.get<string>('TRANSCRIPT_EVENTS_SEGMENT_WINDOW_EVENTS') ||
       process.env.TRANSCRIPT_EVENTS_SEGMENT_WINDOW_EVENTS
     const value = Number(raw)
     if (!Number.isFinite(value)) return 120
@@ -182,9 +198,7 @@ export class TranscriptEventSegmentationService {
 
   private readModelName(): string {
     const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL || '').trim()
-    if (raw) return raw
-    const fallback = (process.env.GLM_TURN_SEGMENT_MODEL || '').trim()
-    return fallback || 'glm-4.6v-flash'
+    return raw || 'glm-4.6v-flash'
   }
 
   private buildGlmErrorContext(error: unknown): Record<string, unknown> | null {
@@ -211,5 +225,135 @@ export class TranscriptEventSegmentationService {
       context.response = response
     }
     return context
+  }
+
+  private async generateAndPersistSegment(input: {
+    sessionId: string
+    previousSentence: string
+    prevSegmentId?: TranscriptEventSegmentDocument['_id']
+    nextSequence: number
+    sourceStartEventIndex: number
+    sourceEndEventIndex: number
+    sourceRevision: number
+    events: TranscriptEventDTO[]
+    modelName: string
+  }): Promise<PersistedTranscriptEventSegment | null> {
+    const prompt = buildTranscriptEventSegmentationPrompt({
+      sessionId: input.sessionId,
+      previousSentence: input.previousSentence,
+      startEventIndex: input.sourceStartEventIndex,
+      endEventIndex: input.sourceEndEventIndex,
+      events: input.events,
+    })
+    const promptLength = prompt.system.length + prompt.user.length
+
+    try {
+      const raw = await this.glmClient.generateStructuredJson(prompt)
+      const parsed = parseTranscriptEventSegmentJson(raw)
+
+      const created = await this.segmentModel.create({
+        sessionId: input.sessionId,
+        sequence: input.nextSequence,
+        content: parsed.nextSentence,
+        sourceStartEventIndex: input.sourceStartEventIndex,
+        sourceEndEventIndex: input.sourceEndEventIndex,
+        sourceRevision: input.sourceRevision,
+        prevSegmentId: input.prevSegmentId,
+        status: 'completed',
+        model: input.modelName,
+        generatedAt: new Date(),
+      })
+
+      const dto = this.toDTO(created)
+      this.emitSegmentUpdate(dto)
+      return { dto, createdId: created._id }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.warn(
+        `Transcript event segmentation failed, sessionId=${input.sessionId}: ${message}`
+      )
+      const glmErrorContext = this.buildGlmErrorContext(error)
+      void this.debugErrorService.recordError({
+        sessionId: input.sessionId,
+        level: 'error',
+        message: `Transcript event segmentation failed: ${message}`,
+        source: 'glm-api',
+        category: 'transcript-event-segmentation',
+        error,
+        context: {
+          model: input.modelName,
+          promptLength,
+          revision: input.sourceRevision,
+          startEventIndex: input.sourceStartEventIndex,
+          endEventIndex: input.sourceEndEventIndex,
+          ...(glmErrorContext ? { glm: glmErrorContext } : {}),
+        },
+        occurredAt: new Date(),
+      })
+      return null
+    }
+  }
+
+  private async runRebuildFromStart(sessionId: string): Promise<void> {
+    this.logger.log(`Transcript event segmentation rebuild started, sessionId=${sessionId}`)
+
+    const state = await this.transcriptStreamService.getState({ sessionId })
+    const endEventIndex = Math.max(-1, state.nextEventIndex - 1)
+
+    await this.segmentModel.deleteMany({ sessionId }).exec()
+    this.emitSegmentReset(sessionId)
+
+    if (endEventIndex < 0) {
+      return
+    }
+
+    const windowSize = this.readChunkSize()
+    const modelName = this.readModelName()
+
+    let previousSentence = ''
+    let prevSegmentId: TranscriptEventSegmentDocument['_id'] | undefined
+    let nextSequence = 1
+
+    const maxEvents = 2000
+    const cappedEnd = Math.min(endEventIndex, maxEvents - 1)
+    for (let currentEnd = 0; currentEnd <= cappedEnd; currentEnd += 1) {
+      const currentStart = Math.max(0, currentEnd - windowSize + 1)
+      const events = await this.transcriptStreamService.getEventsInRange({
+        sessionId,
+        startEventIndex: currentStart,
+        endEventIndex: currentEnd,
+      })
+      if (!events.length) {
+        continue
+      }
+
+      const created = await this.generateAndPersistSegment({
+        sessionId,
+        previousSentence,
+        prevSegmentId,
+        nextSequence,
+        sourceStartEventIndex: currentStart,
+        sourceEndEventIndex: currentEnd,
+        sourceRevision: state.revision,
+        events,
+        modelName,
+      })
+
+      if (!created) {
+        continue
+      }
+
+      previousSentence = created.dto.content
+      prevSegmentId = created.createdId
+      nextSequence += 1
+    }
+
+    if (endEventIndex >= maxEvents) {
+      this.logger.warn(
+        `Transcript event segmentation rebuild capped at ${maxEvents} events, sessionId=${sessionId}, endEventIndex=${endEventIndex}`
+      )
+    }
+
+    this.logger.log(`Transcript event segmentation rebuild completed, sessionId=${sessionId}`)
   }
 }

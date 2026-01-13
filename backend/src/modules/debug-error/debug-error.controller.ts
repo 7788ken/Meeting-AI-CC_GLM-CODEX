@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common'
+import { Controller, Delete, Get, Param } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { DebugErrorService } from './debug-error.service'
 import { DebugErrorDto } from './dto/debug-error.dto'
@@ -21,5 +21,16 @@ export class DebugErrorController {
   @ApiResponse({ status: 200, type: [DebugErrorDto] })
   async findBySession(@Param('sessionId') sessionId: string): Promise<DebugErrorDto[]> {
     return this.debugErrorService.findBySession(sessionId)
+  }
+
+  /**
+   * 清空会话的调试错误列表
+   */
+  @Public()
+  @Delete('session/:sessionId')
+  @ApiOperation({ summary: '清空会话的调试错误列表' })
+  @ApiResponse({ status: 200 })
+  async deleteBySession(@Param('sessionId') sessionId: string): Promise<{ deletedCount: number }> {
+    return this.debugErrorService.deleteBySession(sessionId)
   }
 }

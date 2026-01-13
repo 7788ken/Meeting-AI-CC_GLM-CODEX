@@ -7,7 +7,8 @@ import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/ll
 @Injectable()
 export class TranscriptEventSegmentationGlmClient {
   private readonly logger = new Logger(TranscriptEventSegmentationGlmClient.name)
-  private readonly bumpMaxTokensTo = 2000
+  private readonly defaultMaxTokens = 2000
+  private readonly defaultBumpMaxTokensTo = 4096
 
   constructor(
     private readonly configService: ConfigService,
@@ -69,16 +70,21 @@ export class TranscriptEventSegmentationGlmClient {
 
   private readModel(): string {
     const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL || '').trim()
-    if (raw) return raw
-    const fallback = (process.env.GLM_TURN_SEGMENT_MODEL || '').trim()
-    return fallback || 'glm-4.6v-flash'
+    return raw || 'glm-4.6v-flash'
   }
 
   private readMaxTokens(): number {
     const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS || '').trim()
     const value = Number(raw)
     if (Number.isFinite(value) && value >= 256) return Math.floor(value)
-    return this.bumpMaxTokensTo
+    return this.defaultMaxTokens
+  }
+
+  private readBumpMaxTokensTo(): number {
+    const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS || '').trim()
+    const value = Number(raw)
+    if (Number.isFinite(value) && value >= 256) return Math.floor(value)
+    return this.defaultBumpMaxTokensTo
   }
 
   private shouldUseJsonMode(): boolean {
@@ -105,26 +111,41 @@ export class TranscriptEventSegmentationGlmClient {
     )
 
     const extracted = this.extractStructuredTextFromGlmResponse(response.data)
-    if (extracted.text && extracted.finishReason !== 'length') {
-      return extracted.text
+
+    if (extracted.text) {
+      const normalizedJson = this.extractJsonObjectIfValid(extracted.text)
+      if (normalizedJson) {
+        return normalizedJson
+      }
+      if (extracted.finishReason !== 'length') {
+        return extracted.text
+      }
     }
 
     const currentMaxTokens = this.readRequestMaxTokens(input.requestBody)
+    const bumpMaxTokensTo = this.readBumpMaxTokensTo()
     if (
       extracted.finishReason === 'length' &&
       currentMaxTokens != null &&
-      currentMaxTokens < this.bumpMaxTokensTo
+      currentMaxTokens < bumpMaxTokensTo
     ) {
       this.logger.warn(
-        `GLM completion truncated (finish_reason=length), retrying with max_tokens=${this.bumpMaxTokensTo}`
+        `GLM completion truncated (finish_reason=length), retrying with max_tokens=${bumpMaxTokensTo}`
       )
-      const bumpedBody = { ...input.requestBody, max_tokens: this.bumpMaxTokensTo }
+      const bumpedBody = { ...input.requestBody, max_tokens: bumpMaxTokensTo, temperature: 0 }
       const bumpedResponse = await firstValueFrom(
         this.httpService.post(input.endpoint, bumpedBody, { headers: input.headers })
       )
       const bumpedExtracted = this.extractStructuredTextFromGlmResponse(bumpedResponse.data)
-      if (bumpedExtracted.text && bumpedExtracted.finishReason !== 'length') {
-        return bumpedExtracted.text
+
+      if (bumpedExtracted.text) {
+        const normalizedJson = this.extractJsonObjectIfValid(bumpedExtracted.text)
+        if (normalizedJson) {
+          return normalizedJson
+        }
+        if (bumpedExtracted.finishReason !== 'length') {
+          return bumpedExtracted.text
+        }
       }
       throw this.buildInvalidResponseError(bumpedResponse, bumpedExtracted.finishReason)
     }

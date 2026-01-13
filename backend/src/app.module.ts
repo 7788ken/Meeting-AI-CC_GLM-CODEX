@@ -10,8 +10,6 @@ import { SpeechModule } from './modules/speech/speech.module'
 import { AnalysisModule } from './modules/analysis/analysis.module'
 import { TranscriptModule } from './modules/transcript/transcript.module'
 import { TranscriptStreamModule } from './modules/transcript-stream/transcript-stream.module'
-import { TurnSegmentationModule } from './modules/turn-segmentation/turn-segmentation.module'
-import { TranscriptAnalysisModule } from './modules/transcript-analysis/transcript-analysis.module'
 import { TranscriptEventSegmentationModule } from './modules/transcript-event-segmentation/transcript-event-segmentation.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { DebugErrorModule } from './modules/debug-error/debug-error.module'
@@ -35,8 +33,6 @@ import { AppService } from './app.service'
     AnalysisModule,
     TranscriptModule,
     TranscriptStreamModule,
-    TurnSegmentationModule,
-    TranscriptAnalysisModule,
     TranscriptEventSegmentationModule,
     DebugErrorModule,
   ],

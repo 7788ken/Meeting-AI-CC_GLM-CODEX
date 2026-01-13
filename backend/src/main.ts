@@ -2,7 +2,6 @@ import { NestFactory } from '@nestjs/core'
 import { ValidationPipe, Logger } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { ConfigService } from '@nestjs/config'
-import { getModelToken } from '@nestjs/mongoose'
 import { AppModule } from './app.module'
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter'
 import * as http from 'http'
@@ -12,21 +11,11 @@ import { SmartAudioBufferService } from './modules/transcript/smart-audio-buffer
 import { GlmAsrClient } from './modules/transcript/glm-asr.client'
 import type { AsrConfigDto } from './modules/transcript/dto/transcript.dto'
 import { TranscriptStreamService } from './modules/transcript-stream/transcript-stream.service'
-import { TurnSegmentationService } from './modules/turn-segmentation/turn-segmentation.service'
 import { DebugErrorService } from './modules/debug-error/debug-error.service'
-import {
-  TranscriptAnalysisService,
-  TranscriptAnalysisUpsertData,
-} from './modules/transcript-analysis/transcript-analysis.service'
-import { TranscriptAnalysisGlmClient } from './modules/transcript-analysis/transcript-analysis.glm-client'
-import { TranscriptAnalysisChunk } from './modules/transcript-analysis/schemas/transcript-analysis-chunk.schema'
-import { TranscriptAnalysisState } from './modules/transcript-analysis/schemas/transcript-analysis-state.schema'
 import {
   TranscriptEventSegmentationService,
   TranscriptEventSegmentDTO,
 } from './modules/transcript-event-segmentation/transcript-event-segmentation.service'
-import { TranscriptEventSegmentationGlmClient } from './modules/transcript-event-segmentation/transcript-event-segmentation.glm-client'
-import { TranscriptEventSegment } from './modules/transcript-event-segmentation/schemas/transcript-event-segment.schema'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { SpeakerService } from './modules/speech/speaker.service'
@@ -117,47 +106,22 @@ async function bootstrap() {
   const speechService = app.get(SpeechService)
   const speakerService = app.get(SpeakerService)
   const transcriptStreamService = app.get(TranscriptStreamService)
-  const turnSegmentationService = app.get(TurnSegmentationService)
   const debugErrorService = app.get(DebugErrorService)
-  const transcriptAnalysisChunkModel = app.get(getModelToken(TranscriptAnalysisChunk.name))
-  const transcriptAnalysisStateModel = app.get(getModelToken(TranscriptAnalysisState.name))
-  const transcriptAnalysisGlmClient = app.get(TranscriptAnalysisGlmClient)
-  const transcriptAnalysisService = new TranscriptAnalysisService(
-    transcriptAnalysisChunkModel,
-    transcriptAnalysisStateModel,
-    transcriptStreamService,
-    transcriptAnalysisGlmClient,
-    debugErrorService,
-    configService,
-    (data: TranscriptAnalysisUpsertData) => {
-      broadcastToSession(data.sessionId, {
-        type: 'transcript_analysis_upsert',
-        data,
-      })
-    }
-  )
-  const transcriptEventSegmentModel = app.get(getModelToken(TranscriptEventSegment.name))
-  const transcriptEventSegmentationGlmClient = app.get(TranscriptEventSegmentationGlmClient)
-  const transcriptEventSegmentationService = new TranscriptEventSegmentationService(
-    transcriptEventSegmentModel,
-    transcriptStreamService,
-    transcriptEventSegmentationGlmClient,
-    debugErrorService,
-    configService,
-    (data: TranscriptEventSegmentDTO) => {
-      broadcastToSession(data.sessionId, {
-        type: 'transcript_event_segment_upsert',
-        data,
-      })
-    }
-  )
+  const transcriptEventSegmentationService = app.get(TranscriptEventSegmentationService)
+  transcriptEventSegmentationService.setOnSegmentUpdate((data: TranscriptEventSegmentDTO) => {
+    broadcastToSession(data.sessionId, {
+      type: 'transcript_event_segment_upsert',
+      data,
+    })
+  })
+  transcriptEventSegmentationService.setOnSegmentReset((sessionId: string) => {
+    broadcastToSession(sessionId, {
+      type: 'transcript_event_segment_reset',
+      data: { sessionId },
+    })
+  })
 
-  const transcriptPipeline = process.env.TRANSCRIPT_PIPELINE || 'raw_llm'
   const rawEventStreamEnabled = true // 默认启用原文事件流
-  const turnSegmentationEnabled =
-    rawEventStreamEnabled &&
-    ((process.env.TRANSCRIPT_SEGMENT_ENABLED || '').trim().toLowerCase() === '1' ||
-      (process.env.TRANSCRIPT_SEGMENT_ENABLED || '').trim().toLowerCase() === 'true')
 
   // WebSocket Logger
   const wsLogger = new Logger('WebSocket')
@@ -202,19 +166,6 @@ async function bootstrap() {
   const turnDetectorByClientId = new Map<string, TurnDetector>()
   const speakerClusterBySession = new Map<string, AnonymousSpeakerCluster>()
   const lastSpeakerIdBySession = new Map<string, string>()
-
-  // raw_llm：分段调度（按 session 去抖 + 强触发）
-  const turnSegmentationTimerBySession = new Map<string, ReturnType<typeof setTimeout>>()
-  const turnSegmentationInFlight = new Set<string>()
-  const turnSegmentationPending = new Set<string>()
-  const turnSegmentationIntervalMs = readNumberFromEnv(
-    'TRANSCRIPT_SEGMENT_INTERVAL_MS',
-    3000,
-    value => value >= 0 && value <= 10 * 60 * 1000
-  )
-  const triggerSegmentationOnEndTurn = process.env.TRANSCRIPT_SEGMENT_TRIGGER_ON_END_TURN !== '0'
-  const triggerSegmentationOnStopTranscribe =
-    process.env.TRANSCRIPT_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE !== '0'
 
   const transcriptEventSegmentationTimerBySession = new Map<string, ReturnType<typeof setTimeout>>()
   const transcriptEventSegmentationInFlight = new Set<string>()
@@ -385,17 +336,13 @@ async function bootstrap() {
                       await finalizeActiveSpeechForClient(clientId)
                     }
 
-                    if (triggerSegmentationOnStopTranscribe) {
-                      triggerTurnSegmentationNow(sessionId, 'stop_transcribe')
-                    }
-                    if (triggerEventSegmentationOnStopTranscribe) {
-                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
-                    }
-                    triggerTranscriptAnalysisNow(sessionId)
-                  } else {
-                    smartAudioBufferService.flush(clientId)
-                    await finalizeActiveSpeechForClient(clientId)
-                  }
+	                    if (triggerEventSegmentationOnStopTranscribe) {
+	                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
+	                    }
+	                  } else {
+	                    smartAudioBufferService.flush(clientId)
+	                    await finalizeActiveSpeechForClient(clientId)
+	                  }
                 } else if (turnModeEnabled) {
                   if (sessionId) {
                     await finalizeTurnForClient(sessionId, clientId)
@@ -425,17 +372,13 @@ async function bootstrap() {
                       asrTimestampMs: Date.now(),
                     })
 
-                    if (triggerSegmentationOnStopTranscribe) {
-                      triggerTurnSegmentationNow(sessionId, 'stop_transcribe')
-                    }
-                    if (triggerEventSegmentationOnStopTranscribe) {
-                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
-                    }
-                    triggerTranscriptAnalysisNow(sessionId)
-                  } else {
-                    // 没有返回转写结果，也要关闭当前活跃段落，避免前端一直认为该段落未结束
-                    await finalizeActiveSpeechForClient(clientId)
-                  }
+	                    if (triggerEventSegmentationOnStopTranscribe) {
+	                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
+	                    }
+	                  } else {
+	                    // 没有返回转写结果，也要关闭当前活跃段落，避免前端一直认为该段落未结束
+	                    await finalizeActiveSpeechForClient(clientId)
+	                  }
                 } else {
                   await transcriptService.endAudio(clientId)
                 }
@@ -503,17 +446,13 @@ async function bootstrap() {
                   await finalizeActiveSpeechForClient(clientId)
                 }
               }
-              if (triggerSegmentationOnEndTurn) {
-                triggerTurnSegmentationNow(sessionId, 'end_turn')
-              }
-              if (triggerEventSegmentationOnEndTurn) {
-                triggerTranscriptEventSegmentationNow(sessionId, 'end_turn')
-              }
-              triggerTranscriptAnalysisNow(sessionId)
-              ws.send(
-                JSON.stringify({
-                  type: 'status',
-                  data: { status: 'turn_finalized' },
+	              if (triggerEventSegmentationOnEndTurn) {
+	                triggerTranscriptEventSegmentationNow(sessionId, 'end_turn')
+	              }
+	              ws.send(
+	                JSON.stringify({
+	                  type: 'status',
+	                  data: { status: 'turn_finalized' },
                 })
               )
             }
@@ -1351,11 +1290,9 @@ async function bootstrap() {
       }
 
       if (shouldMarkRollback) {
-        await transcriptAnalysisService.markRollback(sessionId, result.event.eventIndex)
+        await transcriptEventSegmentationService.markRollback(sessionId, result.event.eventIndex)
       }
 
-      scheduleTurnSegmentation(sessionId)
-      transcriptAnalysisService.schedule(sessionId)
       scheduleTranscriptEventSegmentation(sessionId)
     } catch (error) {
       wsLogger.warn(
@@ -1366,28 +1303,9 @@ async function bootstrap() {
     }
   }
 
-  function scheduleTurnSegmentation(sessionId: string): void {
-    if (!turnSegmentationEnabled) return
-    if (!turnSegmentationIntervalMs || turnSegmentationIntervalMs <= 0) {
-      void runTurnSegmentation(sessionId, { force: false, reason: 'interval_disabled' })
-      return
-    }
-
-    const existing = turnSegmentationTimerBySession.get(sessionId)
-    if (existing) {
-      clearTimeout(existing)
-    }
-
-    const timer = setTimeout(() => {
-      turnSegmentationTimerBySession.delete(sessionId)
-      void runTurnSegmentation(sessionId, { force: false, reason: 'debounce' })
-    }, turnSegmentationIntervalMs)
-
-    turnSegmentationTimerBySession.set(sessionId, timer)
-  }
-
   function scheduleTranscriptEventSegmentation(sessionId: string): void {
     if (!rawEventStreamEnabled) return
+    if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) return
     if (!transcriptEventSegmentationIntervalMs || transcriptEventSegmentationIntervalMs <= 0) {
       void runTranscriptEventSegmentation(sessionId, { force: false, reason: 'interval_disabled' })
       return
@@ -1406,20 +1324,9 @@ async function bootstrap() {
     transcriptEventSegmentationTimerBySession.set(sessionId, timer)
   }
 
-  function triggerTurnSegmentationNow(sessionId: string, reason: string): void {
-    if (!turnSegmentationEnabled) return
-
-    const existing = turnSegmentationTimerBySession.get(sessionId)
-    if (existing) {
-      clearTimeout(existing)
-      turnSegmentationTimerBySession.delete(sessionId)
-    }
-
-    void runTurnSegmentation(sessionId, { force: true, reason })
-  }
-
   function triggerTranscriptEventSegmentationNow(sessionId: string, reason: string): void {
     if (!rawEventStreamEnabled) return
+    if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) return
 
     const existing = transcriptEventSegmentationTimerBySession.get(sessionId)
     if (existing) {
@@ -1430,76 +1337,19 @@ async function bootstrap() {
     void runTranscriptEventSegmentation(sessionId, { force: true, reason })
   }
 
-  function triggerTranscriptAnalysisNow(sessionId: string): void {
-    transcriptAnalysisService.schedule(sessionId, { force: true })
-  }
-
   function normalizeTranscriptContent(value: string): string | null {
     const trimmed = typeof value === 'string' ? value.trim() : ''
     if (!trimmed || trimmed === '#') return null
     return trimmed
   }
 
-  async function runTurnSegmentation(
-    sessionId: string,
-    input: { force: boolean; reason: string }
-  ): Promise<void> {
-    if (turnSegmentationInFlight.has(sessionId)) {
-      turnSegmentationPending.add(sessionId)
-      return
-    }
-
-    turnSegmentationInFlight.add(sessionId)
-    try {
-      const state = await transcriptStreamService.getState({ sessionId })
-      const snapshot = await turnSegmentationService.getSnapshot(sessionId)
-
-      if (!input.force) {
-        if (snapshot.status === 'processing' && snapshot.targetRevision === state.revision) {
-          return
-        }
-        if (snapshot.targetRevision >= state.revision) {
-          return
-        }
-      }
-
-      const processing = await turnSegmentationService.markProcessing({
-        sessionId,
-        targetRevision: state.revision,
-      })
-
-      broadcastToSession(sessionId, {
-        type: 'turn_segments_upsert',
-        data: processing,
-      })
-
-      const result = await turnSegmentationService.segmentAndPersist({
-        sessionId,
-        targetRevision: state.revision,
-      })
-
-      broadcastToSession(sessionId, {
-        type: 'turn_segments_upsert',
-        data: result,
-      })
-    } catch (error) {
-      wsLogger.warn(
-        `Turn segmentation task failed, sessionId=${sessionId}, reason=${input.reason}: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      )
-    } finally {
-      turnSegmentationInFlight.delete(sessionId)
-      if (turnSegmentationPending.delete(sessionId)) {
-        void runTurnSegmentation(sessionId, { force: false, reason: 'pending' })
-      }
-    }
-  }
-
   async function runTranscriptEventSegmentation(
     sessionId: string,
     input: { force: boolean; reason: string }
   ): Promise<void> {
+    if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) {
+      return
+    }
     if (transcriptEventSegmentationInFlight.has(sessionId)) {
       transcriptEventSegmentationPending.add(sessionId)
       return
