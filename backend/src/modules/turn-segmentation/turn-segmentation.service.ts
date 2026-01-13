@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
 import { ConfigService } from '@nestjs/config'
-import { TurnSegments, TurnSegmentsDocument, TurnSegmentRange } from './schemas/turn-segments.schema'
+import {
+  TurnSegments,
+  TurnSegmentsDocument,
+  TurnSegmentRange,
+} from './schemas/turn-segments.schema'
 import { TranscriptStreamService } from '../transcript-stream/transcript-stream.service'
 import { TurnSegmentationGlmClient } from './turn-segmentation.glm-client'
 import { buildTurnSegmentationPrompt } from './turn-segmentation.prompt'
@@ -49,7 +53,10 @@ export class TurnSegmentationService {
     return this.toSnapshotDTO(doc)
   }
 
-  async markProcessing(input: { sessionId: string; targetRevision: number }): Promise<TurnSegmentsUpsertDTO> {
+  async markProcessing(input: {
+    sessionId: string
+    targetRevision: number
+  }): Promise<TurnSegmentsUpsertDTO> {
     const targetRevision = Math.max(0, Math.floor(input.targetRevision))
 
     const doc = await this.turnSegmentsModel
@@ -110,7 +117,10 @@ export class TurnSegmentationService {
         )
         .exec()
 
-      await this.transcriptStreamService.updateLastSegmentedRevision({ sessionId, revision: targetRevision })
+      await this.transcriptStreamService.updateLastSegmentedRevision({
+        sessionId,
+        revision: targetRevision,
+      })
 
       return {
         sessionId,
@@ -192,7 +202,10 @@ export class TurnSegmentationService {
       )
       .exec()
 
-    await this.transcriptStreamService.updateLastSegmentedRevision({ sessionId, revision: targetRevision })
+    await this.transcriptStreamService.updateLastSegmentedRevision({
+      sessionId,
+      revision: targetRevision,
+    })
 
     return {
       sessionId,
@@ -206,7 +219,15 @@ export class TurnSegmentationService {
     const doc = await this.turnSegmentsModel
       .findOneAndUpdate(
         { sessionId },
-        { $setOnInsert: { sessionId, revision: 0, targetRevision: 0, status: 'completed', segments: [] } },
+        {
+          $setOnInsert: {
+            sessionId,
+            revision: 0,
+            targetRevision: 0,
+            status: 'completed',
+            segments: [],
+          },
+        },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       )
       .exec()
@@ -227,7 +248,9 @@ export class TurnSegmentationService {
   }
 
   private readWindowSize(): number {
-    const raw = this.configService.get<string>('TRANSCRIPT_SEGMENT_WINDOW_EVENTS') ?? process.env.TRANSCRIPT_SEGMENT_WINDOW_EVENTS
+    const raw =
+      this.configService.get<string>('TRANSCRIPT_SEGMENT_WINDOW_EVENTS') ??
+      process.env.TRANSCRIPT_SEGMENT_WINDOW_EVENTS
     const value = Number(raw)
     if (!Number.isFinite(value)) return 120
     return Math.max(20, Math.min(2000, Math.floor(value)))
@@ -239,7 +262,10 @@ export class TurnSegmentationService {
     return 'glm'
   }
 
-  private alignStartToExistingBoundary(segments: TurnSegmentRange[], startEventIndex: number): number {
+  private alignStartToExistingBoundary(
+    segments: TurnSegmentRange[],
+    startEventIndex: number
+  ): number {
     for (const seg of segments) {
       if (seg.startEventIndex <= startEventIndex && startEventIndex <= seg.endEventIndex) {
         return seg.startEventIndex

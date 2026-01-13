@@ -33,17 +33,21 @@ export function parseTranscriptAnalysisJson(text: string): ParsedTranscriptAnaly
 
 export function validateAndNormalizeDialogues(input: {
   events: TranscriptEventDTO[]
-  startEventIndex: number
-  endEventIndex: number
   dialogues: ParsedTranscriptAnalysis['dialogues']
+  targetEventIndex: number
 }): TranscriptDialogue[] {
   const eventsByIndex = new Map<number, TranscriptEventDTO>()
   for (const event of input.events) {
     eventsByIndex.set(event.eventIndex, event)
   }
 
+  if (!eventsByIndex.has(input.targetEventIndex)) {
+    throw new Error(`目标事件不存在：eventIndex=${input.targetEventIndex}`)
+  }
+
   const normalized: TranscriptDialogue[] = []
-  let expectedStart = input.startEventIndex
+  let previousEnd: number | null = null
+  let containsTarget = false
 
   for (const item of input.dialogues) {
     if (!item || typeof item !== 'object') {
@@ -59,11 +63,8 @@ export function validateAndNormalizeDialogues(input: {
     const start = Math.max(0, Math.floor(segStart))
     const end = Math.max(start, Math.floor(segEnd))
 
-    if (start !== expectedStart) {
-      throw new Error(`dialogue 起点不连续：${start}（期望 ${expectedStart}）`)
-    }
-    if (end > input.endEventIndex) {
-      throw new Error(`dialogue 覆盖到不存在的事件：endEventIndex=${end}`)
+    if (previousEnd != null && start <= previousEnd) {
+      throw new Error(`dialogue 范围重叠或乱序：startEventIndex=${start}`)
     }
 
     const first = eventsByIndex.get(start)
@@ -81,6 +82,10 @@ export function validateAndNormalizeDialogues(input: {
       }
     }
 
+    if (input.targetEventIndex >= start && input.targetEventIndex <= end) {
+      containsTarget = true
+    }
+
     normalized.push({
       speakerId: first.speakerId,
       speakerName: first.speakerName,
@@ -89,11 +94,14 @@ export function validateAndNormalizeDialogues(input: {
       content: buildContentByRange(eventsByIndex, start, end),
     })
 
-    expectedStart = end + 1
+    previousEnd = end
   }
 
-  if (expectedStart !== input.endEventIndex + 1) {
-    throw new Error('dialogues 未覆盖完整范围')
+  if (!normalized.length) {
+    throw new Error('dialogues 为空')
+  }
+  if (!containsTarget) {
+    throw new Error(`dialogues 未覆盖目标事件：targetEventIndex=${input.targetEventIndex}`)
   }
 
   return normalized

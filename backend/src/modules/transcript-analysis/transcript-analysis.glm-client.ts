@@ -90,7 +90,10 @@ export class TranscriptAnalysisGlmClient {
     return raw !== '0' && raw !== 'false'
   }
 
-  private withJsonMode(requestBody: Record<string, unknown>, enabled: boolean): Record<string, unknown> {
+  private withJsonMode(
+    requestBody: Record<string, unknown>,
+    enabled: boolean
+  ): Record<string, unknown> {
     if (!enabled) return requestBody
     return { ...requestBody, response_format: { type: 'json_object' } }
   }

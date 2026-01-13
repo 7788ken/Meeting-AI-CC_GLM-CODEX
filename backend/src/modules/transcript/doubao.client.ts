@@ -48,6 +48,7 @@ class DoubaoWsClient {
   private sentAudioBytes = 0
   private closing = false
   private finalAudioSent = false
+  private lastResponse: DoubaoDecodedMessage | null = null
 
   constructor(private readonly options: DoubaoClientOptions) {}
 
@@ -75,7 +76,8 @@ class DoubaoWsClient {
       flags,
       // 参考 Java demo：音频包同样走 gzip（对端若不兼容可用 TRANSCRIPT_AUDIO_GZIP=false 关闭）
       serialization: DoubaoSerialization.Json,
-      compression: this.options.audioGzip === false ? DoubaoCompression.None : DoubaoCompression.Gzip,
+      compression:
+        this.options.audioGzip === false ? DoubaoCompression.None : DoubaoCompression.Gzip,
       sequence,
       payload: audio,
     })
@@ -133,6 +135,14 @@ class DoubaoWsClient {
       ws.once('close', () => resolve())
       ws.close(1000, 'normal')
     })
+  }
+
+  /**
+   * 获取最后收到的响应（用于 finalizeAudio 时没有新响应的情况）
+   * @returns 最后收到的响应，如果没有则返回 null
+   */
+  getLastResponse(): DoubaoDecodedMessage | null {
+    return this.lastResponse
   }
 
   private async ensureReady(): Promise<void> {
@@ -269,7 +279,8 @@ class DoubaoWsClient {
       flags: DoubaoFlag.Seq,
       serialization: DoubaoSerialization.Json,
       // 豆包/火山流式 ASR 的 Config 通常使用 gzip 压缩 JSON（服务端也可能在不匹配时直接异常断连 1006）
-      compression: this.options.configGzip === false ? DoubaoCompression.None : DoubaoCompression.Gzip,
+      compression:
+        this.options.configGzip === false ? DoubaoCompression.None : DoubaoCompression.Gzip,
       sequence: seq,
       payload,
     })
@@ -320,6 +331,9 @@ class DoubaoWsClient {
   }
 
   private enqueueResponse(message: DoubaoDecodedMessage) {
+    // 保存最后收到的响应，用于 finalizeAudio 时没有新响应的情况
+    this.lastResponse = message
+
     const waiter = this.responseWaiters.shift()
     if (waiter) {
       clearTimeout(waiter.timeoutId)
@@ -378,7 +392,8 @@ export class DoubaoClientManager {
     const enablePuncRaw = this.configService.get<string>('TRANSCRIPT_ENABLE_PUNC')
     const configGzipRaw = this.configService.get<string>('TRANSCRIPT_CONFIG_GZIP')
     const audioGzipRaw = this.configService.get<string>('TRANSCRIPT_AUDIO_GZIP')
-    const enableItn = enableItnRaw == null ? undefined : enableItnRaw === '1' || enableItnRaw === 'true'
+    const enableItn =
+      enableItnRaw == null ? undefined : enableItnRaw === '1' || enableItnRaw === 'true'
     const enablePunc =
       enablePuncRaw == null ? undefined : enablePuncRaw === '1' || enablePuncRaw === 'true'
     const configGzip =

@@ -40,4 +40,3 @@ export const TranscriptEventSchema = SchemaFactory.createForClass(TranscriptEven
 
 TranscriptEventSchema.index({ sessionId: 1, eventIndex: 1 }, { unique: true })
 TranscriptEventSchema.index({ sessionId: 1, segmentKey: 1 })
-

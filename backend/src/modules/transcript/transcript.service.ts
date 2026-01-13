@@ -119,6 +119,10 @@ export class TranscriptService {
 
   /**
    * 结束音频并尝试拉取最终转写结果（原生 WebSocket 使用）。
+   *
+   * 注意：豆包 ASR 在流式处理过程中持续返回结果，最后一条就是"最终结果"。
+   * 发送结束信号后，豆包不会返回额外的确认响应。
+   * 因此这里尝试获取新响应，如果没有则使用最后收到的响应。
    */
   async finalizeAudio(
     clientId: string,
@@ -131,14 +135,37 @@ export class TranscriptService {
     }
 
     try {
+      // 先保存可能存在的最后响应（在发送结束信号前）
+      const lastResponseBeforeEnd = (client as any).getLastResponse
+        ? (client as any).getLastResponse()
+        : null
+
       await client.sendAudio(Buffer.alloc(0), true)
 
+      // 尝试获取结束后的响应（有些 ASR 可能会返回最终确认）
       const response = await client.nextResponse(this.getResponseTimeoutMs())
-      if (!response) {
+
+      // 使用新响应，如果没有则使用之前的最后响应
+      const finalResponse = response ?? lastResponseBeforeEnd
+
+      if (!finalResponse) {
+        this.logger.warn(
+          `finalizeAudio: no response available (before or after end signal), clientId=${clientId}`
+        )
         return null
       }
 
-      return this.buildTranscriptResult(response, sessionId, clientId)
+      const result = this.buildTranscriptResult(finalResponse, sessionId, clientId)
+
+      // 如果是使用之前的响应，强制设置 isFinal 为 true
+      if (result && !response) {
+        result.isFinal = true
+        this.logger.debug(
+          `finalizeAudio: using last response with isFinal=true, clientId=${clientId}`
+        )
+      }
+
+      return result
     } catch (error) {
       this.logger.error(
         `Doubao endAudio failed, clientId=${clientId}`,
@@ -201,7 +228,23 @@ export class TranscriptService {
     }
 
     const payload = message.payload as Record<string, unknown>
-    const utteranceSegment = this.extractUtteranceSegment(payload)
+
+    // 调试日志：输出豆包原始数据结构
+    if (this.shouldLogUtterances()) {
+      const result = (payload.result ?? payload.data ?? payload) as Record<string, unknown>
+      this.logger.debug(
+        [
+          'Doubao payload structure:',
+          `message.sequence=${message.sequence}`,
+          `result.is_final=${String(result?.is_final)}`,
+          `result.isFinal=${String(result?.isFinal)}`,
+          `result.final=${String(result?.final)}`,
+          `result.utterances=${Array.isArray(result?.utterances) ? result.utterances.length : 'N/A'}`,
+        ].join(' ')
+      )
+    }
+
+    const utteranceSegment = this.extractUtteranceSegment(payload, message)
     const content = utteranceSegment?.content ?? this.extractText(payload)
     if (!content) return null
 
@@ -220,10 +263,18 @@ export class TranscriptService {
           `textLen=${utteranceSegment.content.length}`,
           `preview=${utteranceSegment.content.slice(0, 20)}`,
           recordKeys ? `keys=${recordKeys}` : null,
+          `extracted isFinal=${String(utteranceSegment.isFinal)}`,
         ]
           .filter(Boolean)
           .join(' ')
       )
+    }
+
+    const extractedIsFinal = utteranceSegment?.isFinal ?? this.extractIsFinal(payload, message)
+
+    // 额外日志：记录最终提取的 isFinal 值
+    if (this.shouldLogUtterances()) {
+      this.logger.debug(`Final isFinal value: ${String(extractedIsFinal)}`)
     }
 
     return {
@@ -233,7 +284,7 @@ export class TranscriptService {
       speakerId,
       speakerName,
       content,
-      isFinal: utteranceSegment?.isFinal ?? this.extractIsFinal(payload),
+      isFinal: extractedIsFinal,
       confidence: utteranceSegment?.confidence ?? this.extractConfidence(payload),
     }
   }
@@ -243,7 +294,8 @@ export class TranscriptService {
    * 这里优先提取“最后一条 utterance”作为当前段落内容，并给出 segmentKey 用于后端切段。
    */
   private extractUtteranceSegment(
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
+    message?: DoubaoDecodedMessage
   ): {
     content: string
     record: Record<string, unknown>
@@ -275,7 +327,7 @@ export class TranscriptService {
     }
 
     if (utterances.length === 1 && utteranceKey.source === 'index') {
-      // utterances 只返回单条且缺少可稳定识别的 key 时，不切换为“按 utterance 返回”，避免覆盖历史内容
+      // utterances 只返回单条且缺少可稳定识别的 key 时，不切换为"按 utterance 返回"，避免覆盖历史内容
       return null
     }
 
@@ -284,13 +336,15 @@ export class TranscriptService {
       record: last,
       utterancesLength: utterances.length,
       segmentKey: utteranceKey.key,
-      isFinal: this.extractIsFinalFromRecord(last),
+      isFinal: this.extractIsFinalFromRecord(last, message, result),
       confidence: this.extractConfidenceFromRecord(last),
     }
   }
 
   private shouldLogUtterances(): boolean {
-    return process.env.TRANSCRIPT_DEBUG_LOG_UTTERANCES === '1' && process.env.NODE_ENV !== 'production'
+    return (
+      process.env.TRANSCRIPT_DEBUG_LOG_UTTERANCES === '1' && process.env.NODE_ENV !== 'production'
+    )
   }
 
   private findLastNonEmptyUtterance(
@@ -365,10 +419,74 @@ export class TranscriptService {
     return ''
   }
 
-  private extractIsFinalFromRecord(record: Record<string, unknown>): boolean | undefined {
-    if (typeof record.is_final === 'boolean') return record.is_final
-    if (typeof record.isFinal === 'boolean') return record.isFinal
-    if (typeof record.final === 'boolean') return record.final
+  private readBooleanValue(value: unknown): boolean | undefined {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'number') {
+      if (value === 1) return true
+      if (value === 0) return false
+      return undefined
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase()
+      if (normalized === 'true' || normalized === '1') return true
+      if (normalized === 'false' || normalized === '0') return false
+    }
+    return undefined
+  }
+
+  private readNumberValue(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return undefined
+      const parsed = Number(trimmed)
+      return Number.isFinite(parsed) ? parsed : undefined
+    }
+    return undefined
+  }
+
+  private pickBooleanValue(values: unknown[]): boolean | undefined {
+    for (const value of values) {
+      const parsed = this.readBooleanValue(value)
+      if (parsed != null) return parsed
+    }
+    return undefined
+  }
+
+  private extractIsFinalFromRecord(
+    record: Record<string, unknown>,
+    message?: DoubaoDecodedMessage,
+    resultLevel?: Record<string, unknown>
+  ): boolean | undefined {
+    const direct = this.pickBooleanValue([record.is_final, record.isFinal, record.final])
+    if (direct != null) return direct
+
+    // 如果 record 中没有 is_final，尝试从 result 级别获取
+    // 这是因为豆包 ASR 的 utterances 模式下，is_final 可能只在 result 级别存在
+    if (resultLevel) {
+      const resultDirect = this.pickBooleanValue([
+        resultLevel.is_final,
+        resultLevel.isFinal,
+        resultLevel.final,
+      ])
+      if (resultDirect != null) return resultDirect
+    }
+
+    const sequenceCandidates = [
+      (record as any).sequence,
+      (record as any).seq,
+      (record as any).payload_sequence,
+      (record as any).payloadSequence,
+      message?.sequence,
+    ]
+
+    for (const candidate of sequenceCandidates) {
+      const sequence = this.readNumberValue(candidate)
+      if (sequence != null && sequence < 0) {
+        return true
+      }
+    }
+
     return undefined
   }
 
@@ -440,9 +558,38 @@ export class TranscriptService {
     return null
   }
 
-  private extractIsFinal(payload: Record<string, unknown>): boolean {
+  private extractIsFinal(payload: Record<string, unknown>, message?: DoubaoDecodedMessage): boolean {
     const result = (payload.result ?? payload.data ?? payload) as Record<string, unknown>
-    return Boolean(result?.is_final ?? result?.isFinal ?? payload?.is_final ?? payload?.isFinal)
+    const direct = this.pickBooleanValue([
+      result?.is_final,
+      result?.isFinal,
+      result?.final,
+      payload?.is_final,
+      payload?.isFinal,
+      payload?.final,
+    ])
+    if (direct != null) return direct
+
+    const sequenceCandidates = [
+      (result as any).sequence,
+      (result as any).seq,
+      (result as any).payload_sequence,
+      (result as any).payloadSequence,
+      (payload as any).sequence,
+      (payload as any).seq,
+      (payload as any).payload_sequence,
+      (payload as any).payloadSequence,
+      message?.sequence,
+    ]
+
+    for (const candidate of sequenceCandidates) {
+      const sequence = this.readNumberValue(candidate)
+      if (sequence != null) {
+        return sequence < 0
+      }
+    }
+
+    return false
   }
 
   private extractConfidence(payload: Record<string, unknown>): number {

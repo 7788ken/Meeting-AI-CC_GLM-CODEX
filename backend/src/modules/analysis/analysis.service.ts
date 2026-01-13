@@ -175,7 +175,12 @@ export class AnalysisService {
       return model as AIModelType
     }
     // 兼容旧的模型名称
-    if (model === 'glm-4.6v-flash' || model === 'glm-4' || model === 'glm-4-flash' || model === AIModel.GLM) {
+    if (
+      model === 'glm-4.6v-flash' ||
+      model === 'glm-4' ||
+      model === 'glm-4-flash' ||
+      model === AIModel.GLM
+    ) {
       return AIModelType.GLM
     }
     return AIModelType.GLM

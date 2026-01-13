@@ -18,4 +18,3 @@ import { TurnSegments, TurnSegmentsSchema } from './schemas/turn-segments.schema
   exports: [TurnSegmentationService],
 })
 export class TurnSegmentationModule {}
-

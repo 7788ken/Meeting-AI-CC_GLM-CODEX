@@ -16,4 +16,3 @@ export class TurnSegmentationController {
     return this.turnSegmentationService.getSnapshot(sessionId)
   }
 }
-

@@ -3,6 +3,7 @@ import { HttpModule } from '@nestjs/axios'
 import { MongooseModule } from '@nestjs/mongoose'
 import { TranscriptStreamModule } from '../transcript-stream/transcript-stream.module'
 import { TranscriptAnalysisGlmClient } from './transcript-analysis.glm-client'
+import { TranscriptAnalysisController } from './transcript-analysis.controller'
 import { TranscriptAnalysisService } from './transcript-analysis.service'
 import {
   TranscriptAnalysisChunk,
@@ -22,6 +23,7 @@ import {
       { name: TranscriptAnalysisState.name, schema: TranscriptAnalysisStateSchema },
     ]),
   ],
+  controllers: [TranscriptAnalysisController],
   providers: [TranscriptAnalysisService, TranscriptAnalysisGlmClient],
   exports: [TranscriptAnalysisService],
 })

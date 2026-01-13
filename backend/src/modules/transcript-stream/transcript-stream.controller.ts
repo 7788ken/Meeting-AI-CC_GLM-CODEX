@@ -20,4 +20,3 @@ export class TranscriptStreamController {
     return this.transcriptStreamService.getSnapshot({ sessionId, limit: parsedLimit })
   }
 }
-

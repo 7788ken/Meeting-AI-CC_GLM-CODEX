@@ -492,6 +492,50 @@ describe('TranscriptService', () => {
       expect(result?.isFinal).toBe(true)
     })
 
+    it('should extract numeric is_final from result', async () => {
+      const mockResponse: DoubaoDecodedMessage = {
+        messageType: 0x09,
+        flags: 0x00,
+        serialization: 0x01,
+        compression: 0x00,
+        payload: {
+          result: {
+            text: 'Test',
+            is_final: 1,
+          },
+        },
+        rawPayload: Buffer.from('{}'),
+      }
+
+      mockClient.nextResponse.mockResolvedValue(mockResponse)
+
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
+
+      expect(result?.isFinal).toBe(true)
+    })
+
+    it('should derive isFinal from negative payload sequence', async () => {
+      const mockResponse: DoubaoDecodedMessage = {
+        messageType: 0x09,
+        flags: 0x00,
+        serialization: 0x01,
+        compression: 0x00,
+        payload: {
+          result: {
+            text: 'Test',
+            payload_sequence: -3,
+          },
+        },
+        rawPayload: Buffer.from('{}'),
+      }
+
+      mockClient.nextResponse.mockResolvedValue(mockResponse)
+
+      const result = await service.processAudio('client-1', 'aGVsbG8=', 'session-1', false)
+
+      expect(result?.isFinal).toBe(true)
+    })
+
     it('should default to false when is_final not present', async () => {
       const mockResponse: DoubaoDecodedMessage = {
         messageType: 0x09,

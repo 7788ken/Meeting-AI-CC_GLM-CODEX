@@ -63,7 +63,9 @@ export class TranscriptStreamService {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     )
 
-    const assignedEventIndex = needsNewIndex ? Math.max(0, state.nextEventIndex - 1) : input.eventIndex!
+    const assignedEventIndex = needsNewIndex
+      ? Math.max(0, state.nextEventIndex - 1)
+      : input.eventIndex!
 
     const eventDoc = await this.eventModel.findOneAndUpdate(
       { sessionId: input.sessionId, eventIndex: assignedEventIndex },
@@ -91,7 +93,10 @@ export class TranscriptStreamService {
     }
   }
 
-  async getSnapshot(input: { sessionId: string; limit?: number }): Promise<TranscriptStreamSnapshotDTO> {
+  async getSnapshot(input: {
+    sessionId: string
+    limit?: number
+  }): Promise<TranscriptStreamSnapshotDTO> {
     const limit = this.normalizeLimit(input.limit)
 
     const [state, events] = await Promise.all([

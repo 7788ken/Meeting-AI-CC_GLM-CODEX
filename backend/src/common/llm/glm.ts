@@ -70,4 +70,3 @@ function base64UrlEncode(content: string): string {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
 }
-

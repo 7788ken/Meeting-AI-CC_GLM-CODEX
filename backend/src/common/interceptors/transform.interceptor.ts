@@ -26,15 +26,10 @@ const SUCCESS_MESSAGE = '操作成功'
  * // 实际响应: { code: 200, message: "操作成功", data: { id: "123", name: "test" } }
  */
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
-  intercept(
-    context: ExecutionContext,
-    next: CallHandler<T>,
-  ): Observable<ApiResponse<T>> {
+export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<T>> {
+  intercept(context: ExecutionContext, next: CallHandler<T>): Observable<ApiResponse<T>> {
     return next.handle().pipe(
-      map((data) => {
+      map(data => {
         // 如果已经是 ApiResponse 格式，直接返回
         if (
           data &&
@@ -52,7 +47,7 @@ export class TransformInterceptor<T>
           message: SUCCESS_MESSAGE,
           data,
         }
-      }),
+      })
     )
   }
 }

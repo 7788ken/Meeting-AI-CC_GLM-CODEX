@@ -34,4 +34,3 @@ describe('realtime-split', () => {
     })
   })
 })
-

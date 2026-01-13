@@ -26,4 +26,3 @@ export function isSegmentKeyRollback(
   if (activeOrder == null || incomingOrder == null) return false
   return incomingOrder < activeOrder
 }
-

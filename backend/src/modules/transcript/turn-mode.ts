@@ -187,11 +187,7 @@ export function cosineSimilarity(a: SpeakerEmbedding, b: SpeakerEmbedding): numb
   return dot / Math.sqrt(normA * normB)
 }
 
-export function estimatePcm16leDurationMs(
-  chunk: Buffer,
-  sampleRate = 16000,
-  channels = 1
-): number {
+export function estimatePcm16leDurationMs(chunk: Buffer, sampleRate = 16000, channels = 1): number {
   const bytesPerSample = 2
   const samples = Math.floor(chunk.length / (bytesPerSample * channels))
   return Math.floor((samples / sampleRate) * 1000)

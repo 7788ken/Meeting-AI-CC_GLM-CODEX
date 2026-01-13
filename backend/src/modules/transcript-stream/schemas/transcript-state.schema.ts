@@ -27,4 +27,3 @@ export class TranscriptState {
 export const TranscriptStateSchema = SchemaFactory.createForClass(TranscriptState)
 
 TranscriptStateSchema.index({ sessionId: 1 }, { unique: true })
-

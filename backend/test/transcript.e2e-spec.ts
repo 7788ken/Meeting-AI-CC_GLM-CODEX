@@ -52,9 +52,7 @@ describe('API E2E Tests', () => {
     })
 
     it('/api (GET)', () => {
-      return request(app.getHttpServer())
-        .get('/api')
-        .expect(200) // 设置全局前缀后返回 200
+      return request(app.getHttpServer()).get('/api').expect(200) // 设置全局前缀后返回 200
     })
   })
 
@@ -80,10 +78,7 @@ describe('API E2E Tests', () => {
     })
 
     it('POST /api/sessions - should create session without settings', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/sessions')
-        .send({})
-        .expect(201)
+      const response = await request(app.getHttpServer()).post('/api/sessions').send({}).expect(201)
 
       expect(response.body).toBeDefined()
       expect(response.body.id).toBeDefined()
@@ -99,15 +94,11 @@ describe('API E2E Tests', () => {
     })
 
     it('GET /api/sessions/:id - should return 404 for non-existent session', async () => {
-      await request(app.getHttpServer())
-        .get('/api/sessions/non-existent-id')
-        .expect(404)
+      await request(app.getHttpServer()).get('/api/sessions/non-existent-id').expect(404)
     })
 
     it('GET /api/sessions - should get all sessions', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/api/sessions')
-        .expect(200)
+      const response = await request(app.getHttpServer()).get('/api/sessions').expect(200)
 
       expect(Array.isArray(response.body)).toBe(true)
       expect(response.body.length).toBeGreaterThan(0)

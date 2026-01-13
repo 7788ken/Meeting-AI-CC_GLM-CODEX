@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core'
 import { ValidationPipe, Logger } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { ConfigService } from '@nestjs/config'
+import { getModelToken } from '@nestjs/mongoose'
 import { AppModule } from './app.module'
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter'
 import * as http from 'http'
@@ -9,7 +10,13 @@ import * as WebSocket from 'ws'
 import { TranscriptService } from './modules/transcript/transcript.service'
 import { TranscriptStreamService } from './modules/transcript-stream/transcript-stream.service'
 import { TurnSegmentationService } from './modules/turn-segmentation/turn-segmentation.service'
-import { TranscriptAnalysisService } from './modules/transcript-analysis/transcript-analysis.service'
+import {
+  TranscriptAnalysisService,
+  TranscriptAnalysisUpsertData,
+} from './modules/transcript-analysis/transcript-analysis.service'
+import { TranscriptAnalysisGlmClient } from './modules/transcript-analysis/transcript-analysis.glm-client'
+import { TranscriptAnalysisChunk } from './modules/transcript-analysis/schemas/transcript-analysis-chunk.schema'
+import { TranscriptAnalysisState } from './modules/transcript-analysis/schemas/transcript-analysis-state.schema'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { SpeakerService } from './modules/speech/speaker.service'
@@ -21,7 +28,10 @@ import {
   getDefaultTurnModeConfig,
 } from './modules/transcript/turn-mode'
 import { isSegmentKeyRollback } from './modules/transcript/segment-key'
-import { shouldSplitByContent, shouldSplitBySegmentKeyChange } from './modules/transcript/realtime-split'
+import {
+  shouldSplitByContent,
+  shouldSplitBySegmentKeyChange,
+} from './modules/transcript/realtime-split'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -95,7 +105,22 @@ async function bootstrap() {
   const speakerService = app.get(SpeakerService)
   const transcriptStreamService = app.get(TranscriptStreamService)
   const turnSegmentationService = app.get(TurnSegmentationService)
-  const transcriptAnalysisService = app.get(TranscriptAnalysisService)
+  const transcriptAnalysisChunkModel = app.get(getModelToken(TranscriptAnalysisChunk.name))
+  const transcriptAnalysisStateModel = app.get(getModelToken(TranscriptAnalysisState.name))
+  const transcriptAnalysisGlmClient = app.get(TranscriptAnalysisGlmClient)
+  const transcriptAnalysisService = new TranscriptAnalysisService(
+    transcriptAnalysisChunkModel,
+    transcriptAnalysisStateModel,
+    transcriptStreamService,
+    transcriptAnalysisGlmClient,
+    configService,
+    (data: TranscriptAnalysisUpsertData) => {
+      broadcastToSession(data.sessionId, {
+        type: 'transcript_analysis_upsert',
+        data,
+      })
+    }
+  )
 
   const transcriptPipeline = process.env.TRANSCRIPT_PIPELINE || 'raw_llm'
   const rawEventStreamEnabled = true // 默认启用原文事件流
@@ -129,6 +154,11 @@ async function bootstrap() {
 
   // raw_llm：segmentKey -> eventIndex 映射（每 session + client，用于原文流 upsert）
   const segmentKeyToEventIndexBySessionClient = new Map<string, Map<string, number>>()
+  // 保存每个 segmentKey 对应的原始内容（用于 15 秒强制分段时标记 isFinal）
+  const segmentKeyContentBySessionClient = new Map<string, Map<string, string>>()
+
+  // 追踪每 session + client 的活跃 segmentKey（用于检测段落变化并标记 isFinal）
+  const activeSegmentKeyBySessionClient = new Map<string, string>()
 
   const turnModeEnabled = process.env.TRANSCRIPT_TURN_MODE === '1'
   const turnModeConfig = getDefaultTurnModeConfig()
@@ -177,7 +207,12 @@ async function bootstrap() {
               const previousSessionId = clientSessions.get(ws)
               if (previousSessionId && previousSessionId !== nextSessionId) {
                 removeClientFromSession(previousSessionId, ws)
-                segmentKeyToEventIndexBySessionClient.delete(getSegmentKeyMapKey(previousSessionId, clientId))
+                segmentKeyToEventIndexBySessionClient.delete(
+                  getSegmentKeyMapKey(previousSessionId, clientId)
+                )
+                segmentKeyContentBySessionClient.delete(
+                  getSegmentKeyMapKey(previousSessionId, clientId)
+                )
               }
 
               clientSessions.set(ws, nextSessionId)
@@ -241,7 +276,10 @@ async function bootstrap() {
                 speakerName: speakerName ?? current.speakerName,
               }
               speakerMetaBySessionClient.set(getSpeakerMetaKey(sessionId, clientId), next)
-              speakerNameBySessionSpeakerId.set(getSpeakerDirectoryKey(sessionId, next.speakerId), next.speakerName)
+              speakerNameBySessionSpeakerId.set(
+                getSpeakerDirectoryKey(sessionId, next.speakerId),
+                next.speakerName
+              )
 
               ws.send(
                 JSON.stringify({
@@ -411,9 +449,14 @@ async function bootstrap() {
             return
           }
 
-          const result = await transcriptService.processBinaryAudio(clientId, data as Buffer, sessionId, {
-            propagateError: true,
-          })
+          const result = await transcriptService.processBinaryAudio(
+            clientId,
+            data as Buffer,
+            sessionId,
+            {
+              propagateError: true,
+            }
+          )
 
           if (result) {
             await persistAndBroadcastTranscript(sessionId, clientId, {
@@ -457,6 +500,7 @@ async function bootstrap() {
       const sessionId = clientSessions.get(ws)
       if (clientId && sessionId) {
         segmentKeyToEventIndexBySessionClient.delete(getSegmentKeyMapKey(sessionId, clientId))
+        segmentKeyContentBySessionClient.delete(getSegmentKeyMapKey(sessionId, clientId))
       }
       if (sessionId) {
         removeClientFromSession(sessionId, ws)
@@ -534,6 +578,16 @@ async function bootstrap() {
     return created
   }
 
+  function getSegmentKeyContentMap(sessionId: string, clientId: string): Map<string, string> {
+    const key = getSegmentKeyMapKey(sessionId, clientId)
+    const existing = segmentKeyContentBySessionClient.get(key)
+    if (existing) return existing
+
+    const created = new Map<string, string>()
+    segmentKeyContentBySessionClient.set(key, created)
+    return created
+  }
+
   function ensureSpeakerMeta(
     sessionId: string,
     clientId: string
@@ -554,7 +608,10 @@ async function bootstrap() {
     }
 
     speakerMetaBySessionClient.set(key, meta)
-    speakerNameBySessionSpeakerId.set(getSpeakerDirectoryKey(sessionId, meta.speakerId), meta.speakerName)
+    speakerNameBySessionSpeakerId.set(
+      getSpeakerDirectoryKey(sessionId, meta.speakerId),
+      meta.speakerName
+    )
     return meta
   }
 
@@ -584,7 +641,8 @@ async function bootstrap() {
     const rawSpeakerId = asrSpeakerId?.trim?.() ? asrSpeakerId.trim() : ''
     const rawSpeakerName = asrSpeakerName?.trim?.() ? asrSpeakerName.trim() : ''
 
-    const speakerId = rawSpeakerId && rawSpeakerId !== `client_${clientId}` ? rawSpeakerId : meta.speakerId
+    const speakerId =
+      rawSpeakerId && rawSpeakerId !== `client_${clientId}` ? rawSpeakerId : meta.speakerId
     const dirKey = getSpeakerDirectoryKey(sessionId, speakerId)
 
     const speakerName =
@@ -616,8 +674,16 @@ async function bootstrap() {
     const existing = speakerClusterBySession.get(sessionId)
     if (existing) return existing
 
-    const sameTh = readNumberFromEnv('TRANSCRIPT_TURN_SPK_SAME_TH', 0.75, value => value > 0 && value <= 1)
-    const newTh = readNumberFromEnv('TRANSCRIPT_TURN_SPK_NEW_TH', 0.6, value => value >= 0 && value < 1)
+    const sameTh = readNumberFromEnv(
+      'TRANSCRIPT_TURN_SPK_SAME_TH',
+      0.75,
+      value => value > 0 && value <= 1
+    )
+    const newTh = readNumberFromEnv(
+      'TRANSCRIPT_TURN_SPK_NEW_TH',
+      0.6,
+      value => value >= 0 && value < 1
+    )
 
     const created = new AnonymousSpeakerCluster(sessionId, { sameTh, newTh })
     speakerClusterBySession.set(sessionId, created)
@@ -635,7 +701,9 @@ async function bootstrap() {
 
     if (detector.hasActiveTurn()) {
       // turn 模式下仍使用豆包流式链路喂音频，但不广播中间结果
-      await transcriptService.processBinaryAudio(clientId, chunk, sessionId, { propagateError: true })
+      await transcriptService.processBinaryAudio(clientId, chunk, sessionId, {
+        propagateError: true,
+      })
     }
 
     if (!shouldFinalizeTurn) {
@@ -662,7 +730,9 @@ async function bootstrap() {
     clientId: string,
     snapshot: TurnAudioSnapshot | null
   ): Promise<void> {
-    const result = await transcriptService.finalizeAudio(clientId, sessionId, { propagateError: true })
+    const result = await transcriptService.finalizeAudio(clientId, sessionId, {
+      propagateError: true,
+    })
     if (!result?.content) {
       return
     }
@@ -693,7 +763,8 @@ async function bootstrap() {
     clientId: string,
     snapshot: TurnAudioSnapshot | null
   ): Promise<string> {
-    const fallback = lastSpeakerIdBySession.get(sessionId) ?? ensureSpeakerMeta(sessionId, clientId).speakerId
+    const fallback =
+      lastSpeakerIdBySession.get(sessionId) ?? ensureSpeakerMeta(sessionId, clientId).speakerId
 
     const embedUrl = process.env.TRANSCRIPT_TURN_EMBEDDING_URL
     if (!embedUrl) {
@@ -899,6 +970,57 @@ async function bootstrap() {
     // 原文流：优先按 segmentKey 更新同一句话；无 segmentKey 时追加新事件
     try {
       const segmentKeyMap = input.segmentKey ? getSegmentKeyMap(sessionId, clientId) : null
+      const segmentKeyContentMap = input.segmentKey
+        ? getSegmentKeyContentMap(sessionId, clientId)
+        : null
+
+      // 当 segmentKey 变化时，把之前的 segmentKey 对应的事件标记为 isFinal=true
+      // 这是因为豆包 ASR 在音频 > 15s 时会强制分段返回结果，但 is_final=false
+      if (input.segmentKey) {
+        const sessionClientKey = getSegmentKeyMapKey(sessionId, clientId)
+        const activeSegmentKey = activeSegmentKeyBySessionClient.get(sessionClientKey)
+
+        if (segmentKeyContentMap && !segmentKeyContentMap.has(input.segmentKey)) {
+          segmentKeyContentMap.set(input.segmentKey, input.content)
+        }
+
+        if (activeSegmentKey && activeSegmentKey !== input.segmentKey) {
+          // segmentKey 变化了，把之前的段落标记为 isFinal=true
+          const previousEventIndex = segmentKeyMap?.get(activeSegmentKey)
+          if (previousEventIndex != null) {
+            const previousContent = segmentKeyContentMap?.get(activeSegmentKey) ?? input.content
+            await transcriptStreamService.upsertEvent({
+              sessionId,
+              eventIndex: previousEventIndex,
+              speakerId: resolved.speakerId,
+              speakerName: resolved.speakerName,
+              content: previousContent,
+              isFinal: true, // 标记为最终
+              segmentKey: activeSegmentKey,
+              asrTimestampMs: input.asrTimestampMs,
+            })
+            // 广播更新后的事件
+            broadcastToSession(sessionId, {
+              type: 'transcript_event_upsert',
+              data: {
+                sessionId,
+                revision: 0, // 会被 upsertEvent 更新
+                event: {
+                  eventIndex: previousEventIndex,
+                  speakerId: resolved.speakerId,
+                  speakerName: resolved.speakerName,
+                  content: previousContent,
+                  isFinal: true,
+                  segmentKey: activeSegmentKey,
+                },
+              },
+            })
+          }
+        }
+        // 更新活跃的 segmentKey
+        activeSegmentKeyBySessionClient.set(sessionClientKey, input.segmentKey)
+      }
+
       const existingEventIndex = input.segmentKey ? segmentKeyMap?.get(input.segmentKey) : undefined
       const shouldMarkRollback = input.eventIndex != null || existingEventIndex != null
 

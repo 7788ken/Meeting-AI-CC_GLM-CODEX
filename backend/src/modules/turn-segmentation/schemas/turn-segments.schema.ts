@@ -60,4 +60,3 @@ export const TurnSegmentsSchema = SchemaFactory.createForClass(TurnSegments)
 
 TurnSegmentsSchema.index({ sessionId: 1 }, { unique: true })
 TurnSegmentsSchema.index({ sessionId: 1, revision: -1 })
-

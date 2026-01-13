@@ -21,8 +21,7 @@ export class AuthService implements OnModuleInit {
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService
-  ) {
-  }
+  ) {}
 
   async onModuleInit() {
     // 创建默认测试用户（确保 app.init() 前可用，避免竞态）

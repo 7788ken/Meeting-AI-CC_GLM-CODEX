@@ -128,7 +128,9 @@ export function validateAndNormalizeSegments(input: {
     const prev = normalized[i - 1]
     const cur = normalized[i]
     if (cur.startEventIndex !== prev.endEventIndex + 1) {
-      throw new Error(`segments 存在缺口或重叠：prev=${prev.endEventIndex} cur=${cur.startEventIndex}`)
+      throw new Error(
+        `segments 存在缺口或重叠：prev=${prev.endEventIndex} cur=${cur.startEventIndex}`
+      )
     }
     if (cur.speakerId === prev.speakerId) {
       throw new Error('segments 未合并同 speaker 的连续轮次')
@@ -184,4 +186,3 @@ export function heuristicSegmentBySpeaker(input: {
   if (current) segments.push(current)
   return segments
 }
-

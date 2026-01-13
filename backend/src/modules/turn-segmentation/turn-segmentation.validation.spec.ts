@@ -1,4 +1,8 @@
-import { heuristicSegmentBySpeaker, parseTurnSegmentsJson, validateAndNormalizeSegments } from './turn-segmentation.validation'
+import {
+  heuristicSegmentBySpeaker,
+  parseTurnSegmentsJson,
+  validateAndNormalizeSegments,
+} from './turn-segmentation.validation'
 import type { TranscriptEventDTO } from '../transcript-stream/transcript-stream.service'
 
 describe('turn-segmentation.validation', () => {
@@ -51,4 +55,3 @@ describe('turn-segmentation.validation', () => {
     ).toThrow(/未合并同 speaker/)
   })
 })
-

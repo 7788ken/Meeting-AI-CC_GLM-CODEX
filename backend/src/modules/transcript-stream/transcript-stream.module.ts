@@ -17,4 +17,3 @@ import { TranscriptState, TranscriptStateSchema } from './schemas/transcript-sta
   exports: [TranscriptStreamService],
 })
 export class TranscriptStreamModule {}
-

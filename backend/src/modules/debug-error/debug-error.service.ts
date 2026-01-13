@@ -10,9 +10,7 @@ import { DebugErrorDto } from './dto/debug-error.dto'
  */
 @Injectable()
 export class DebugErrorService {
-  constructor(
-    @InjectModel(DebugError.name) private debugErrorModel: Model<DebugErrorDocument>
-  ) {}
+  constructor(@InjectModel(DebugError.name) private debugErrorModel: Model<DebugErrorDocument>) {}
 
   async findBySession(sessionId: string): Promise<DebugErrorDto[]> {
     const errors = await this.debugErrorModel
