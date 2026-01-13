@@ -64,6 +64,7 @@ export interface TranscriptEvent {
   isFinal: boolean
   segmentKey?: string
   asrTimestampMs?: number
+  audioDurationMs?: number
 }
 
 export interface TranscriptStreamSnapshot {

@@ -12,6 +12,7 @@ export type TranscriptEventDTO = {
   isFinal: boolean
   segmentKey?: string
   asrTimestampMs?: number
+  audioDurationMs?: number
 }
 
 export type TranscriptStreamSnapshotDTO = {
@@ -51,6 +52,7 @@ export class TranscriptStreamService {
     isFinal: boolean
     segmentKey?: string
     asrTimestampMs?: number
+    audioDurationMs?: number
   }): Promise<{ sessionId: string; revision: number; event: TranscriptEventDTO }> {
     const needsNewIndex = input.eventIndex == null
     const stateUpdate = needsNewIndex
@@ -77,6 +79,10 @@ export class TranscriptStreamService {
           isFinal: input.isFinal,
           segmentKey: input.segmentKey,
           asrTimestampMs: input.asrTimestampMs,
+          audioDurationMs:
+            typeof input.audioDurationMs === 'number' && Number.isFinite(input.audioDurationMs)
+              ? Math.max(0, Math.floor(input.audioDurationMs))
+              : input.audioDurationMs,
         },
         $setOnInsert: {
           sessionId: input.sessionId,
@@ -165,6 +171,7 @@ export class TranscriptStreamService {
       isFinal: Boolean(doc.isFinal),
       segmentKey: doc.segmentKey ?? undefined,
       asrTimestampMs: doc.asrTimestampMs ?? undefined,
+      audioDurationMs: doc.audioDurationMs ?? undefined,
     }
   }
 

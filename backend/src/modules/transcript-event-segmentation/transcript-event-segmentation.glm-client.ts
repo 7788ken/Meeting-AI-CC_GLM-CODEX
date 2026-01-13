@@ -49,12 +49,12 @@ export class TranscriptEventSegmentationGlmClient {
       )
       const content = extractGlmTextContent(response.data?.choices?.[0]?.message?.content)
       if (!content) {
-        throw new Error('Invalid response format from GLM API')
+        throw this.buildInvalidResponseError(response)
       }
       return content
     } catch (error) {
       if (!useJsonMode) {
-        throw error
+        throw this.attachGlmMeta(error)
       }
       this.logger.error(
         'GLM JSON mode failed, retrying without json mode',
@@ -62,12 +62,16 @@ export class TranscriptEventSegmentationGlmClient {
       )
     }
 
-    const response = await firstValueFrom(this.httpService.post(endpoint, requestBody, { headers }))
-    const content = extractGlmTextContent(response.data?.choices?.[0]?.message?.content)
-    if (!content) {
-      throw new Error('Invalid response format from GLM API')
+    try {
+      const response = await firstValueFrom(this.httpService.post(endpoint, requestBody, { headers }))
+      const content = extractGlmTextContent(response.data?.choices?.[0]?.message?.content)
+      if (!content) {
+        throw this.buildInvalidResponseError(response)
+      }
+      return content
+    } catch (error) {
+      throw this.attachGlmMeta(error)
     }
-    return content
   }
 
   private readModel(): string {
@@ -96,5 +100,35 @@ export class TranscriptEventSegmentationGlmClient {
   ): Record<string, unknown> {
     if (!enabled) return requestBody
     return { ...requestBody, response_format: { type: 'json_object' } }
+  }
+
+  private buildInvalidResponseError(response: { data?: unknown; status?: unknown }): Error {
+    const error = new Error('Invalid response format from GLM API')
+    const target = error as { glmResponse?: unknown; glmStatus?: unknown }
+    target.glmResponse = response.data
+    if (response.status != null) {
+      target.glmStatus = response.status
+    }
+    return error
+  }
+
+  private attachGlmMeta(error: unknown): Error {
+    const normalized = error instanceof Error ? error : new Error(String(error))
+    const source = error as { glmResponse?: unknown; glmStatus?: unknown; response?: { data?: unknown; status?: unknown } }
+    const target = normalized as { glmResponse?: unknown; glmStatus?: unknown }
+
+    if (target.glmResponse == null && source?.glmResponse != null) {
+      target.glmResponse = source.glmResponse
+    }
+    if (target.glmStatus == null && source?.glmStatus != null) {
+      target.glmStatus = source.glmStatus
+    }
+    if (target.glmResponse == null && source?.response?.data != null) {
+      target.glmResponse = source.response.data
+    }
+    if (target.glmStatus == null && source?.response?.status != null) {
+      target.glmStatus = source.response.status
+    }
+    return normalized
   }
 }

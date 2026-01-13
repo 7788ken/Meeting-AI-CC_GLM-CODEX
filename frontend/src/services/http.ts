@@ -20,6 +20,12 @@ export const http: AxiosInstance = axios.create({
   },
 })
 
+export const setApiBaseUrl = (baseURL: string) => {
+  http.defaults.baseURL = baseURL || '/api'
+}
+
+export const getApiBaseUrl = () => http.defaults.baseURL || '/api'
+
 // 请求拦截器
 http.interceptors.request.use(
   (config) => {

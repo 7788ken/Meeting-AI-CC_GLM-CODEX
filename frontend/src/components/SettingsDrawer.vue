@@ -2,7 +2,7 @@
   <el-drawer
     v-model="visibleProxy"
     :with-header="false"
-    size="76%"
+    size="min(92vw, 720px)"
     direction="rtl"
     append-to-body
     class="settings-drawer"
@@ -11,10 +11,13 @@
     <div class="settings-shell">
       <header class="drawer-header">
         <div class="title-block">
-          <div class="title">参数设置</div>
-          <div class="subtitle">实时控制 ASR、VAD、分析默认值与服务地址</div>
+          <div class="title">设置</div>
+          <div class="subtitle">仅影响本地客户端行为，不修改后端</div>
         </div>
         <div class="header-actions">
+          <el-button size="small" class="icon-button" @click="visibleProxy = false">
+            <el-icon><Close /></el-icon>
+          </el-button>
           <el-button
             size="small"
             class="ghost-button"
@@ -23,135 +26,154 @@
           >
             重置
           </el-button>
-          <el-button size="small" type="primary" @click="onSave">
-            保存
+          <el-button size="small" type="primary" :icon="Check" @click="onSave">
+            保存并关闭
           </el-button>
         </div>
       </header>
 
       <div class="drawer-body">
-        <nav class="section-nav">
-          <button
-            v-for="section in sections"
-            :key="section.id"
-            type="button"
-            class="nav-item"
-            :class="{ active: activeSection === section.id }"
-            @click="activeSection = section.id"
-          >
-            <el-icon><component :is="section.icon" /></el-icon>
-            <span>{{ section.label }}</span>
-          </button>
-        </nav>
+        <el-tabs v-model="activeSection" tab-position="left" class="settings-tabs">
+          <el-tab-pane name="asr">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Microphone /></el-icon>
+                ASR
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">ASR 模型</div>
+              <div class="pane-subtitle">影响会话录音时的转写模型选择</div>
 
-        <div class="section-content">
-          <section v-if="activeSection === 'asr'" class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">ASR 模型</div>
-                <div class="card-desc">实时转写模型选择，影响音频发送参数</div>
-              </div>
-            </div>
-            <el-form label-position="top" :model="form" class="card-form">
-              <el-form-item label="模型">
-                <el-select v-model="form.asrModel" style="width: 240px">
-                  <el-option
-                    v-for="item in asrModels"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  >
-                    <div class="option-row">
-                      <span class="emoji">{{ item.icon }}</span>
-                      <div class="option-text">
-                        <div class="option-title">{{ item.label }}</div>
-                        <div class="option-desc">{{ item.desc }}</div>
-                      </div>
-                    </div>
-                  </el-option>
-                </el-select>
-              </el-form-item>
-            </el-form>
-          </section>
+              <el-radio-group v-model="form.asrModel" class="choice-grid">
+                <el-radio
+                  v-for="item in asrModels"
+                  :key="item.value"
+                  :label="item.value"
+                  border
+                  class="choice-card"
+                >
+                  <div class="choice-title">{{ item.label }}</div>
+                  <div class="choice-desc">{{ item.desc }}</div>
+                </el-radio>
+              </el-radio-group>
+            </section>
+          </el-tab-pane>
 
-          <section v-else-if="activeSection === 'vad'" class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">VAD 参数</div>
-                <div class="card-desc">能量阈值与静音窗口，决定分句敏感度</div>
-              </div>
-              <el-tag type="success" effect="dark" round size="small">
-                {{ vadPreview }}
-              </el-tag>
-            </div>
-            <el-form label-position="top" :model="form" class="card-form">
-              <div class="grid two-col">
-                <el-form-item label="起始阈值 (start_th)">
-                  <el-input-number
-                    v-model="form.vadStartTh"
-                    :step="0.001"
-                    :precision="3"
-                    :min="0"
-                  />
-                </el-form-item>
-                <el-form-item label="停止阈值 (stop_th)">
-                  <el-input-number
-                    v-model="form.vadStopTh"
-                    :step="0.001"
-                    :precision="3"
-                    :min="0"
-                  />
-                </el-form-item>
-                <el-form-item label="静音间隔 (gap_ms)">
-                  <el-input-number v-model="form.vadGapMs" :step="50" :min="0" />
-                </el-form-item>
-                <el-form-item label="确认延迟 (confirm_ms)">
-                  <el-input-number v-model="form.vadConfirmMs" :step="50" :min="0" />
-                </el-form-item>
-              </div>
-              <div class="hint">建议：start ≥ stop；gap/confirm 过小会导致频繁分段。</div>
-            </el-form>
-          </section>
+          <el-tab-pane name="vad">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><TrendCharts /></el-icon>
+                VAD
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">VAD 参数</div>
+              <div class="pane-subtitle">能量阈值与静音窗口，决定分句敏感度</div>
 
-          <section v-else-if="activeSection === 'analysis'" class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">默认分析类型</div>
-                <div class="card-desc">影响头部下拉初始值</div>
-              </div>
-            </div>
-            <div class="tag-grid">
-              <button
-                v-for="item in analysisTypes"
-                :key="item.value"
-                type="button"
-                class="tag-button"
-                :class="{ active: form.analysisType === item.value }"
-                @click="form.analysisType = item.value"
-              >
-                {{ item.label }}
-              </button>
-            </div>
-          </section>
+              <div class="mono-preview">{{ vadPreview }}</div>
 
-          <section v-else-if="activeSection === 'service'" class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">服务地址</div>
-                <div class="card-desc">HTTP / WebSocket 覆盖值，仅前端使用</div>
-              </div>
-              <el-tag type="warning" effect="plain" round size="small">本地覆盖，不改后端</el-tag>
-            </div>
-            <el-form label-position="top" :model="form" class="card-form">
-              <el-form-item label="API 基础地址">
-                <el-input v-model="form.apiBaseUrl" placeholder="如 https://host/api 或 /api" />
-              </el-form-item>
-              <el-form-item label="WebSocket 地址">
-                <el-input v-model="form.wsUrl" placeholder="如 wss://host/transcript" />
-              </el-form-item>
-            </el-form>
-          </section>
-        </div>
+              <el-form label-position="top" :model="form" class="pane-form">
+                <div class="grid two-col">
+                  <el-form-item label="起始阈值 (start_th)">
+                    <el-input-number
+                      v-model="form.vadStartTh"
+                      :step="0.001"
+                      :precision="3"
+                      :min="0"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="停止阈值 (stop_th)">
+                    <el-input-number
+                      v-model="form.vadStopTh"
+                      :step="0.001"
+                      :precision="3"
+                      :min="0"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="静音间隔 (gap_ms)">
+                    <el-input-number
+                      v-model="form.vadGapMs"
+                      :step="50"
+                      :min="0"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="确认延迟 (confirm_ms)">
+                    <el-input-number
+                      v-model="form.vadConfirmMs"
+                      :step="50"
+                      :min="0"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                </div>
+                <div class="hint">建议：start ≥ stop；gap/confirm 过小会导致频繁分段。</div>
+              </el-form>
+            </section>
+          </el-tab-pane>
+
+          <el-tab-pane name="analysis">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><DataAnalysis /></el-icon>
+                分析
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">默认分析类型</div>
+              <div class="pane-subtitle">影响头部「分析类型」下拉初始值</div>
+
+              <el-radio-group v-model="form.analysisType" class="choice-grid">
+                <el-radio
+                  v-for="item in analysisTypes"
+                  :key="item.value"
+                  :label="item.value"
+                  border
+                  class="choice-card"
+                >
+                  <div class="choice-title">{{ item.label }}</div>
+                </el-radio>
+              </el-radio-group>
+            </section>
+          </el-tab-pane>
+
+          <el-tab-pane name="service">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Connection /></el-icon>
+                服务
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">服务地址</div>
+              <div class="pane-subtitle">覆盖 HTTP / WebSocket 地址（仅前端）</div>
+
+              <el-alert
+                type="warning"
+                show-icon
+                :closable="false"
+                class="alert"
+                title="修改地址会影响后续请求/连接；录音中不建议修改。"
+              />
+
+              <el-form label-position="top" :model="form" class="pane-form">
+                <el-form-item label="API 基础地址">
+                  <el-input v-model="form.apiBaseUrl" placeholder="如 https://host/api 或 /api" />
+                </el-form-item>
+                <el-form-item label="WebSocket 地址">
+                  <el-input v-model="form.wsUrl" placeholder="如 wss://host/transcript" />
+                </el-form-item>
+              </el-form>
+            </section>
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </div>
   </el-drawer>
@@ -160,7 +182,15 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Connection, TrendCharts, DataAnalysis, Microphone, Refresh } from '@element-plus/icons-vue'
+import {
+  Connection,
+  TrendCharts,
+  DataAnalysis,
+  Microphone,
+  Refresh,
+  Close,
+  Check,
+} from '@element-plus/icons-vue'
 import { useAppSettings, type AppSettings, type AsrModel } from '@/composables/useAppSettings'
 
 const props = defineProps<{
@@ -181,13 +211,6 @@ const visibleProxy = computed({
 const form = reactive<AppSettings>({ ...settings.value })
 const activeSection = ref<'asr' | 'vad' | 'analysis' | 'service'>('asr')
 
-const sections = [
-  { id: 'asr', label: 'ASR 模型', icon: Microphone },
-  { id: 'vad', label: 'VAD 参数', icon: TrendCharts },
-  { id: 'analysis', label: '分析类型', icon: DataAnalysis },
-  { id: 'service', label: '服务地址', icon: Connection },
-]
-
 const analysisTypes = [
   { label: '会议摘要', value: 'summary' as AppSettings['analysisType'] },
   { label: '行动项', value: 'action-items' as AppSettings['analysisType'] },
@@ -196,13 +219,13 @@ const analysisTypes = [
   { label: '议题分析', value: 'topics' as AppSettings['analysisType'] },
 ]
 
-const asrModels: Array<{ value: AsrModel; label: string; desc: string; icon: string }> = [
-  { value: 'doubao', label: '豆包 ASR', desc: '实时、低延迟，适合会议录制', icon: '🥣' },
-  { value: 'glm', label: 'GLM ASR', desc: '高精度，适合高噪声场景', icon: '🧠' },
+const asrModels: Array<{ value: AsrModel; label: string; desc: string }> = [
+  { value: 'doubao', label: '豆包 ASR', desc: '实时、低延迟，适合会议录制' },
+  { value: 'glm', label: 'GLM ASR', desc: '高精度，适合高噪声场景' },
 ]
 
 const vadPreview = computed(() => {
-  return `start=${form.vadStartTh} stop=${form.vadStopTh} gap=${form.vadGapMs}ms`
+  return `VAD_START_TH=${form.vadStartTh}  VAD_STOP_TH=${form.vadStopTh}  VAD_GAP_MS=${form.vadGapMs}  VAD_CONFIRM_MS=${form.vadConfirmMs}`
 })
 
 watch(
@@ -241,13 +264,24 @@ const onReset = async () => {
 <style scoped>
 .settings-drawer :deep(.el-drawer__body) {
   padding: 0;
-  background: #f4f5f2;
+  background: #f5f7fb;
+  background-image:
+    linear-gradient(rgba(24, 144, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24, 144, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 .settings-shell {
   display: flex;
   flex-direction: column;
   height: 100%;
+  font-family:
+    "PingFang SC",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    system-ui,
+    -apple-system,
+    sans-serif;
 }
 
 .drawer-header {
@@ -255,18 +289,19 @@ const onReset = async () => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid #e7ebef;
-  background: linear-gradient(135deg, #f8faf7 0%, #eef3ee 100%);
+  border-bottom: 1px solid #e8e8e8;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
 }
 
 .title-block .title {
   font-size: 18px;
   font-weight: 700;
-  color: #1b4332;
+  color: #1f2328;
 }
 
 .title-block .subtitle {
-  color: #6c757d;
+  color: #6b7280;
   font-size: 12px;
   margin-top: 4px;
 }
@@ -278,82 +313,79 @@ const onReset = async () => {
 
 .drawer-body {
   flex: 1;
-  display: grid;
-  grid-template-columns: 220px 1fr;
   min-height: 0;
+  padding: 14px 16px 16px;
 }
 
-.section-nav {
-  border-right: 1px solid #e7ebef;
-  padding: 16px;
-  background: #f7f9f6;
-  display: grid;
-  gap: 8px;
+.settings-tabs {
+  height: 100%;
 }
 
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid #dce4dd;
+.settings-tabs :deep(.el-tabs__header) {
+  margin: 0;
+}
+
+.settings-tabs :deep(.el-tabs__nav-wrap) {
+  padding-right: 10px;
+}
+
+.settings-tabs :deep(.el-tabs__item) {
+  height: 44px;
+  line-height: 44px;
   border-radius: 10px;
-  background: #fff;
-  color: #1b4332;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  margin: 4px 0;
+  color: #4b5563;
+  transition: all 0.15s ease;
 }
 
-.nav-item:hover {
-  border-color: #2d6a4f;
-  box-shadow: 0 4px 12px rgba(45, 106, 79, 0.08);
+.settings-tabs :deep(.el-tabs__item.is-active) {
+  background: rgba(24, 144, 255, 0.10);
+  color: #185abc;
 }
 
-.nav-item.active {
-  border-color: #2d6a4f;
-  background: rgba(45, 106, 79, 0.08);
-  color: #1b4332;
+.settings-tabs :deep(.el-tabs__active-bar) {
+  background: transparent;
 }
 
-.section-content {
-  padding: 16px 20px;
-  overflow-y: auto;
+.settings-tabs :deep(.el-tabs__content) {
+  height: 100%;
+  overflow: hidden;
 }
 
-.card {
-  background: #fff;
-  border: 1px solid #e7ebef;
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
+.settings-tabs :deep(.el-tab-pane) {
+  height: 100%;
 }
 
-.card + .card {
-  margin-top: 12px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
+.tab-label {
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 12px;
-}
-
-.card-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1b4332;
-}
-
-.card-desc {
-  font-size: 12px;
-  color: #6c757d;
-  margin-top: 4px;
-}
-
-.card-form {
-  display: grid;
   gap: 8px;
+}
+
+.pane {
+  height: 100%;
+  overflow: auto;
+  padding: 14px 16px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(24, 144, 255, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
+}
+
+.pane-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.pane-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.pane-form {
+  margin-top: 14px;
 }
 
 .grid.two-col {
@@ -365,66 +397,105 @@ const onReset = async () => {
 .hint {
   margin-top: 6px;
   font-size: 12px;
-  color: #6c757d;
+  color: #6b7280;
 }
 
-.tag-grid {
-  display: flex;
-  flex-wrap: wrap;
+.choice-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 10px;
 }
 
-.tag-button {
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid #dce4dd;
-  background: #fff;
-  color: #1b4332;
-  cursor: pointer;
-  transition: all 0.2s ease;
+.choice-card {
+  width: 100%;
+  align-items: flex-start;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border-color: rgba(31, 41, 55, 0.16);
+  background: rgba(255, 255, 255, 0.7);
+  transition: all 0.15s ease;
 }
 
-.tag-button.active {
-  border-color: #2d6a4f;
-  background: rgba(45, 106, 79, 0.08);
+.choice-card.is-checked {
+  border-color: rgba(24, 144, 255, 0.55);
+  background: rgba(24, 144, 255, 0.06);
+  box-shadow: 0 10px 26px rgba(24, 144, 255, 0.10);
 }
 
-.tag-button:hover {
-  border-color: #2d6a4f;
+.choice-card.is-checked .choice-title {
+  color: #185abc;
 }
 
 .ghost-button {
-  border-color: #d0d7d3;
-  color: #4b6256;
+  border-color: rgba(31, 41, 55, 0.16);
+  color: #374151;
+  background: rgba(255, 255, 255, 0.6);
 }
 
-.option-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.icon-button {
+  border-color: rgba(31, 41, 55, 0.16);
+  background: rgba(255, 255, 255, 0.6);
 }
 
-.option-text .option-title {
-  font-weight: 600;
+.icon-button:hover,
+.ghost-button:hover {
+  border-color: rgba(24, 144, 255, 0.40);
+  background: rgba(24, 144, 255, 0.06);
 }
 
-.option-text .option-desc {
+.choice-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.choice-desc {
+  margin-top: 4px;
   font-size: 12px;
-  color: #6c757d;
+  color: #6b7280;
 }
 
-.emoji {
-  font-size: 16px;
+.mono-preview {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(24, 144, 255, 0.28);
+  background: rgba(24, 144, 255, 0.04);
+  color: #1f2937;
+  font-size: 12px;
+  font-family:
+    "JetBrains Mono",
+    "SFMono-Regular",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.mono-input :deep(.el-input__inner) {
+  font-family:
+    "JetBrains Mono",
+    "SFMono-Regular",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
+}
+
+.alert {
+  margin-top: 12px;
 }
 
 @media (max-width: 960px) {
-  .drawer-body {
-    grid-template-columns: 1fr;
+  .settings-tabs :deep(.el-tabs--left) {
+    display: block;
   }
 
-  .section-nav {
-    display: flex;
-    flex-wrap: wrap;
+  .settings-tabs :deep(.el-tabs__header) {
+    margin-bottom: 10px;
   }
 }
 </style>

@@ -77,4 +77,10 @@ export class TranscriptResultDto {
 
   @ApiProperty({ description: '置信度' })
   confidence: number
+
+  @ApiPropertyOptional({ description: '本段音频时长（ms）' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  audioDurationMs?: number
 }

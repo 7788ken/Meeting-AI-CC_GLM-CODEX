@@ -47,14 +47,16 @@
 
         <el-button size="small" type="success" @click="generateAnalysis">生成分析</el-button>
 
-        <el-button
-          size="small"
-          circle
-          class="settings-trigger"
-          @click="settingsDrawerVisible = true"
-        >
-          <el-icon><Setting /></el-icon>
-        </el-button>
+        <el-tooltip content="设置" placement="bottom">
+          <el-button
+            size="small"
+            circle
+            class="settings-trigger"
+            @click="settingsDrawerVisible = true"
+          >
+            <el-icon><Setting /></el-icon>
+          </el-button>
+        </el-tooltip>
 
         <el-button
           size="small"
@@ -90,9 +92,17 @@
             :key="event.eventIndex"
             class="realtime-event-item"
           >
-            <span class="event-speaker">{{ event.speakerName }}</span>
-            <span class="event-text">{{ event.content }}</span>
-            <span v-if="event.isFinal" class="event-final">final</span>
+            <div class="event-meta-row">
+              <span class="event-index">事件#{{ event.eventIndex }}</span>
+              <span
+                v-if="event.isFinal && getEventDurationText(event.eventIndex)"
+                class="event-duration"
+              >
+                {{ getEventDurationText(event.eventIndex) }}
+              </span>
+              <span v-if="event.isFinal" class="event-final">final</span>
+            </div>
+            <div class="event-text">{{ event.content }}</div>
           </div>
         </div>
       </div>
@@ -104,10 +114,27 @@
       <section class="transcript-panel">
       <div class="panel-header">
         <h2>语句拆分</h2>
+        <div class="panel-actions">
+          <el-tooltip
+            :content="transcriptSegmentOrder === 'desc' ? '切换为正序（旧→新）' : '切换为倒序（新→旧）'"
+            placement="bottom"
+          >
+            <el-button
+              size="small"
+              class="segment-order-trigger"
+              @click="transcriptSegmentOrder = transcriptSegmentOrder === 'desc' ? 'asc' : 'desc'"
+            >
+              {{ transcriptSegmentOrder === 'desc' ? '倒序' : '正序' }}
+            </el-button>
+          </el-tooltip>
+        </div>
       </div>
 
       <div class="transcript-content">
-        <TranscriptEventSegmentsPanel :segments="transcriptEventSegmentationStore.segments" />
+        <TranscriptEventSegmentsPanel
+          :segments="transcriptEventSegmentationStore.segments"
+          :order="transcriptSegmentOrder"
+        />
       </div>
     </section>
 
@@ -192,6 +219,7 @@ const sessionEndedOverride = ref(false)
 const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 const debugDrawerVisible = ref(false)
 const settingsDrawerVisible = ref(false)
+const transcriptSegmentOrder = ref<'asc' | 'desc'>('desc')
 const transcriptStreamStore = useTranscriptStreamStore()
 const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
 
@@ -538,6 +566,23 @@ function scrollToBottom() {
     }
   })
 }
+
+function formatDurationMs(durationMs: number): string {
+  const safeMs = Math.max(0, Math.floor(durationMs))
+  if (safeMs < 60_000) {
+    return `${(safeMs / 1000).toFixed(1)}s`
+  }
+  const totalSeconds = Math.floor(safeMs / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+function getEventDurationText(eventIndex: number): string | null {
+  const durationMs = transcriptStreamStore.getEventDurationMs(eventIndex)
+  if (durationMs == null) return null
+  return formatDurationMs(durationMs)
+}
 </script>
 
 <style scoped>
@@ -548,14 +593,14 @@ function scrollToBottom() {
 }
 
 .settings-trigger {
-  border-color: #dce4dd;
-  color: #4b6256;
+  border-color: rgba(31, 41, 55, 0.18);
+  color: #4b5563;
 }
 
 .settings-trigger:hover {
-  background: rgba(45, 106, 79, 0.08);
-  border-color: #2d6a4f;
-  color: #2d6a4f;
+  background: rgba(24, 144, 255, 0.06);
+  border-color: rgba(24, 144, 255, 0.40);
+  color: #185abc;
 }
 
 .debug-trigger {
@@ -627,15 +672,21 @@ function scrollToBottom() {
 
 .realtime-event-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
   background-color: #f9f9f9;
   border-radius: 6px;
   font-size: 13px;
 }
 
-.event-speaker {
+.event-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-index {
   flex-shrink: 0;
   padding: 2px 8px;
   border-radius: 999px;
@@ -646,11 +697,10 @@ function scrollToBottom() {
 }
 
 .event-text {
-  flex: 1;
   color: #333;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
 }
 
 .event-final {
@@ -660,6 +710,22 @@ function scrollToBottom() {
   background-color: #e6f4ff;
   color: #1677ff;
   font-size: 11px;
+}
+
+.event-duration {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #475569;
+  font-size: 11px;
+  font-family:
+    "JetBrains Mono",
+    "SFMono-Regular",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
 }
 
 /* 下部内容区域（左右分栏） */
@@ -708,6 +774,24 @@ function scrollToBottom() {
   font-size: 16px;
   font-weight: 600;
   color: #333;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.segment-order-trigger {
+  border-color: rgba(31, 41, 55, 0.18);
+  color: #4b5563;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.segment-order-trigger:hover {
+  border-color: rgba(24, 144, 255, 0.40);
+  color: #185abc;
+  background: rgba(24, 144, 255, 0.06);
 }
 
 /* 转写列表 */

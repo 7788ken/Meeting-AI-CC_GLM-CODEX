@@ -89,7 +89,11 @@ export class TranscriptService {
         return null
       }
 
-      return this.buildTranscriptResult(response, sessionId, clientId)
+      const result = this.buildTranscriptResult(response, sessionId, clientId)
+      if (result && typeof durationMs === 'number' && Number.isFinite(durationMs)) {
+        result.audioDurationMs = Math.max(0, Math.floor(durationMs))
+      }
+      return result
     } catch (error) {
       this.logger.error(
         `Doubao ASR failed, clientId=${clientId}`,
@@ -177,7 +181,11 @@ export class TranscriptService {
         return null
       }
 
-      return this.buildTranscriptResult(response, sessionId, clientId)
+      const result = this.buildTranscriptResult(response, sessionId, clientId)
+      if (result && typeof appended.durationMs === 'number' && Number.isFinite(appended.durationMs)) {
+        result.audioDurationMs = Math.max(0, Math.floor(appended.durationMs))
+      }
+      return result
     } catch (error) {
       this.logger.error(
         `Doubao ASR binary failed, clientId=${clientId}`,
@@ -208,6 +216,11 @@ export class TranscriptService {
     }
 
     try {
+      const flushed = this.smartAudioBufferService.flush(clientId, { force: true })
+      if (flushed.buffer) {
+        await client.sendAudio(flushed.buffer, false)
+      }
+
       // 先保存可能存在的最后响应（在发送结束信号前）
       const lastResponseBeforeEnd = (client as any).getLastResponse
         ? (client as any).getLastResponse()
@@ -229,6 +242,9 @@ export class TranscriptService {
       }
 
       const result = this.buildTranscriptResult(finalResponse, sessionId, clientId)
+      if (result && typeof flushed.durationMs === 'number' && Number.isFinite(flushed.durationMs)) {
+        result.audioDurationMs = Math.max(0, Math.floor(flushed.durationMs))
+      }
 
       // 如果是使用之前的响应，强制设置 isFinal 为 true
       if (result && !response) {

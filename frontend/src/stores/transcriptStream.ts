@@ -3,6 +3,11 @@ import { computed, ref } from 'vue'
 import { transcriptStreamApi, type TranscriptEvent } from '@/services/api'
 import { websocket, type TranscriptMessage } from '@/services/websocket'
 
+type TranscriptEventTiming = {
+  firstAsrTimestampMs: number
+  lastAsrTimestampMs: number
+}
+
 export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
   const sessionId = ref<string>('')
   const revision = ref<number>(0)
@@ -10,6 +15,7 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
   const eventsByIndex = ref<Map<number, TranscriptEvent>>(new Map())
   // 按 segmentKey 分组，用于流式显示：同一 segmentKey 只显示最新一条
   const eventsByKey = ref<Map<string, TranscriptEvent>>(new Map())
+  const timingByIndex = ref<Map<number, TranscriptEventTiming>>(new Map())
 
   // 流式显示：按 segmentKey 分组后的最新结果
   const events = computed(() =>
@@ -34,6 +40,7 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
 
     const indexMap = new Map<number, TranscriptEvent>()
     const keyMap = new Map<string, TranscriptEvent>()
+    const timingMap = new Map<number, TranscriptEventTiming>()
     for (const event of snapshot.events || []) {
       indexMap.set(event.eventIndex, event)
       // 按 segmentKey 分组：同一 key 只保留最新的（eventIndex 最大的）
@@ -42,9 +49,17 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
       if (!existing || event.eventIndex > existing.eventIndex) {
         keyMap.set(key, event)
       }
+
+      if (typeof event.asrTimestampMs === 'number' && Number.isFinite(event.asrTimestampMs)) {
+        timingMap.set(event.eventIndex, {
+          firstAsrTimestampMs: event.asrTimestampMs,
+          lastAsrTimestampMs: event.asrTimestampMs,
+        })
+      }
     }
     eventsByIndex.value = indexMap
     eventsByKey.value = keyMap
+    timingByIndex.value = timingMap
   }
 
   function bindWebSocket(): void {
@@ -78,6 +93,32 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
     // 按 segmentKey 流式更新：同一 key 只保留最新的
     const key = event.segmentKey || `idx_${event.eventIndex}`
     eventsByKey.value.set(key, event)
+
+    if (typeof event.asrTimestampMs === 'number' && Number.isFinite(event.asrTimestampMs)) {
+      const existing = timingByIndex.value.get(event.eventIndex)
+      if (!existing) {
+        timingByIndex.value.set(event.eventIndex, {
+          firstAsrTimestampMs: event.asrTimestampMs,
+          lastAsrTimestampMs: event.asrTimestampMs,
+        })
+      } else {
+        existing.lastAsrTimestampMs = event.asrTimestampMs
+      }
+    }
+  }
+
+  function getEventDurationMs(eventIndex: number): number | null {
+    const event = eventsByIndex.value.get(eventIndex)
+    if (event && typeof event.audioDurationMs === 'number' && Number.isFinite(event.audioDurationMs)) {
+      const normalized = Math.max(0, Math.floor(event.audioDurationMs))
+      return normalized > 0 ? normalized : null
+    }
+
+    const timing = timingByIndex.value.get(eventIndex)
+    if (!timing) return null
+    const duration = timing.lastAsrTimestampMs - timing.firstAsrTimestampMs
+    if (!Number.isFinite(duration) || duration < 0) return null
+    return duration
   }
 
   function getTextByRange(startEventIndex: number, endEventIndex: number): string {
@@ -99,6 +140,7 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
     nextEventIndex.value = 0
     eventsByIndex.value = new Map()
     eventsByKey.value = new Map()
+    timingByIndex.value = new Map()
   }
 
   return {
@@ -108,6 +150,7 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
     events,
     loadSnapshot,
     bindWebSocket,
+    getEventDurationMs,
     getTextByRange,
     reset,
   }

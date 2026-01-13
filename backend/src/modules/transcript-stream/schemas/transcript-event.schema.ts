@@ -34,6 +34,13 @@ export class TranscriptEvent {
 
   @Prop()
   asrTimestampMs?: number
+
+  /**
+   * 该段原始音频时长（毫秒），用于前端展示与分析。
+   * 由服务端在音频 flush 时计算并累计写入。
+   */
+  @Prop()
+  audioDurationMs?: number
 }
 
 export const TranscriptEventSchema = SchemaFactory.createForClass(TranscriptEvent)

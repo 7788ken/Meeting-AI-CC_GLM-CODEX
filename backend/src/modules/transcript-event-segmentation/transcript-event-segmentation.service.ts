@@ -126,6 +126,7 @@ export class TranscriptEventSegmentationService {
       this.logger.warn(
         `Transcript event segmentation failed, sessionId=${sessionId}: ${message}`
       )
+      const glmErrorContext = this.buildGlmErrorContext(error)
       void this.debugErrorService.recordError({
         sessionId,
         level: 'error',
@@ -139,6 +140,7 @@ export class TranscriptEventSegmentationService {
           revision: state.revision,
           startEventIndex,
           endEventIndex,
+          ...(glmErrorContext ? { glm: glmErrorContext } : {}),
         },
         occurredAt: new Date(),
       })
@@ -183,5 +185,31 @@ export class TranscriptEventSegmentationService {
     if (raw) return raw
     const fallback = (process.env.GLM_TURN_SEGMENT_MODEL || '').trim()
     return fallback || 'glm-4.6v-flash'
+  }
+
+  private buildGlmErrorContext(error: unknown): Record<string, unknown> | null {
+    if (!error || typeof error !== 'object') {
+      return null
+    }
+    const source = error as {
+      glmResponse?: unknown
+      glmStatus?: unknown
+      response?: { data?: unknown; status?: unknown }
+    }
+    const response = source.glmResponse ?? source.response?.data
+    const status = source.glmStatus ?? source.response?.status
+
+    if (response == null && status == null) {
+      return null
+    }
+
+    const context: Record<string, unknown> = {}
+    if (status != null) {
+      context.status = status
+    }
+    if (response != null) {
+      context.response = response
+    }
+    return context
   }
 }

@@ -191,6 +191,8 @@ async function bootstrap() {
   const segmentKeyToEventIndexBySessionClient = new Map<string, Map<string, number>>()
   // 保存每个 segmentKey 对应的原始内容（用于 15 秒强制分段时标记 isFinal）
   const segmentKeyContentBySessionClient = new Map<string, Map<string, string>>()
+  // 保存每个 segmentKey 对应的原始音频累计时长（用于落库与展示）
+  const segmentKeyAudioDurationMsBySessionClient = new Map<string, Map<string, number>>()
 
   // 追踪每 session + client 的活跃 segmentKey（用于检测段落变化并标记 isFinal）
   const activeSegmentKeyBySessionClient = new Map<string, string>()
@@ -369,7 +371,12 @@ async function bootstrap() {
                   if (sessionId) {
                     const flushed = smartAudioBufferService.flush(clientId, { force: true })
                     if (flushed.buffer) {
-                      await enqueueGlmTranscription(sessionId, clientId, flushed.buffer)
+                      await enqueueGlmTranscription(
+                        sessionId,
+                        clientId,
+                        flushed.buffer,
+                        flushed.durationMs
+                      )
                     } else {
                       const pending = glmQueueByClientId.get(clientId)
                       if (pending) {
@@ -459,7 +466,7 @@ async function bootstrap() {
               if (!turnModeEnabled && model === 'glm') {
                 const flushed = smartAudioBufferService.flush(clientId, { force: true })
                 if (flushed.buffer) {
-                  await enqueueGlmTranscription(sessionId, clientId, flushed.buffer)
+                  await enqueueGlmTranscription(sessionId, clientId, flushed.buffer, flushed.durationMs)
                 } else {
                   const pending = glmQueueByClientId.get(clientId)
                   if (pending) {
@@ -490,6 +497,7 @@ async function bootstrap() {
                     speakerName: result.speakerName,
                     segmentKey: result.segmentKey,
                     asrTimestampMs: Date.now(),
+                    audioDurationMs: result.audioDurationMs,
                   })
                 } else {
                   await finalizeActiveSpeechForClient(clientId)
@@ -557,7 +565,7 @@ async function bootstrap() {
           if (model === 'glm') {
             const appended = smartAudioBufferService.appendAudio(clientId, data as Buffer)
             if (appended.buffer) {
-              void enqueueGlmTranscription(sessionId, clientId, appended.buffer)
+              void enqueueGlmTranscription(sessionId, clientId, appended.buffer, appended.durationMs)
             }
             return
           }
@@ -588,6 +596,7 @@ async function bootstrap() {
               speakerName: result.speakerName,
               segmentKey: result.segmentKey,
               asrTimestampMs: Date.now(),
+              audioDurationMs: result.audioDurationMs,
             })
           }
         } catch (error) {
@@ -617,6 +626,7 @@ async function bootstrap() {
       if (clientId && sessionId) {
         segmentKeyToEventIndexBySessionClient.delete(getSegmentKeyMapKey(sessionId, clientId))
         segmentKeyContentBySessionClient.delete(getSegmentKeyMapKey(sessionId, clientId))
+        segmentKeyAudioDurationMsBySessionClient.delete(getSegmentKeyMapKey(sessionId, clientId))
       }
       if (sessionId) {
         removeClientFromSession(sessionId, ws)
@@ -684,10 +694,11 @@ async function bootstrap() {
   function enqueueGlmTranscription(
     sessionId: string,
     clientId: string,
-    audioBuffer: Buffer
+    audioBuffer: Buffer,
+    audioDurationMs: number
   ): Promise<void> {
     const task = async () => {
-      await processGlmBuffer(sessionId, clientId, audioBuffer)
+      await processGlmBuffer(sessionId, clientId, audioBuffer, audioDurationMs)
     }
 
     const previous = glmQueueByClientId.get(clientId) ?? Promise.resolve()
@@ -711,7 +722,8 @@ async function bootstrap() {
   async function processGlmBuffer(
     sessionId: string,
     clientId: string,
-    audioBuffer: Buffer
+    audioBuffer: Buffer,
+    audioDurationMs: number
   ): Promise<void> {
     const config = smartAudioBufferService.getConfig(clientId)
     const fallbackSegmentKey = `glm:${clientId}:${Date.now()}:${Math.random()
@@ -752,6 +764,7 @@ async function bootstrap() {
         speakerName: speakerMeta.speakerName,
         segmentKey,
         asrTimestampMs: Date.now(),
+        audioDurationMs: chunk.isFinal ? audioDurationMs : undefined,
       })
     }
   }
@@ -836,6 +849,16 @@ async function bootstrap() {
 
     const created = new Map<string, string>()
     segmentKeyContentBySessionClient.set(key, created)
+    return created
+  }
+
+  function getSegmentKeyAudioDurationMap(sessionId: string, clientId: string): Map<string, number> {
+    const key = getSegmentKeyMapKey(sessionId, clientId)
+    const existing = segmentKeyAudioDurationMsBySessionClient.get(key)
+    if (existing) return existing
+
+    const created = new Map<string, number>()
+    segmentKeyAudioDurationMsBySessionClient.set(key, created)
     return created
   }
 
@@ -1121,6 +1144,9 @@ async function bootstrap() {
       segmentKey?: string
     }
   ): Promise<void> {
+    const content = normalizeTranscriptContent(input.content)
+    if (!content) return
+
     const resolved = resolveSpeaker(sessionId, clientId, input.speakerId, input.speakerName)
     const assigned = speakerService.assignSpeaker(resolved.speakerId, resolved.speakerName)
     const now = new Date()
@@ -1140,13 +1166,13 @@ async function bootstrap() {
         (input.segmentKey &&
           active.segmentKey &&
           input.segmentKey !== active.segmentKey &&
-          shouldSplitBySegmentKeyChange(active.lastContent, input.content)) ||
+          shouldSplitBySegmentKeyChange(active.lastContent, content)) ||
         (active.segmentKey == null &&
           input.segmentKey == null &&
           nowMs - active.lastUpdateAtMs >= getAutoSplitGapMs()) ||
         (active.segmentKey == null &&
           input.segmentKey == null &&
-          shouldSplitByContent(active.lastContent, input.content)))
+          shouldSplitByContent(active.lastContent, content)))
     ) {
       // speaker 或 utterance 边界变化：先结束上一段，避免全部拼成一条
       await finalizeActiveSpeechForClient(clientId)
@@ -1161,7 +1187,7 @@ async function bootstrap() {
         speakerId: assigned.id,
         speakerName: assigned.name,
         speakerColor: assigned.color,
-        content: input.content,
+        content,
         confidence: input.confidence,
       })
       activeSpeechByClientId.set(clientId, {
@@ -1169,12 +1195,12 @@ async function bootstrap() {
         speechId: speech.id,
         speakerId: assigned.id,
         segmentKey: input.segmentKey,
-        lastContent: input.content,
+        lastContent: content,
         lastUpdateAtMs: nowMs,
       })
     } else {
       speech = await speechService.updateRealtime(refreshed.speechId, {
-        content: input.content,
+        content,
         confidence: input.confidence,
         speakerId: assigned.id,
         speakerName: assigned.name,
@@ -1182,7 +1208,7 @@ async function bootstrap() {
         endTime: now,
       })
       refreshed.segmentKey = input.segmentKey ?? refreshed.segmentKey
-      refreshed.lastContent = input.content
+      refreshed.lastContent = content
       refreshed.lastUpdateAtMs = nowMs
     }
 
@@ -1210,11 +1236,13 @@ async function bootstrap() {
       speakerName: string
       segmentKey?: string
       asrTimestampMs?: number
+      audioDurationMs?: number
       eventIndex?: number
     }
   ): Promise<void> {
     if (!rawEventStreamEnabled) return
-    if (!input.content) return
+    const content = normalizeTranscriptContent(input.content)
+    if (!content) return
 
     const resolved = resolveSpeaker(sessionId, clientId, input.speakerId, input.speakerName)
 
@@ -1224,6 +1252,23 @@ async function bootstrap() {
       const segmentKeyContentMap = input.segmentKey
         ? getSegmentKeyContentMap(sessionId, clientId)
         : null
+      const segmentKeyDurationMap = input.segmentKey
+        ? getSegmentKeyAudioDurationMap(sessionId, clientId)
+        : null
+
+      if (
+        segmentKeyDurationMap &&
+        input.segmentKey &&
+        typeof input.audioDurationMs === 'number' &&
+        Number.isFinite(input.audioDurationMs) &&
+        input.audioDurationMs > 0
+      ) {
+        const previousDuration = segmentKeyDurationMap.get(input.segmentKey) ?? 0
+        segmentKeyDurationMap.set(
+          input.segmentKey,
+          Math.max(0, Math.floor(previousDuration + input.audioDurationMs))
+        )
+      }
 
       // 当 segmentKey 变化时，把之前的 segmentKey 对应的事件标记为 isFinal=true
       // 这是因为豆包 ASR 在音频 > 15s 时会强制分段返回结果，但 is_final=false
@@ -1232,15 +1277,15 @@ async function bootstrap() {
         const activeSegmentKey = activeSegmentKeyBySessionClient.get(sessionClientKey)
 
         if (segmentKeyContentMap && !segmentKeyContentMap.has(input.segmentKey)) {
-          segmentKeyContentMap.set(input.segmentKey, input.content)
+          segmentKeyContentMap.set(input.segmentKey, content)
         }
 
         if (activeSegmentKey && activeSegmentKey !== input.segmentKey) {
           // segmentKey 变化了，把之前的段落标记为 isFinal=true
           const previousEventIndex = segmentKeyMap?.get(activeSegmentKey)
           if (previousEventIndex != null) {
-            const previousContent = segmentKeyContentMap?.get(activeSegmentKey) ?? input.content
-            await transcriptStreamService.upsertEvent({
+            const previousContent = segmentKeyContentMap?.get(activeSegmentKey) ?? content
+            const previousResult = await transcriptStreamService.upsertEvent({
               sessionId,
               eventIndex: previousEventIndex,
               speakerId: resolved.speakerId,
@@ -1249,22 +1294,19 @@ async function bootstrap() {
               isFinal: true, // 标记为最终
               segmentKey: activeSegmentKey,
               asrTimestampMs: input.asrTimestampMs,
+              audioDurationMs: segmentKeyDurationMap?.get(activeSegmentKey),
             })
-            // 广播更新后的事件
+
+            if (segmentKeyContentMap) {
+              segmentKeyContentMap.delete(activeSegmentKey)
+            }
+            if (segmentKeyDurationMap) {
+              segmentKeyDurationMap.delete(activeSegmentKey)
+            }
+
             broadcastToSession(sessionId, {
               type: 'transcript_event_upsert',
-              data: {
-                sessionId,
-                revision: 0, // 会被 upsertEvent 更新
-                event: {
-                  eventIndex: previousEventIndex,
-                  speakerId: resolved.speakerId,
-                  speakerName: resolved.speakerName,
-                  content: previousContent,
-                  isFinal: true,
-                  segmentKey: activeSegmentKey,
-                },
-              },
+              data: previousResult,
             })
           }
         }
@@ -1275,15 +1317,20 @@ async function bootstrap() {
       const existingEventIndex = input.segmentKey ? segmentKeyMap?.get(input.segmentKey) : undefined
       const shouldMarkRollback = input.eventIndex != null || existingEventIndex != null
 
+      const resolvedAudioDurationMs = input.segmentKey
+        ? segmentKeyDurationMap?.get(input.segmentKey)
+        : input.audioDurationMs
+
       const result = await transcriptStreamService.upsertEvent({
         sessionId,
         eventIndex: input.eventIndex ?? existingEventIndex,
         speakerId: resolved.speakerId,
         speakerName: resolved.speakerName,
-        content: input.content,
+        content,
         isFinal: input.isFinal,
         segmentKey: input.segmentKey, // 保留用于调试和追溯
         asrTimestampMs: input.asrTimestampMs,
+        audioDurationMs: resolvedAudioDurationMs,
       })
 
       if (segmentKeyMap && input.segmentKey) {
@@ -1298,6 +1345,10 @@ async function bootstrap() {
           event: result.event,
         },
       })
+
+      if (input.isFinal && segmentKeyDurationMap && input.segmentKey) {
+        segmentKeyDurationMap.delete(input.segmentKey)
+      }
 
       if (shouldMarkRollback) {
         await transcriptAnalysisService.markRollback(sessionId, result.event.eventIndex)
@@ -1381,6 +1432,12 @@ async function bootstrap() {
 
   function triggerTranscriptAnalysisNow(sessionId: string): void {
     transcriptAnalysisService.schedule(sessionId, { force: true })
+  }
+
+  function normalizeTranscriptContent(value: string): string | null {
+    const trimmed = typeof value === 'string' ? value.trim() : ''
+    if (!trimmed || trimmed === '#') return null
+    return trimmed
   }
 
   async function runTurnSegmentation(

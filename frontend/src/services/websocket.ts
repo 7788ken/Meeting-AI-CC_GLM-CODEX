@@ -60,6 +60,7 @@ export type TranscriptEventData = {
     isFinal: boolean
     segmentKey?: string
     asrTimestampMs?: number
+    audioDurationMs?: number
   }
 }
 
@@ -140,6 +141,25 @@ export class WebSocketService {
       state: 'disconnected',
       attempt: 0,
       maxAttempts: this.maxReconnectAttempts,
+    }
+  }
+
+  getUrl(): string {
+    return this.url
+  }
+
+  setUrl(nextUrl: string): void {
+    const trimmed = nextUrl.trim()
+    if (!trimmed || trimmed === this.url) return
+
+    this.url = trimmed
+
+    // 若当前未在转写中，自动重连以让新地址立即生效；转写中修改将推迟到下次连接。
+    if (this.isConnected && !this.isTranscribing) {
+      this.disconnect()
+      this.connect().catch(() => {
+        // 交由上层处理连接失败提示
+      })
     }
   }
 

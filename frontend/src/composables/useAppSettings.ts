@@ -1,5 +1,7 @@
 import { ref } from 'vue'
 import { applyVadConfig, getVadConfig } from '@/services/transcription'
+import { setApiBaseUrl } from '@/services/http'
+import { websocket } from '@/services/websocket'
 
 export type AsrModel = 'doubao' | 'glm'
 
@@ -94,7 +96,11 @@ function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppS
 function applySettings(next?: AppSettings) {
   const target = next ?? settings.value
   ;(globalThis as any).__VITE_API_BASE_URL__ = target.apiBaseUrl
-  ;(globalThis as any).__VITE_WS_URL__ = target.wsUrl
+  setApiBaseUrl(target.apiBaseUrl)
+  if (target.wsUrl) {
+    ;(globalThis as any).__VITE_WS_URL__ = target.wsUrl
+    websocket.setUrl(target.wsUrl)
+  }
   applyVadConfig({
     startThreshold: target.vadStartTh,
     stopThreshold: target.vadStopTh,

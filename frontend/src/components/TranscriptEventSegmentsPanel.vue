@@ -1,5 +1,5 @@
 <template>
-  <div class="event-segments-panel">
+  <div ref="panelRef" class="event-segments-panel">
     <div v-if="segments.length === 0" class="empty">
       <el-empty description="暂无语句拆分结果" />
     </div>
@@ -19,16 +19,43 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { TranscriptEventSegment } from '@/services/api'
 
 const props = defineProps<{
   segments: TranscriptEventSegment[]
+  order?: 'asc' | 'desc'
 }>()
 
-const orderedSegments = computed(() =>
-  [...props.segments].sort((a, b) => (b.sequence ?? 0) - (a.sequence ?? 0))
-)
+const panelRef = ref<HTMLElement | null>(null)
+
+const normalizedOrder = computed(() => (props.order === 'asc' ? 'asc' : 'desc'))
+
+const orderedSegments = computed(() => {
+  const sorted = [...props.segments].sort((a, b) => (b.sequence ?? 0) - (a.sequence ?? 0))
+  return normalizedOrder.value === 'asc' ? sorted.slice().reverse() : sorted
+})
+
+const latestSequence = computed(() => {
+  if (!props.segments.length) return null
+  return props.segments.reduce((max, item) => Math.max(max, item.sequence ?? 0), 0)
+})
+
+async function scrollToLatest() {
+  await nextTick()
+  const el = panelRef.value
+  if (!el) return
+  if (normalizedOrder.value === 'desc') {
+    el.scrollTop = 0
+  } else {
+    el.scrollTop = el.scrollHeight
+  }
+}
+
+watch([latestSequence, normalizedOrder], ([nextSequence]) => {
+  if (nextSequence == null) return
+  scrollToLatest()
+})
 </script>
 
 <style scoped>

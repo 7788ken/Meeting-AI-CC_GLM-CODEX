@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import type { AsrConfigDto } from './dto/transcript.dto'
 
 interface SmartBufferState {
@@ -27,8 +28,11 @@ export class SmartAudioBufferService {
   // VAD 参数
   private readonly DEFAULT_ENERGY_THRESHOLD = 0.02
   private readonly DEFAULT_SILENCE_THRESHOLD_MS = 500
-  private readonly DEFAULT_MAX_BUFFER_DURATION_MS = 59000
+  private readonly DEFAULT_SOFT_MAX_BUFFER_DURATION_MS = 30000
+  private readonly DEFAULT_HARD_MAX_BUFFER_DURATION_MS = 50000
   private readonly DEFAULT_MIN_SPEECH_DURATION_MS = 200
+
+  constructor(private readonly configService: ConfigService) {}
 
   getConfig(clientId: string): AsrConfigDto {
     return { ...this.ensureState(clientId).config }
@@ -62,6 +66,7 @@ export class SmartAudioBufferService {
     state.totalBytes += chunk.length
 
     const durationMs = this.bytesToMs(state.totalBytes)
+    const minAudioLengthMs = this.getMinAudioLengthMs(state)
     const energy = this.calculateEnergy(chunk)
     const speechDetected = this.detectSpeech(chunk, energy)
 
@@ -77,15 +82,16 @@ export class SmartAudioBufferService {
         `threshold=${this.DEFAULT_SILENCE_THRESHOLD_MS}ms`
     )
 
-    if (this.shouldFlushByMaxDuration(state, durationMs)) {
+    const maxFlushMs = this.getMaxDurationFlushMs(state, durationMs)
+    if (maxFlushMs) {
       this.logger.log(
         `[AudioBuffer] FLUSH by max_duration: clientId=${clientId}, ` +
-          `durationMs=${durationMs}ms >= ${this.DEFAULT_MAX_BUFFER_DURATION_MS}ms`
+          `durationMs=${durationMs}ms >= ${maxFlushMs}ms`
       )
-      return this.buildFlushResult(clientId, state, durationMs, 'max_duration')
+      return this.flushByMaxDuration(clientId, state, maxFlushMs)
     }
 
-    if (this.shouldFlushBySilence(state)) {
+    if (this.shouldFlushBySilence(state, minAudioLengthMs)) {
       this.logger.log(
         `[AudioBuffer] FLUSH by silence: clientId=${clientId}, ` +
           `trailingSilence=${state.trailingSilenceMs}ms >= ${this.DEFAULT_SILENCE_THRESHOLD_MS}ms, ` +
@@ -169,8 +175,7 @@ export class SmartAudioBufferService {
       return false
     }
 
-    const durationMs = this.bytesToMs(buffer.length)
-    return durationMs >= this.DEFAULT_MIN_SPEECH_DURATION_MS
+    return true
   }
 
   /**
@@ -220,28 +225,123 @@ export class SmartAudioBufferService {
     state.trailingSilenceMs = chunkTrailingSilenceMs
   }
 
-  private shouldFlushBySilence(state: SmartBufferState): boolean {
+  private shouldFlushBySilence(state: SmartBufferState, minAudioLengthMs: number): boolean {
     if (!state.hasSpeech) {
       return false
     }
 
     const durationMs = this.bytesToMs(state.totalBytes)
-    if (durationMs < this.DEFAULT_MIN_SPEECH_DURATION_MS) {
+    if (durationMs < minAudioLengthMs) {
       return false
     }
 
     return state.trailingSilenceMs >= this.DEFAULT_SILENCE_THRESHOLD_MS
   }
 
-  private shouldFlushByMaxDuration(state: SmartBufferState, durationMs: number): boolean {
+  private getMaxDurationFlushMs(state: SmartBufferState, durationMs: number): number | null {
     if (state.totalBytes === 0) {
-      return false
+      return null
     }
-    if (durationMs < this.DEFAULT_MAX_BUFFER_DURATION_MS) {
-      return false
+    const softMaxMs = this.readSoftMaxDurationMs()
+    const hardMaxMs = this.readHardMaxDurationMs(softMaxMs)
+
+    if (durationMs >= hardMaxMs) {
+      return hardMaxMs
+    }
+    if (durationMs >= softMaxMs && state.trailingSilenceMs >= this.DEFAULT_SILENCE_THRESHOLD_MS) {
+      return softMaxMs
     }
 
-    return true
+    return null
+  }
+
+  private flushByMaxDuration(
+    clientId: string,
+    state: SmartBufferState,
+    maxDurationMs: number
+  ): FlushResult {
+    const maxBytes = Math.floor(this.bytesPerMs * maxDurationMs)
+    const totalBytes = state.totalBytes
+    const chunks = state.chunks
+
+    if (!chunks.length || totalBytes <= 0) {
+      return { buffer: null, durationMs: 0, reason: 'insufficient_audio', config: { ...state.config } }
+    }
+
+    let remainingBytes = maxBytes
+    const headChunks: Buffer[] = []
+    const tailChunks: Buffer[] = []
+
+    for (const chunk of chunks) {
+      if (remainingBytes <= 0) {
+        tailChunks.push(chunk)
+        continue
+      }
+
+      if (chunk.length <= remainingBytes) {
+        headChunks.push(chunk)
+        remainingBytes -= chunk.length
+        continue
+      }
+
+      headChunks.push(chunk.subarray(0, remainingBytes))
+      tailChunks.push(chunk.subarray(remainingBytes))
+      remainingBytes = 0
+    }
+
+    const flushedBytes = maxBytes - remainingBytes
+    const buffer = flushedBytes > 0 ? Buffer.concat(headChunks, flushedBytes) : null
+    const flushedDurationMs = this.bytesToMs(flushedBytes)
+    const minAudioLengthMs = this.getMinAudioLengthMs(state)
+    const shouldSend = state.hasSpeech && flushedDurationMs >= minAudioLengthMs && buffer
+
+    if (!shouldSend) {
+      this.resetState(state)
+      return {
+        buffer: null,
+        durationMs: flushedDurationMs,
+        reason: 'insufficient_audio',
+        config: { ...state.config },
+      }
+    }
+
+    this.rebuildStateAfterSplit(state, tailChunks)
+
+    if (buffer) {
+      this.logger.warn(
+        `[AudioBuffer] ✅ FLUSH SUCCESS: clientId=${clientId}, reason=max_duration, ` +
+          `durationMs=${flushedDurationMs}ms, bytes=${flushedBytes}, ` +
+          `remainingBytes=${state.totalBytes}`
+      )
+    }
+
+    return {
+      buffer,
+      durationMs: flushedDurationMs,
+      reason: buffer ? 'max_duration' : 'insufficient_audio',
+      config: { ...state.config },
+    }
+  }
+
+  private readSoftMaxDurationMs(): number {
+    const raw =
+      this.configService.get<string>('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS') ||
+      process.env.TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS
+    const value = Number(raw)
+    if (!Number.isFinite(value)) return this.DEFAULT_SOFT_MAX_BUFFER_DURATION_MS
+    return this.clampNumber(value, 5000, 59000, this.DEFAULT_SOFT_MAX_BUFFER_DURATION_MS)
+  }
+
+  private readHardMaxDurationMs(softMaxMs: number): number {
+    const raw =
+      this.configService.get<string>('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS') ||
+      process.env.TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS
+    const value = Number(raw)
+    if (!Number.isFinite(value)) {
+      return Math.max(softMaxMs, this.DEFAULT_HARD_MAX_BUFFER_DURATION_MS)
+    }
+    const normalized = this.clampNumber(value, softMaxMs, 59000, this.DEFAULT_HARD_MAX_BUFFER_DURATION_MS)
+    return Math.max(softMaxMs, normalized)
   }
 
   private buildFlushResult(
@@ -253,8 +353,7 @@ export class SmartAudioBufferService {
   ): FlushResult {
     const shouldSend =
       state.totalBytes > 0 &&
-      (options?.force === true ||
-        (state.hasSpeech && durationMs >= this.DEFAULT_MIN_SPEECH_DURATION_MS))
+      (options?.force === true || (state.hasSpeech && durationMs >= this.getMinAudioLengthMs(state)))
 
     const buffer = shouldSend ? Buffer.concat(state.chunks, state.totalBytes) : null
     const resultReason = shouldSend ? reason : 'insufficient_audio'
@@ -274,7 +373,7 @@ export class SmartAudioBufferService {
       this.logger.debug(
         `[AudioBuffer] ❌ FLUSH SKIPPED: clientId=${clientId}, ` +
           `hasSpeech=${hasSpeech}, durationMs=${durationMs}ms, ` +
-          `minRequired=${this.DEFAULT_MIN_SPEECH_DURATION_MS}ms`
+          `minRequired=${this.getMinAudioLengthMs(state)}ms`
       )
     }
 
@@ -286,12 +385,54 @@ export class SmartAudioBufferService {
     }
   }
 
+  private rebuildStateAfterSplit(state: SmartBufferState, remainingChunks: Buffer[]): void {
+    state.chunks = remainingChunks
+    state.totalBytes = remainingChunks.reduce((sum, chunk) => sum + chunk.length, 0)
+    state.hasSpeech = this.detectSpeechInChunks(remainingChunks)
+    state.trailingSilenceMs = this.calculateTrailingSilenceFromChunks(remainingChunks)
+  }
+
+  private detectSpeechInChunks(chunks: Buffer[]): boolean {
+    for (const chunk of chunks) {
+      if (this.calculateEnergy(chunk) > this.DEFAULT_ENERGY_THRESHOLD) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private calculateTrailingSilenceFromChunks(chunks: Buffer[]): number {
+    if (!chunks.length) return 0
+
+    let totalSilenceMs = 0
+    for (let idx = chunks.length - 1; idx >= 0; idx -= 1) {
+      const chunk = chunks[idx]
+      const chunkDurationMs = this.bytesToMs(chunk.length)
+      const chunkTrailingSilenceMs = this.calculateTrailingSilence(chunk)
+      if (chunkTrailingSilenceMs >= chunkDurationMs) {
+        totalSilenceMs += chunkDurationMs
+        continue
+      }
+      totalSilenceMs += chunkTrailingSilenceMs
+      break
+    }
+    return totalSilenceMs
+  }
+
   private get defaultConfig(): AsrConfigDto {
     return {
       bufferDurationMs: 3000,
       minAudioLengthMs: 500,
       language: 'zh',
     }
+  }
+
+  private getMinAudioLengthMs(state: SmartBufferState): number {
+    const value = Number(state.config.minAudioLengthMs)
+    if (Number.isFinite(value) && value >= 0) {
+      return value
+    }
+    return this.DEFAULT_MIN_SPEECH_DURATION_MS
   }
 
   private normalizeConfig(input: Partial<AsrConfigDto>): AsrConfigDto {
