@@ -6,6 +6,14 @@ export function extractGlmTextContent(content: unknown): string | null {
     return trimmed ? trimmed : null
   }
 
+  if (content && typeof content === 'object' && !Array.isArray(content)) {
+    const maybeText = (content as any).text
+    if (typeof maybeText === 'string') {
+      const trimmed = maybeText.trim()
+      return trimmed ? trimmed : null
+    }
+  }
+
   if (!Array.isArray(content)) {
     return null
   }

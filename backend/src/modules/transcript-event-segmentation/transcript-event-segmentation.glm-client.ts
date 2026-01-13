@@ -7,6 +7,7 @@ import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/ll
 @Injectable()
 export class TranscriptEventSegmentationGlmClient {
   private readonly logger = new Logger(TranscriptEventSegmentationGlmClient.name)
+  private readonly bumpMaxTokensTo = 2000
 
   constructor(
     private readonly configService: ConfigService,
@@ -26,7 +27,7 @@ export class TranscriptEventSegmentationGlmClient {
     const model = this.readModel()
     const maxTokens = this.readMaxTokens()
     const useJsonMode = this.shouldUseJsonMode()
-    const requestBody = {
+    const requestBody: Record<string, unknown> = {
       model,
       messages: [
         { role: 'system', content: [{ type: 'text', text: params.system }] },
@@ -44,14 +45,11 @@ export class TranscriptEventSegmentationGlmClient {
     this.logger.debug(`Calling GLM for transcript event segmentation, model=${model}`)
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(endpoint, this.withJsonMode(requestBody, useJsonMode), { headers })
-      )
-      const content = extractGlmTextContent(response.data?.choices?.[0]?.message?.content)
-      if (!content) {
-        throw this.buildInvalidResponseError(response)
-      }
-      return content
+      return await this.callAndExtractStructuredText({
+        endpoint,
+        headers,
+        requestBody: this.withJsonMode(requestBody, useJsonMode),
+      })
     } catch (error) {
       if (!useJsonMode) {
         throw this.attachGlmMeta(error)
@@ -63,12 +61,7 @@ export class TranscriptEventSegmentationGlmClient {
     }
 
     try {
-      const response = await firstValueFrom(this.httpService.post(endpoint, requestBody, { headers }))
-      const content = extractGlmTextContent(response.data?.choices?.[0]?.message?.content)
-      if (!content) {
-        throw this.buildInvalidResponseError(response)
-      }
-      return content
+      return await this.callAndExtractStructuredText({ endpoint, headers, requestBody })
     } catch (error) {
       throw this.attachGlmMeta(error)
     }
@@ -84,8 +77,8 @@ export class TranscriptEventSegmentationGlmClient {
   private readMaxTokens(): number {
     const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS || '').trim()
     const value = Number(raw)
-    if (Number.isFinite(value) && value >= 128) return Math.floor(value)
-    return 512
+    if (Number.isFinite(value) && value >= 256) return Math.floor(value)
+    return this.bumpMaxTokensTo
   }
 
   private shouldUseJsonMode(): boolean {
@@ -102,12 +95,109 @@ export class TranscriptEventSegmentationGlmClient {
     return { ...requestBody, response_format: { type: 'json_object' } }
   }
 
-  private buildInvalidResponseError(response: { data?: unknown; status?: unknown }): Error {
-    const error = new Error('Invalid response format from GLM API')
-    const target = error as { glmResponse?: unknown; glmStatus?: unknown }
+  private async callAndExtractStructuredText(input: {
+    endpoint: string
+    headers: Record<string, string>
+    requestBody: Record<string, unknown>
+  }): Promise<string> {
+    const response = await firstValueFrom(
+      this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
+    )
+
+    const extracted = this.extractStructuredTextFromGlmResponse(response.data)
+    if (extracted.text && extracted.finishReason !== 'length') {
+      return extracted.text
+    }
+
+    const currentMaxTokens = this.readRequestMaxTokens(input.requestBody)
+    if (
+      extracted.finishReason === 'length' &&
+      currentMaxTokens != null &&
+      currentMaxTokens < this.bumpMaxTokensTo
+    ) {
+      this.logger.warn(
+        `GLM completion truncated (finish_reason=length), retrying with max_tokens=${this.bumpMaxTokensTo}`
+      )
+      const bumpedBody = { ...input.requestBody, max_tokens: this.bumpMaxTokensTo }
+      const bumpedResponse = await firstValueFrom(
+        this.httpService.post(input.endpoint, bumpedBody, { headers: input.headers })
+      )
+      const bumpedExtracted = this.extractStructuredTextFromGlmResponse(bumpedResponse.data)
+      if (bumpedExtracted.text && bumpedExtracted.finishReason !== 'length') {
+        return bumpedExtracted.text
+      }
+      throw this.buildInvalidResponseError(bumpedResponse, bumpedExtracted.finishReason)
+    }
+
+    throw this.buildInvalidResponseError(response, extracted.finishReason)
+  }
+
+  private extractStructuredTextFromGlmResponse(data: unknown): {
+    text: string | null
+    finishReason?: string
+  } {
+    const choice = (data as any)?.choices?.[0]
+    const finishReason = typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
+    const message = choice?.message
+
+    const content = extractGlmTextContent(message?.content)
+    if (content) {
+      return { text: content, finishReason }
+    }
+
+    const reasoning = extractGlmTextContent(message?.reasoning_content)
+    const jsonFromReasoning = reasoning ? this.extractJsonObjectIfValid(reasoning) : null
+    if (jsonFromReasoning) {
+      this.logger.debug('GLM returned empty content, using JSON extracted from reasoning_content')
+      return { text: jsonFromReasoning, finishReason }
+    }
+
+    return { text: null, finishReason }
+  }
+
+  private extractJsonObjectIfValid(text: string): string | null {
+    const trimmed = text.trim()
+    if (!trimmed) return null
+
+    const extracted = this.extractJsonObject(trimmed) ?? trimmed
+    try {
+      const parsed = JSON.parse(extracted)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return extracted
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  private extractJsonObject(text: string): string | null {
+    const start = text.indexOf('{')
+    const end = text.lastIndexOf('}')
+    if (start < 0 || end <= start) return null
+    const extracted = text.slice(start, end + 1).trim()
+    return extracted || null
+  }
+
+  private readRequestMaxTokens(requestBody: Record<string, unknown>): number | null {
+    const value = requestBody.max_tokens
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    return null
+  }
+
+  private buildInvalidResponseError(
+    response: { data?: unknown; status?: unknown },
+    finishReason?: string
+  ): Error {
+    const suffix = finishReason ? ` (finish_reason=${finishReason})` : ''
+    const error = new Error(`Invalid response format from GLM API${suffix}`)
+    const target = error as { glmResponse?: unknown; glmStatus?: unknown; glmFinishReason?: string }
     target.glmResponse = response.data
     if (response.status != null) {
       target.glmStatus = response.status
+    }
+    if (finishReason) {
+      target.glmFinishReason = finishReason
     }
     return error
   }
