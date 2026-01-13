@@ -15,6 +15,7 @@ import { DebugErrorService } from './modules/debug-error/debug-error.service'
 import {
   TranscriptEventSegmentationService,
   TranscriptEventSegmentDTO,
+  TranscriptEventSegmentationProgressDTO,
 } from './modules/transcript-event-segmentation/transcript-event-segmentation.service'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
@@ -120,6 +121,14 @@ async function bootstrap() {
       data: { sessionId },
     })
   })
+  transcriptEventSegmentationService.setOnProgressUpdate(
+    (data: TranscriptEventSegmentationProgressDTO) => {
+      broadcastToSession(data.sessionId, {
+        type: 'transcript_event_segmentation_progress',
+        data,
+      })
+    }
+  )
 
   const rawEventStreamEnabled = true // 默认启用原文事件流
 
@@ -336,13 +345,13 @@ async function bootstrap() {
                       await finalizeActiveSpeechForClient(clientId)
                     }
 
-	                    if (triggerEventSegmentationOnStopTranscribe) {
-	                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
-	                    }
-	                  } else {
-	                    smartAudioBufferService.flush(clientId)
-	                    await finalizeActiveSpeechForClient(clientId)
-	                  }
+                    if (triggerEventSegmentationOnStopTranscribe) {
+                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
+                    }
+                  } else {
+                    smartAudioBufferService.flush(clientId)
+                    await finalizeActiveSpeechForClient(clientId)
+                  }
                 } else if (turnModeEnabled) {
                   if (sessionId) {
                     await finalizeTurnForClient(sessionId, clientId)
@@ -370,15 +379,16 @@ async function bootstrap() {
                       speakerName: result.speakerName,
                       segmentKey: result.segmentKey,
                       asrTimestampMs: Date.now(),
+                      audioDurationMs: result.audioDurationMs,
                     })
 
-	                    if (triggerEventSegmentationOnStopTranscribe) {
-	                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
-	                    }
-	                  } else {
-	                    // 没有返回转写结果，也要关闭当前活跃段落，避免前端一直认为该段落未结束
-	                    await finalizeActiveSpeechForClient(clientId)
-	                  }
+                    if (triggerEventSegmentationOnStopTranscribe) {
+                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
+                    }
+                  } else {
+                    // 没有返回转写结果，也要关闭当前活跃段落，避免前端一直认为该段落未结束
+                    await finalizeActiveSpeechForClient(clientId)
+                  }
                 } else {
                   await transcriptService.endAudio(clientId)
                 }
@@ -409,7 +419,12 @@ async function bootstrap() {
               if (!turnModeEnabled && model === 'glm') {
                 const flushed = smartAudioBufferService.flush(clientId, { force: true })
                 if (flushed.buffer) {
-                  await enqueueGlmTranscription(sessionId, clientId, flushed.buffer, flushed.durationMs)
+                  await enqueueGlmTranscription(
+                    sessionId,
+                    clientId,
+                    flushed.buffer,
+                    flushed.durationMs
+                  )
                 } else {
                   const pending = glmQueueByClientId.get(clientId)
                   if (pending) {
@@ -446,13 +461,13 @@ async function bootstrap() {
                   await finalizeActiveSpeechForClient(clientId)
                 }
               }
-	              if (triggerEventSegmentationOnEndTurn) {
-	                triggerTranscriptEventSegmentationNow(sessionId, 'end_turn')
-	              }
-	              ws.send(
-	                JSON.stringify({
-	                  type: 'status',
-	                  data: { status: 'turn_finalized' },
+              if (triggerEventSegmentationOnEndTurn) {
+                triggerTranscriptEventSegmentationNow(sessionId, 'end_turn')
+              }
+              ws.send(
+                JSON.stringify({
+                  type: 'status',
+                  data: { status: 'turn_finalized' },
                 })
               )
             }
@@ -504,7 +519,12 @@ async function bootstrap() {
           if (model === 'glm') {
             const appended = smartAudioBufferService.appendAudio(clientId, data as Buffer)
             if (appended.buffer) {
-              void enqueueGlmTranscription(sessionId, clientId, appended.buffer, appended.durationMs)
+              void enqueueGlmTranscription(
+                sessionId,
+                clientId,
+                appended.buffer,
+                appended.durationMs
+              )
             }
             return
           }
@@ -968,6 +988,7 @@ async function bootstrap() {
       speakerName: '',
       segmentKey: undefined,
       asrTimestampMs: Date.now(),
+      audioDurationMs: result.audioDurationMs,
     })
   }
 

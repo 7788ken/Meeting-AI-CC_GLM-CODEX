@@ -39,6 +39,15 @@ export class TranscriptEventSegment {
   model?: string
 
   @Prop()
+  promptSystem?: string
+
+  @Prop()
+  promptUser?: string
+
+  @Prop()
+  promptLength?: number
+
+  @Prop()
   generatedAt?: Date
 
   @Prop()

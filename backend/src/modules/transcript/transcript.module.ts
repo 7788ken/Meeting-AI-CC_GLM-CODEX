@@ -17,6 +17,12 @@ import { SmartAudioBufferService } from './smart-audio-buffer.service'
     GlmAsrClient,
     SmartAudioBufferService,
   ],
-  exports: [TranscriptService, TranscriptGateway, DoubaoClientManager, AudioBufferService, GlmAsrClient],
+  exports: [
+    TranscriptService,
+    TranscriptGateway,
+    DoubaoClientManager,
+    AudioBufferService,
+    GlmAsrClient,
+  ],
 })
 export class TranscriptModule {}

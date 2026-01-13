@@ -182,7 +182,11 @@ export class TranscriptService {
       }
 
       const result = this.buildTranscriptResult(response, sessionId, clientId)
-      if (result && typeof appended.durationMs === 'number' && Number.isFinite(appended.durationMs)) {
+      if (
+        result &&
+        typeof appended.durationMs === 'number' &&
+        Number.isFinite(appended.durationMs)
+      ) {
         result.audioDurationMs = Math.max(0, Math.floor(appended.durationMs))
       }
       return result
@@ -647,7 +651,10 @@ export class TranscriptService {
     return null
   }
 
-  private extractIsFinal(payload: Record<string, unknown>, message?: DoubaoDecodedMessage): boolean {
+  private extractIsFinal(
+    payload: Record<string, unknown>,
+    message?: DoubaoDecodedMessage
+  ): boolean {
     const result = (payload.result ?? payload.data ?? payload) as Record<string, unknown>
     const direct = this.pickBooleanValue([
       result?.is_final,

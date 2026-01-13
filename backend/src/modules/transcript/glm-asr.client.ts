@@ -286,7 +286,10 @@ function pcm16ToWav(pcmBuffer: Buffer): Buffer {
   return Buffer.concat([header, pcmBuffer])
 }
 
-function buildMultipartBody(parts: MultipartPart[], boundary: string): { body: Buffer; boundary: string } {
+function buildMultipartBody(
+  parts: MultipartPart[],
+  boundary: string
+): { body: Buffer; boundary: string } {
   const buffers: Buffer[] = []
 
   for (const part of parts) {
@@ -434,13 +437,15 @@ function extractIsFinal(payload: unknown): boolean {
 
   const data = record.data
   if (data && typeof data === 'object') {
-    const nested = (data as Record<string, unknown>).is_final ?? (data as Record<string, unknown>).isFinal
+    const nested =
+      (data as Record<string, unknown>).is_final ?? (data as Record<string, unknown>).isFinal
     if (typeof nested === 'boolean') return nested
   }
 
   const result = record.result
   if (result && typeof result === 'object') {
-    const nested = (result as Record<string, unknown>).is_final ?? (result as Record<string, unknown>).isFinal
+    const nested =
+      (result as Record<string, unknown>).is_final ?? (result as Record<string, unknown>).isFinal
     if (typeof nested === 'boolean') return nested
   }
 

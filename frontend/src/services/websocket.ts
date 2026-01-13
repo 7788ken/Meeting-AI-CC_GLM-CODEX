@@ -84,6 +84,21 @@ export type TranscriptEventSegmentResetData = {
   sessionId: string
 }
 
+export type TranscriptEventSegmentationProgressData = {
+  sessionId: string
+  taskId: string
+  mode: 'incremental' | 'rebuild'
+  stage: 'queued' | 'calling_llm' | 'parsing' | 'persisting' | 'completed' | 'failed'
+  pointerEventIndex: number
+  windowStartEventIndex: number
+  windowEndEventIndex: number
+  maxEventIndex: number
+  sequence?: number
+  model?: string
+  message?: string
+  updatedAt: string
+}
+
 export type TranscriptMessage =
   | { type: 'transcript'; data: LegacyTranscriptData }
   | { type: 'status'; data: { status?: string; sessionId?: string; speakerId?: string; speakerName?: string } }
@@ -91,6 +106,7 @@ export type TranscriptMessage =
   | { type: 'transcript_event_upsert'; data: TranscriptEventData }
   | { type: 'transcript_event_segment_upsert'; data: TranscriptEventSegmentUpsertData }
   | { type: 'transcript_event_segment_reset'; data: TranscriptEventSegmentResetData }
+  | { type: 'transcript_event_segmentation_progress'; data: TranscriptEventSegmentationProgressData }
 
 export class WebSocketService {
   private ws: WebSocket | null = null

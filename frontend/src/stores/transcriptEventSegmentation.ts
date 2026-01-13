@@ -4,13 +4,25 @@ import {
   transcriptEventSegmentationApi,
   type TranscriptEventSegment,
 } from '@/services/api'
-import { websocket, type TranscriptMessage } from '@/services/websocket'
+import { websocket, type TranscriptMessage, type TranscriptEventSegmentationProgressData } from '@/services/websocket'
 
 export const useTranscriptEventSegmentationStore = defineStore('transcriptEventSegmentation', () => {
   const sessionId = ref<string>('')
   const segments = ref<TranscriptEventSegment[]>([])
+  const progress = ref<TranscriptEventSegmentationProgressData | null>(null)
+  const isLoadingSnapshot = ref(false)
 
   const hasSegments = computed(() => segments.value.length > 0)
+  const latestProcessedEventIndex = computed(() => {
+    if (!segments.value.length) return null
+    return segments.value.reduce((max, item) => Math.max(max, item.sourceEndEventIndex ?? -1), -1)
+  })
+  const pointerEventIndex = computed(() => progress.value?.pointerEventIndex ?? latestProcessedEventIndex.value)
+  const isInFlight = computed(() => {
+    const stage = progress.value?.stage
+    if (!stage) return false
+    return stage === 'queued' || stage === 'calling_llm' || stage === 'parsing' || stage === 'persisting'
+  })
 
   let messageHandler: ((message: TranscriptMessage) => void) | null = null
 
@@ -21,11 +33,16 @@ export const useTranscriptEventSegmentationStore = defineStore('transcriptEventS
     }
 
     sessionId.value = targetSessionId
-    const response = await transcriptEventSegmentationApi.getSnapshot(targetSessionId)
-    const snapshot = response.data
-    if (!snapshot) return
+    try {
+      isLoadingSnapshot.value = true
+      const response = await transcriptEventSegmentationApi.getSnapshot(targetSessionId)
+      const snapshot = response.data
+      if (!snapshot) return
 
-    segments.value = (snapshot.segments ?? []).slice().sort(sortBySequenceDesc)
+      segments.value = (snapshot.segments ?? []).slice().sort(sortBySequenceDesc)
+    } finally {
+      isLoadingSnapshot.value = false
+    }
   }
 
   function bindWebSocket(): void {
@@ -47,6 +64,13 @@ export const useTranscriptEventSegmentationStore = defineStore('transcriptEventS
         if (sessionId.value && targetSessionId !== sessionId.value) return
         clearSegments()
         void loadSnapshot(targetSessionId)
+        return
+      }
+
+      if (message.type === 'transcript_event_segmentation_progress') {
+        if (!message.data?.sessionId) return
+        if (sessionId.value && message.data.sessionId !== sessionId.value) return
+        progress.value = message.data
       }
     }
 
@@ -75,12 +99,15 @@ export const useTranscriptEventSegmentationStore = defineStore('transcriptEventS
 
   function clearSegments(): void {
     segments.value = []
+    progress.value = null
   }
 
   function reset(): void {
     unbindWebSocket()
     sessionId.value = ''
     segments.value = []
+    progress.value = null
+    isLoadingSnapshot.value = false
   }
 
   function sortBySequenceDesc(a: TranscriptEventSegment, b: TranscriptEventSegment): number {
@@ -90,7 +117,11 @@ export const useTranscriptEventSegmentationStore = defineStore('transcriptEventS
   return {
     sessionId,
     segments,
+    progress,
     hasSegments,
+    pointerEventIndex,
+    isInFlight,
+    isLoadingSnapshot,
     loadSnapshot,
     bindWebSocket,
     clearSegments,

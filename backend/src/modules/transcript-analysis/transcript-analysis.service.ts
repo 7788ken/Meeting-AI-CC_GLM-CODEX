@@ -314,7 +314,10 @@ export class TranscriptAnalysisService {
     }
   }
 
-  private clearMaxRequestedEventIndexIfDone(sessionId: string, lastAnalyzedEventIndex: number): void {
+  private clearMaxRequestedEventIndexIfDone(
+    sessionId: string,
+    lastAnalyzedEventIndex: number
+  ): void {
     const current = this.maxRequestedEventIndices.get(sessionId)
     if (current != null && lastAnalyzedEventIndex >= current) {
       this.maxRequestedEventIndices.delete(sessionId)

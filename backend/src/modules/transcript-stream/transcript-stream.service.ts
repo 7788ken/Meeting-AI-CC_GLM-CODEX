@@ -69,20 +69,30 @@ export class TranscriptStreamService {
       ? Math.max(0, state.nextEventIndex - 1)
       : input.eventIndex!
 
+    const setUpdate: Record<string, unknown> = {
+      speakerId: input.speakerId,
+      speakerName: input.speakerName,
+      content: input.content,
+      isFinal: input.isFinal,
+      segmentKey: input.segmentKey,
+    }
+
+    if (typeof input.asrTimestampMs === 'number' && Number.isFinite(input.asrTimestampMs)) {
+      setUpdate.asrTimestampMs = Math.max(0, Math.floor(input.asrTimestampMs))
+    }
+
+    if (typeof input.audioDurationMs === 'number' && Number.isFinite(input.audioDurationMs)) {
+      const normalized = Math.max(0, Math.floor(input.audioDurationMs))
+      if (normalized > 0) {
+        setUpdate.audioDurationMs = normalized
+      }
+    }
+
     const eventDoc = await this.eventModel.findOneAndUpdate(
       { sessionId: input.sessionId, eventIndex: assignedEventIndex },
       {
         $set: {
-          speakerId: input.speakerId,
-          speakerName: input.speakerName,
-          content: input.content,
-          isFinal: input.isFinal,
-          segmentKey: input.segmentKey,
-          asrTimestampMs: input.asrTimestampMs,
-          audioDurationMs:
-            typeof input.audioDurationMs === 'number' && Number.isFinite(input.audioDurationMs)
-              ? Math.max(0, Math.floor(input.audioDurationMs))
-              : input.audioDurationMs,
+          ...setUpdate,
         },
         $setOnInsert: {
           sessionId: input.sessionId,

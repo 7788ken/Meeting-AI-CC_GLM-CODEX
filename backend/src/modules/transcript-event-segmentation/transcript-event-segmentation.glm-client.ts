@@ -158,7 +158,8 @@ export class TranscriptEventSegmentationGlmClient {
     finishReason?: string
   } {
     const choice = (data as any)?.choices?.[0]
-    const finishReason = typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
+    const finishReason =
+      typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
     const message = choice?.message
 
     const content = extractGlmTextContent(message?.content)
@@ -225,7 +226,11 @@ export class TranscriptEventSegmentationGlmClient {
 
   private attachGlmMeta(error: unknown): Error {
     const normalized = error instanceof Error ? error : new Error(String(error))
-    const source = error as { glmResponse?: unknown; glmStatus?: unknown; response?: { data?: unknown; status?: unknown } }
+    const source = error as {
+      glmResponse?: unknown
+      glmStatus?: unknown
+      response?: { data?: unknown; status?: unknown }
+    }
     const target = normalized as { glmResponse?: unknown; glmStatus?: unknown }
 
     if (target.glmResponse == null && source?.glmResponse != null) {

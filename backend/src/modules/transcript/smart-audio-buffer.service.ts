@@ -112,7 +112,12 @@ export class SmartAudioBufferService {
   flush(clientId: string, options?: { force?: boolean }): FlushResult {
     const state = this.states.get(clientId)
     if (!state) {
-      return { buffer: null, durationMs: 0, reason: 'insufficient_audio', config: { ...this.defaultConfig } }
+      return {
+        buffer: null,
+        durationMs: 0,
+        reason: 'insufficient_audio',
+        config: { ...this.defaultConfig },
+      }
     }
 
     const durationMs = this.bytesToMs(state.totalBytes)
@@ -265,7 +270,12 @@ export class SmartAudioBufferService {
     const chunks = state.chunks
 
     if (!chunks.length || totalBytes <= 0) {
-      return { buffer: null, durationMs: 0, reason: 'insufficient_audio', config: { ...state.config } }
+      return {
+        buffer: null,
+        durationMs: 0,
+        reason: 'insufficient_audio',
+        config: { ...state.config },
+      }
     }
 
     let remainingBytes = maxBytes
@@ -340,7 +350,12 @@ export class SmartAudioBufferService {
     if (!Number.isFinite(value)) {
       return Math.max(softMaxMs, this.DEFAULT_HARD_MAX_BUFFER_DURATION_MS)
     }
-    const normalized = this.clampNumber(value, softMaxMs, 59000, this.DEFAULT_HARD_MAX_BUFFER_DURATION_MS)
+    const normalized = this.clampNumber(
+      value,
+      softMaxMs,
+      59000,
+      this.DEFAULT_HARD_MAX_BUFFER_DURATION_MS
+    )
     return Math.max(softMaxMs, normalized)
   }
 
@@ -353,7 +368,8 @@ export class SmartAudioBufferService {
   ): FlushResult {
     const shouldSend =
       state.totalBytes > 0 &&
-      (options?.force === true || (state.hasSpeech && durationMs >= this.getMinAudioLengthMs(state)))
+      (options?.force === true ||
+        (state.hasSpeech && durationMs >= this.getMinAudioLengthMs(state)))
 
     const buffer = shouldSend ? Buffer.concat(state.chunks, state.totalBytes) : null
     const resultReason = shouldSend ? reason : 'insufficient_audio'
@@ -437,7 +453,12 @@ export class SmartAudioBufferService {
 
   private normalizeConfig(input: Partial<AsrConfigDto>): AsrConfigDto {
     const bufferDurationMs = this.clampNumber(input.bufferDurationMs, 1000, 10000, 3000)
-    const minAudioLengthMs = this.clampNumber(input.minAudioLengthMs, 0, Number.MAX_SAFE_INTEGER, 500)
+    const minAudioLengthMs = this.clampNumber(
+      input.minAudioLengthMs,
+      0,
+      Number.MAX_SAFE_INTEGER,
+      500
+    )
     const language = this.normalizeLanguage(input.language)
     const hotwords = this.normalizeHotwords(input.hotwords)
     const prompt = this.normalizePrompt(input.prompt)
@@ -469,7 +490,12 @@ export class SmartAudioBufferService {
     if (normalized === 'zh-cn' || normalized === 'zh_cn' || normalized === 'zh-hans') {
       return 'zh'
     }
-    if (normalized === 'zh' || normalized === 'en' || normalized === 'yue' || normalized === 'auto') {
+    if (
+      normalized === 'zh' ||
+      normalized === 'en' ||
+      normalized === 'yue' ||
+      normalized === 'auto'
+    ) {
       return normalized
     }
     this.logger.warn(`Unsupported ASR language: ${value}, fallback to zh`)

@@ -99,7 +99,12 @@ export class AudioBufferService {
 
   private normalizeConfig(input: Partial<AsrConfigDto>): AsrConfigDto {
     const bufferDurationMs = this.clampNumber(input.bufferDurationMs, 1000, 10000, 3000)
-    const minAudioLengthMs = this.clampNumber(input.minAudioLengthMs, 0, Number.MAX_SAFE_INTEGER, 500)
+    const minAudioLengthMs = this.clampNumber(
+      input.minAudioLengthMs,
+      0,
+      Number.MAX_SAFE_INTEGER,
+      500
+    )
     const language = this.normalizeLanguage(input.language)
     const hotwords = this.normalizeHotwords(input.hotwords)
     const prompt = this.normalizePrompt(input.prompt)
@@ -131,7 +136,12 @@ export class AudioBufferService {
     if (normalized === 'zh-cn' || normalized === 'zh_cn' || normalized === 'zh-hans') {
       return 'zh'
     }
-    if (normalized === 'zh' || normalized === 'en' || normalized === 'yue' || normalized === 'auto') {
+    if (
+      normalized === 'zh' ||
+      normalized === 'en' ||
+      normalized === 'yue' ||
+      normalized === 'auto'
+    ) {
       return normalized
     }
     this.logger.warn(`Unsupported ASR language: ${value}, fallback to zh`)

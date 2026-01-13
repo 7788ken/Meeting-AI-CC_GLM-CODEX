@@ -75,14 +75,28 @@
     <section class="realtime-transcript-bar">
       <div class="realtime-header">
         <h3>原文流</h3>
-        <div class="realtime-status">
-          <el-tag v-if="recordingStatus === 'recording'" type="success" size="small">录制中</el-tag>
-          <el-tag v-else-if="recordingStatus === 'paused'" type="warning" size="small">已暂停</el-tag>
-          <el-tag v-else type="info" size="small">未录制</el-tag>
-          <el-tag type="info" size="small">事件数: {{ transcriptStreamStore.events.length }}</el-tag>
-        </div>
-      </div>
-      <div class="realtime-content">
+	        <div class="realtime-status">
+	          <el-tag v-if="recordingStatus === 'recording'" type="success" size="small">录制中</el-tag>
+	          <el-tag v-else-if="recordingStatus === 'paused'" type="warning" size="small">已暂停</el-tag>
+	          <el-tag v-else type="info" size="small">未录制</el-tag>
+	          <el-tag type="info" size="small">事件数: {{ transcriptStreamStore.events.length }}</el-tag>
+	          <el-tag
+	            v-if="transcriptEventSegmentationStore.pointerEventIndex != null"
+	            :type="transcriptEventSegmentationStore.isInFlight ? 'warning' : 'info'"
+	            size="small"
+	          >
+	            {{ transcriptEventSegmentationStore.isInFlight ? '拆分中' : '已拆分到' }}:
+	            #{{ transcriptEventSegmentationStore.pointerEventIndex }}
+	            <template v-if="maxAvailableEventIndex != null">
+	              /#{{ maxAvailableEventIndex }}
+	            </template>
+	          </el-tag>
+	          <el-tag v-if="segmentationStageText" :type="segmentationStageTagType" size="small">
+	            LLM: {{ segmentationStageText }}
+	          </el-tag>
+	        </div>
+	      </div>
+	      <div class="realtime-content">
         <div v-if="transcriptStreamStore.events.length === 0" class="realtime-placeholder">
           暂无实时转写内容
         </div>
@@ -140,13 +154,15 @@
         </div>
       </div>
 
-      <div class="transcript-content">
-        <TranscriptEventSegmentsPanel
-          :segments="transcriptEventSegmentationStore.segments"
-          :order="transcriptSegmentOrder"
-        />
-      </div>
-    </section>
+	      <div class="transcript-content">
+	        <TranscriptEventSegmentsPanel
+	          :segments="transcriptEventSegmentationStore.segments"
+	          :order="transcriptSegmentOrder"
+	          :loading="transcriptEventSegmentationStore.isLoadingSnapshot"
+	          :progress="transcriptEventSegmentationStore.progress"
+	        />
+	      </div>
+	    </section>
 
     <!-- 右侧：AI分析区 -->
     <section class="analysis-panel">
@@ -204,12 +220,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 	  type Speech,
 	  type AIAnalysis,
 	} from '@/services/api'
-import { exportAnalysis as exportAnalysisService, type ExportFormat } from '@/services/export'
-import { transcription } from '@/services/transcription'
-import type { ConnectionStatus } from '@/services/websocket'
-import { useTranscriptStreamStore } from '@/stores/transcriptStream'
-import { useTranscriptEventSegmentationStore } from '@/stores/transcriptEventSegmentation'
-import { useAppSettings } from '@/composables/useAppSettings'
+	import { exportAnalysis as exportAnalysisService, type ExportFormat } from '@/services/export'
+	import { transcription } from '@/services/transcription'
+	import { websocket, type ConnectionStatus, type TranscriptEventSegmentationProgressData } from '@/services/websocket'
+		import { useTranscriptStreamStore } from '@/stores/transcriptStream'
+		import { useTranscriptEventSegmentationStore } from '@/stores/transcriptEventSegmentation'
+		import { useAppSettings } from '@/composables/useAppSettings'
 import MainLayout from '@/components/MainLayout.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import RecordButton from '@/components/RecordButton.vue'
@@ -239,8 +255,8 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	const settingsDrawerVisible = ref(false)
 	const transcriptSegmentOrder = ref<'asc' | 'desc'>('desc')
 	const rebuildingTranscriptSegments = ref(false)
-	const transcriptStreamStore = useTranscriptStreamStore()
-	const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
+		const transcriptStreamStore = useTranscriptStreamStore()
+		const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
 
 // 计算属性
 const statusText = computed(() => {
@@ -264,7 +280,7 @@ watch(selectedAnalysisType, (nextType) => {
   updateSettings({ analysisType: nextType as any })
 })
 
-const wsReconnectTag = computed(() => {
+	const wsReconnectTag = computed(() => {
   const status = wsConnectionStatus.value
   if (!status) return null
 
@@ -285,9 +301,51 @@ const wsReconnectTag = computed(() => {
   }
 
   return null
-})
+	})
 
-let hasInitializedSession = false
+	const segmentationStageText = computed(() => {
+	  const stage = transcriptEventSegmentationStore.progress?.stage
+	  if (!stage) return ''
+	  const map: Record<string, string> = {
+	    queued: '排队中',
+	    calling_llm: '调用中',
+	    parsing: '解析中',
+	    persisting: '落库中',
+	    completed: '已完成',
+	    failed: '失败',
+	  }
+	  return map[stage] || stage
+	})
+
+	const segmentationStageTagType = computed(() => {
+	  const stage = transcriptEventSegmentationStore.progress?.stage
+	  if (!stage) return 'info'
+	  if (stage === 'failed') return 'danger'
+	  if (stage === 'completed') return 'success'
+	  if (stage === 'queued' || stage === 'calling_llm' || stage === 'parsing' || stage === 'persisting') {
+	    return 'warning'
+	  }
+	  return 'info'
+	})
+
+	const maxAvailableEventIndex = computed(() => {
+	  const next = transcriptStreamStore.nextEventIndex
+	  if (!Number.isFinite(next) || next <= 0) return null
+	  return next - 1
+	})
+
+	let hasInitializedSession = false
+
+	async function ensureWebSocketSessionBound(targetSessionId: string): Promise<void> {
+	  const normalized = typeof targetSessionId === 'string' ? targetSessionId.trim() : ''
+	  if (!normalized) return
+	  try {
+	    await websocket.connect()
+	    websocket.setSession(normalized)
+	  } catch (error) {
+	    console.error('WebSocket 连接失败:', error)
+	  }
+	}
 
 watch(
   () => route.params.id,
@@ -314,9 +372,10 @@ watch(
 
     if (!sessionId.value) return
 
-    // 重新绑定 WebSocket（reset 会解绑，需要重新绑定）
-    transcriptStreamStore.bindWebSocket()
-    transcriptEventSegmentationStore.bindWebSocket()
+	    // 重新绑定 WebSocket（reset 会解绑，需要重新绑定）
+	    transcriptStreamStore.bindWebSocket()
+	    transcriptEventSegmentationStore.bindWebSocket()
+	    void ensureWebSocketSessionBound(sessionId.value)
 
     await loadSession()
     await loadSpeeches()
@@ -327,17 +386,18 @@ watch(
 )
 
 // 初始化
-onMounted(async () => {
-  sessionId.value = route.params.id as string || route.query.id as string || ''
-  if (sessionId.value) {
-    await loadSession()
-    await loadSpeeches()
-    transcriptStreamStore.bindWebSocket()
-    await transcriptStreamStore.loadSnapshot(sessionId.value)
-    transcriptEventSegmentationStore.bindWebSocket()
-    await transcriptEventSegmentationStore.loadSnapshot(sessionId.value)
-  }
-})
+	onMounted(async () => {
+	  sessionId.value = route.params.id as string || route.query.id as string || ''
+	  if (sessionId.value) {
+	    await loadSession()
+	    await loadSpeeches()
+	    transcriptStreamStore.bindWebSocket()
+	    void ensureWebSocketSessionBound(sessionId.value)
+	    await transcriptStreamStore.loadSnapshot(sessionId.value)
+	    transcriptEventSegmentationStore.bindWebSocket()
+	    await transcriptEventSegmentationStore.loadSnapshot(sessionId.value)
+	  }
+	})
 
 onUnmounted(() => {
   transcription.dispose()
@@ -406,9 +466,9 @@ async function loadSpeeches() {
 	  }
 	}
 
-	async function rebuildTranscriptSegments(): Promise<void> {
-	  if (!sessionId.value) return
-	  if (rebuildingTranscriptSegments.value) return
+		async function rebuildTranscriptSegments(): Promise<void> {
+		  if (!sessionId.value) return
+		  if (rebuildingTranscriptSegments.value) return
 
 	  try {
 	    await ElMessageBox.confirm(
@@ -424,12 +484,27 @@ async function loadSpeeches() {
 	    return
 	  }
 
-	  try {
-	    rebuildingTranscriptSegments.value = true
-	    transcriptEventSegmentationStore.clearSegments()
-	    await transcriptEventSegmentationApi.rebuild(sessionId.value)
-	    ElMessage.success('已开始重拆')
-	  } catch (error) {
+		  try {
+		    rebuildingTranscriptSegments.value = true
+		    await ensureWebSocketSessionBound(sessionId.value)
+		    const maxAvailable = maxAvailableEventIndex.value ?? 0
+		    const optimisticProgress: TranscriptEventSegmentationProgressData = {
+		      sessionId: sessionId.value,
+		      taskId: 'local-rebuild',
+		      mode: 'rebuild',
+		      stage: 'queued',
+		      pointerEventIndex: 0,
+		      windowStartEventIndex: 0,
+		      windowEndEventIndex: 0,
+		      maxEventIndex: Math.max(0, maxAvailable),
+		      sequence: 1,
+		      updatedAt: new Date().toISOString(),
+		    }
+		    transcriptEventSegmentationStore.clearSegments()
+		    transcriptEventSegmentationStore.progress = optimisticProgress
+		    await transcriptEventSegmentationApi.rebuild(sessionId.value)
+		    ElMessage.success('已开始重拆')
+		  } catch (error) {
 	    console.error('重拆失败:', error)
 	    ElMessage.error('重拆失败')
 	  } finally {

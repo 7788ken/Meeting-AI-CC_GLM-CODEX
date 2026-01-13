@@ -88,6 +88,7 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
   function applyUpsert(nextRevision: number, event: TranscriptEvent): void {
     if (!event) return
     revision.value = Math.max(revision.value, Number(nextRevision) || 0)
+    nextEventIndex.value = Math.max(nextEventIndex.value, (event.eventIndex ?? 0) + 1)
     eventsByIndex.value.set(event.eventIndex, event)
 
     // 按 segmentKey 流式更新：同一 key 只保留最新的

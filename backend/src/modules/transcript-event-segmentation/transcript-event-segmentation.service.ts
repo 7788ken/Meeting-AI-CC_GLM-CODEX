@@ -9,9 +9,14 @@ import { TranscriptEventSegmentationGlmClient } from './transcript-event-segment
 import { buildTranscriptEventSegmentationPrompt } from './transcript-event-segmentation.prompt'
 import { parseTranscriptEventSegmentJson } from './transcript-event-segmentation.validation'
 import {
+  extractRawNextSegment,
+  normalizeForPunctuationOnlyCompare,
+} from './transcript-event-segmentation.extraction'
+import {
   TranscriptEventSegment,
   TranscriptEventSegmentDocument,
 } from './schemas/transcript-event-segment.schema'
+import { randomBytes } from 'crypto'
 
 export type TranscriptEventSegmentDTO = {
   id: string
@@ -36,6 +41,23 @@ export type TranscriptEventSegmentsSnapshotDTO = {
 
 type TranscriptEventSegmentUpdateHandler = (data: TranscriptEventSegmentDTO) => void
 type TranscriptEventSegmentResetHandler = (sessionId: string) => void
+export type TranscriptEventSegmentationProgressDTO = {
+  sessionId: string
+  taskId: string
+  mode: 'incremental' | 'rebuild'
+  stage: 'queued' | 'calling_llm' | 'parsing' | 'persisting' | 'completed' | 'failed'
+  pointerEventIndex: number
+  windowStartEventIndex: number
+  windowEndEventIndex: number
+  maxEventIndex: number
+  sequence?: number
+  model?: string
+  message?: string
+  updatedAt: string
+}
+type TranscriptEventSegmentationProgressHandler = (
+  data: TranscriptEventSegmentationProgressDTO
+) => void
 type PersistedTranscriptEventSegment = {
   dto: TranscriptEventSegmentDTO
   createdId: TranscriptEventSegmentDocument['_id']
@@ -46,6 +68,7 @@ export class TranscriptEventSegmentationService {
   private readonly logger = new Logger(TranscriptEventSegmentationService.name)
   private onSegmentUpdate?: TranscriptEventSegmentUpdateHandler
   private onSegmentReset?: TranscriptEventSegmentResetHandler
+  private onProgressUpdate?: TranscriptEventSegmentationProgressHandler
   private readonly rebuildInFlightBySession = new Set<string>()
 
   constructor(
@@ -65,6 +88,10 @@ export class TranscriptEventSegmentationService {
     this.onSegmentReset = handler ?? undefined
   }
 
+  setOnProgressUpdate(handler?: TranscriptEventSegmentationProgressHandler | null): void {
+    this.onProgressUpdate = handler ?? undefined
+  }
+
   isRebuildInFlight(sessionId: string): boolean {
     const normalized = typeof sessionId === 'string' ? sessionId.trim() : ''
     if (!normalized) return false
@@ -72,10 +99,7 @@ export class TranscriptEventSegmentationService {
   }
 
   async getSnapshot(sessionId: string): Promise<TranscriptEventSegmentsSnapshotDTO> {
-    const segments = await this.segmentModel
-      .find({ sessionId })
-      .sort({ sequence: -1 })
-      .exec()
+    const segments = await this.segmentModel.find({ sessionId }).sort({ sequence: -1 }).exec()
 
     return {
       sessionId,
@@ -94,10 +118,7 @@ export class TranscriptEventSegmentationService {
     const endEventIndex = Math.max(-1, state.nextEventIndex - 1)
     if (endEventIndex < 0) return null
 
-    const lastSegment = await this.segmentModel
-      .findOne({ sessionId })
-      .sort({ sequence: -1 })
-      .exec()
+    const lastSegment = await this.segmentModel.findOne({ sessionId }).sort({ sequence: -1 }).exec()
 
     if (!input.force && lastSegment && lastSegment.sourceRevision >= state.revision) {
       return null
@@ -117,6 +138,9 @@ export class TranscriptEventSegmentationService {
     const nextSequence = (lastSegment?.sequence ?? 0) + 1
     const created = await this.generateAndPersistSegment({
       sessionId,
+      taskId: this.createTaskId(),
+      mode: 'incremental',
+      maxEventIndex: endEventIndex,
       previousSentence: lastSegment?.content ?? '',
       prevSegmentId: lastSegment?._id,
       nextSequence,
@@ -161,6 +185,27 @@ export class TranscriptEventSegmentationService {
 
   private emitSegmentReset(sessionId: string): void {
     this.onSegmentReset?.(sessionId)
+  }
+
+  private emitProgressUpdate(data: TranscriptEventSegmentationProgressDTO): void {
+    this.onProgressUpdate?.(data)
+  }
+
+  private createTaskId(): string {
+    return randomBytes(8).toString('hex')
+  }
+
+  private createProgressEmitter(
+    base: Omit<TranscriptEventSegmentationProgressDTO, 'stage' | 'updatedAt'>
+  ) {
+    return (stage: TranscriptEventSegmentationProgressDTO['stage'], message?: string) => {
+      this.emitProgressUpdate({
+        ...base,
+        stage,
+        ...(message ? { message } : {}),
+        updatedAt: new Date().toISOString(),
+      })
+    }
   }
 
   private toDTO(segment: TranscriptEventSegmentDocument): TranscriptEventSegmentDTO {
@@ -229,6 +274,9 @@ export class TranscriptEventSegmentationService {
 
   private async generateAndPersistSegment(input: {
     sessionId: string
+    taskId: string
+    mode: TranscriptEventSegmentationProgressDTO['mode']
+    maxEventIndex: number
     previousSentence: string
     prevSegmentId?: TranscriptEventSegmentDocument['_id']
     nextSequence: number
@@ -238,40 +286,130 @@ export class TranscriptEventSegmentationService {
     events: TranscriptEventDTO[]
     modelName: string
   }): Promise<PersistedTranscriptEventSegment | null> {
+    const emitProgress = this.createProgressEmitter({
+      sessionId: input.sessionId,
+      taskId: input.taskId,
+      mode: input.mode,
+      pointerEventIndex: input.sourceEndEventIndex,
+      windowStartEventIndex: input.sourceStartEventIndex,
+      windowEndEventIndex: input.sourceEndEventIndex,
+      maxEventIndex: input.maxEventIndex,
+      sequence: input.nextSequence,
+      model: input.modelName,
+    })
+
+    const extraction = extractRawNextSegment({
+      previousSentence: input.previousSentence,
+      events: input.events,
+    })
+
+    const extractedText = extraction.rawSegment || input.events.at(-1)?.content?.trim() || ''
+    if (!extractedText) {
+      this.logger.warn(
+        `Transcript event segmentation skipped: extractedText is empty, sessionId=${input.sessionId}`
+      )
+      return null
+    }
+
     const prompt = buildTranscriptEventSegmentationPrompt({
       sessionId: input.sessionId,
       previousSentence: input.previousSentence,
       startEventIndex: input.sourceStartEventIndex,
       endEventIndex: input.sourceEndEventIndex,
       events: input.events,
+      extractedText,
     })
     const promptLength = prompt.system.length + prompt.user.length
 
     try {
+      emitProgress('queued')
+      emitProgress('calling_llm')
       const raw = await this.glmClient.generateStructuredJson(prompt)
+      emitProgress('parsing')
       const parsed = parseTranscriptEventSegmentJson(raw)
 
+      const candidate = typeof parsed.nextSentence === 'string' ? parsed.nextSentence.trim() : ''
+      const normalizedCandidate = normalizeForPunctuationOnlyCompare(candidate)
+      const normalizedExtracted = normalizeForPunctuationOnlyCompare(extractedText)
+
+      let nextSentence = ''
+      let persistStatus: TranscriptEventSegmentDTO['status'] = 'completed'
+      let persistError: string | undefined
+      if (candidate && normalizedCandidate === normalizedExtracted) {
+        nextSentence = candidate
+      } else {
+        const retryPrompt = buildTranscriptEventSegmentationPrompt({
+          sessionId: input.sessionId,
+          previousSentence: input.previousSentence,
+          startEventIndex: input.sourceStartEventIndex,
+          endEventIndex: input.sourceEndEventIndex,
+          events: input.events,
+          extractedText,
+          strictEcho: true,
+        })
+        const retryRaw = await this.glmClient.generateStructuredJson(retryPrompt)
+        const retryParsed = parseTranscriptEventSegmentJson(retryRaw)
+        const retryCandidate =
+          typeof retryParsed.nextSentence === 'string' ? retryParsed.nextSentence.trim() : ''
+
+        const extractedTrimmed = extractedText.trim()
+        if (retryCandidate && retryCandidate.trim() === extractedTrimmed) {
+          nextSentence = extractedTrimmed
+        } else {
+          nextSentence = extractedTrimmed
+          persistStatus = 'failed'
+          persistError = 'LLM 输出未能满足约束，已降级为 deterministic 边界截取结果'
+
+          void this.debugErrorService.recordError({
+            sessionId: input.sessionId,
+            level: 'warn',
+            message: 'Transcript event segmentation degraded: LLM output mismatch',
+            source: 'glm-api',
+            category: 'transcript-event-segmentation',
+            error: new Error('LLM 输出未能满足“只加标点不改字/逐字一致”的约束'),
+            context: {
+              model: input.modelName,
+              promptLength,
+              revision: input.sourceRevision,
+              startEventIndex: input.sourceStartEventIndex,
+              endEventIndex: input.sourceEndEventIndex,
+              extractedText: extractedTrimmed,
+              llmCandidate: candidate,
+              llmRetryCandidate: retryCandidate,
+            },
+            occurredAt: new Date(),
+          })
+        }
+      }
+
+      emitProgress('persisting')
       const created = await this.segmentModel.create({
         sessionId: input.sessionId,
         sequence: input.nextSequence,
-        content: parsed.nextSentence,
+        content: nextSentence,
         sourceStartEventIndex: input.sourceStartEventIndex,
         sourceEndEventIndex: input.sourceEndEventIndex,
         sourceRevision: input.sourceRevision,
         prevSegmentId: input.prevSegmentId,
-        status: 'completed',
+        status: persistStatus,
+        error: persistError,
         model: input.modelName,
+        promptSystem: prompt.system,
+        promptUser: prompt.user,
+        promptLength,
         generatedAt: new Date(),
       })
 
       const dto = this.toDTO(created)
       this.emitSegmentUpdate(dto)
+      emitProgress('completed')
       return { dto, createdId: created._id }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.logger.warn(
         `Transcript event segmentation failed, sessionId=${input.sessionId}: ${message}`
       )
+      emitProgress('failed', message)
       const glmErrorContext = this.buildGlmErrorContext(error)
       void this.debugErrorService.recordError({
         sessionId: input.sessionId,
@@ -329,6 +467,9 @@ export class TranscriptEventSegmentationService {
 
       const created = await this.generateAndPersistSegment({
         sessionId,
+        taskId: this.createTaskId(),
+        mode: 'rebuild',
+        maxEventIndex: cappedEnd,
         previousSentence,
         prevSegmentId,
         nextSequence,
