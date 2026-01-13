@@ -8,6 +8,7 @@ export type ParsedTranscriptAnalysis = {
     startEventIndex?: number
     endEventIndex?: number
     content?: string
+    correctedContent?: string // 新增：GLM 纠正后的内容
   }>
 }
 
@@ -86,12 +87,19 @@ export function validateAndNormalizeDialogues(input: {
       containsTarget = true
     }
 
+    const content = buildContentByRange(eventsByIndex, start, end)
+    const correctedContent =
+      typeof item.correctedContent === 'string' && item.correctedContent.trim()
+        ? item.correctedContent
+        : content
+
     normalized.push({
       speakerId: first.speakerId,
       speakerName: first.speakerName,
       startEventIndex: start,
       endEventIndex: end,
-      content: buildContentByRange(eventsByIndex, start, end),
+      content,
+      correctedContent,
     })
 
     previousEnd = end

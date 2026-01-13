@@ -6,17 +6,90 @@
 import { AudioCaptureService, audioCapture, type AudioDataCallback } from './audioCapture'
 import { websocket, type ConnectionStatus, type LegacyTranscriptData, type TranscriptMessage } from './websocket'
 import type { Speech } from './api'
+import type { AsrConfig } from '../types'
 
 export interface TranscriptionConfig {
   sessionId: string
   language?: string
   model?: string
+  asrConfig?: Partial<AsrConfig>
   speakerId?: string
   speakerName?: string
   onTranscript?: (transcript: Speech) => void
   onError?: (error: Error) => void
   onStatusChange?: (status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error') => void
   onConnectionStatusChange?: (status: ConnectionStatus) => void
+}
+
+export const DEFAULT_ASR_CONFIG: AsrConfig = {
+  bufferDurationMs: 3000,
+  minAudioLengthMs: 500,
+  language: 'zh',
+}
+
+export interface VadConfig {
+  startThreshold: number
+  stopThreshold: number
+  gapMs: number
+  confirmMs: number
+}
+
+const DEFAULT_VAD_CONFIG: VadConfig = {
+  startThreshold: Number(import.meta.env.VITE_TRANSCRIPT_VAD_START_TH ?? 0.015),
+  stopThreshold: Number(import.meta.env.VITE_TRANSCRIPT_VAD_STOP_TH ?? 0.01),
+  gapMs: Number(import.meta.env.VITE_TRANSCRIPT_VAD_GAP_MS ?? 900),
+  confirmMs: Number(import.meta.env.VITE_TRANSCRIPT_VAD_CONFIRM_MS ?? 500),
+}
+
+const vadConfig: VadConfig = { ...DEFAULT_VAD_CONFIG }
+
+export const getVadConfig = (): VadConfig => ({ ...vadConfig })
+
+export const applyVadConfig = (partial?: Partial<VadConfig>): VadConfig => {
+  if (!partial) return getVadConfig()
+
+  const normalize = (value: unknown, fallback: number, min?: number): number => {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && (min === undefined || parsed >= min)) {
+      return parsed
+    }
+    return fallback
+  }
+
+  vadConfig.startThreshold = normalize(partial.startThreshold, vadConfig.startThreshold, 0)
+  vadConfig.stopThreshold = normalize(partial.stopThreshold, vadConfig.stopThreshold, 0)
+  vadConfig.gapMs = normalize(partial.gapMs, vadConfig.gapMs, 0)
+  vadConfig.confirmMs = normalize(partial.confirmMs, vadConfig.confirmMs, 0)
+  return getVadConfig()
+}
+
+const resolveAsrLanguage = (input?: string): AsrConfig['language'] => {
+  if (!input) return DEFAULT_ASR_CONFIG.language
+  const normalized = input.trim().toLowerCase()
+  if (normalized === 'zh-cn' || normalized === 'zh_cn' || normalized === 'zh-hans') {
+    return 'zh'
+  }
+  if (normalized === 'zh' || normalized === 'en' || normalized === 'yue' || normalized === 'auto') {
+    return normalized
+  }
+  return DEFAULT_ASR_CONFIG.language
+}
+
+const resolveAsrConfig = (config: TranscriptionConfig): AsrConfig => {
+  const asrConfig = config.asrConfig ?? {}
+  return {
+    bufferDurationMs:
+      typeof asrConfig.bufferDurationMs === 'number'
+        ? asrConfig.bufferDurationMs
+        : DEFAULT_ASR_CONFIG.bufferDurationMs,
+    minAudioLengthMs:
+      typeof asrConfig.minAudioLengthMs === 'number'
+        ? asrConfig.minAudioLengthMs
+        : DEFAULT_ASR_CONFIG.minAudioLengthMs,
+    language: resolveAsrLanguage(asrConfig.language ?? config.language),
+    hotwords: asrConfig.hotwords,
+    prompt: asrConfig.prompt,
+  }
 }
 
 export class TranscriptionService {
@@ -78,8 +151,8 @@ export class TranscriptionService {
 
       // 开始转写
       websocket.startTranscribe({
-        language: config.language || 'zh-CN',
         model: config.model || 'doubao',
+        asrConfig: resolveAsrConfig(config),
       })
 
       // 开始音频捕获
@@ -143,11 +216,12 @@ export class TranscriptionService {
    */
   private async startAudioCapture(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const vadStartThreshold = Number(import.meta.env.VITE_TRANSCRIPT_VAD_START_TH ?? 0.015)
-      const vadStopThreshold = Number(import.meta.env.VITE_TRANSCRIPT_VAD_STOP_TH ?? 0.01)
-      const vadGapMs = Number(import.meta.env.VITE_TRANSCRIPT_VAD_GAP_MS ?? 900)
+      const currentVad = getVadConfig()
+      const vadStartThreshold = currentVad.startThreshold
+      const vadStopThreshold = currentVad.stopThreshold
+      const vadGapMs = currentVad.gapMs
       // 确认延迟：检测到静音后再等待一段时间，确认是否真的结束了
-      const vadConfirmMs = Number(import.meta.env.VITE_TRANSCRIPT_VAD_CONFIRM_MS ?? 500)
+      const vadConfirmMs = currentVad.confirmMs
 
       // VAD 状态机
       type VADState = 'idle' | 'speaking' | 'confirming'

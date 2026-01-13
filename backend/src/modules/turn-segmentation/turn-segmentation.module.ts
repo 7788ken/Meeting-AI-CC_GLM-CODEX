@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { HttpModule } from '@nestjs/axios'
 import { MongooseModule } from '@nestjs/mongoose'
 import { TranscriptStreamModule } from '../transcript-stream/transcript-stream.module'
+import { DebugErrorModule } from '../debug-error/debug-error.module'
 import { TurnSegmentationController } from './turn-segmentation.controller'
 import { TurnSegmentationGlmClient } from './turn-segmentation.glm-client'
 import { TurnSegmentationService } from './turn-segmentation.service'
@@ -11,6 +12,7 @@ import { TurnSegments, TurnSegmentsSchema } from './schemas/turn-segments.schema
   imports: [
     HttpModule,
     TranscriptStreamModule,
+    DebugErrorModule,
     MongooseModule.forFeature([{ name: TurnSegments.name, schema: TurnSegmentsSchema }]),
   ],
   controllers: [TurnSegmentationController],

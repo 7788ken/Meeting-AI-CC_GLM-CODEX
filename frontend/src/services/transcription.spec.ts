@@ -123,8 +123,12 @@ describe('TranscriptionService', () => {
       expect(mockWebsocket.connect).toHaveBeenCalled()
       expect(mockWebsocket.setSession).toHaveBeenCalledWith(mockConfig.sessionId)
       expect(mockWebsocket.startTranscribe).toHaveBeenCalledWith({
-        language: 'zh-CN',
         model: 'doubao',
+        asrConfig: {
+          bufferDurationMs: 3000,
+          minAudioLengthMs: 500,
+          language: 'zh',
+        },
       })
       expect(audioCaptureModule.audioCapture.startCapture).toHaveBeenCalled()
       expect(service.getStatus()).toBe('recording')
@@ -156,8 +160,12 @@ describe('TranscriptionService', () => {
       })
 
       expect(mockWebsocket.startTranscribe).toHaveBeenCalledWith({
-        language: 'zh-CN',
         model: 'doubao',
+        asrConfig: {
+          bufferDurationMs: 3000,
+          minAudioLengthMs: 500,
+          language: 'zh',
+        },
       })
     })
 

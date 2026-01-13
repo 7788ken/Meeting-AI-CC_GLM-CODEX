@@ -8,8 +8,12 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter'
 import * as http from 'http'
 import * as WebSocket from 'ws'
 import { TranscriptService } from './modules/transcript/transcript.service'
+import { SmartAudioBufferService } from './modules/transcript/smart-audio-buffer.service'
+import { GlmAsrClient } from './modules/transcript/glm-asr.client'
+import type { AsrConfigDto } from './modules/transcript/dto/transcript.dto'
 import { TranscriptStreamService } from './modules/transcript-stream/transcript-stream.service'
 import { TurnSegmentationService } from './modules/turn-segmentation/turn-segmentation.service'
+import { DebugErrorService } from './modules/debug-error/debug-error.service'
 import {
   TranscriptAnalysisService,
   TranscriptAnalysisUpsertData,
@@ -17,6 +21,12 @@ import {
 import { TranscriptAnalysisGlmClient } from './modules/transcript-analysis/transcript-analysis.glm-client'
 import { TranscriptAnalysisChunk } from './modules/transcript-analysis/schemas/transcript-analysis-chunk.schema'
 import { TranscriptAnalysisState } from './modules/transcript-analysis/schemas/transcript-analysis-state.schema'
+import {
+  TranscriptEventSegmentationService,
+  TranscriptEventSegmentDTO,
+} from './modules/transcript-event-segmentation/transcript-event-segmentation.service'
+import { TranscriptEventSegmentationGlmClient } from './modules/transcript-event-segmentation/transcript-event-segmentation.glm-client'
+import { TranscriptEventSegment } from './modules/transcript-event-segmentation/schemas/transcript-event-segment.schema'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { SpeakerService } from './modules/speech/speaker.service'
@@ -71,6 +81,7 @@ async function bootstrap() {
     .addTag('speeches', '发言记录')
     .addTag('analysis', 'AI分析')
     .addTag('transcript', '实时转写')
+    .addTag('transcript-event-segmentation', '语句拆分')
     .addTag('debug-errors', '会话调试报错')
     .addBearerAuth()
     .build()
@@ -101,10 +112,13 @@ async function bootstrap() {
 
   // 获取 TranscriptService 用于处理音频数据
   const transcriptService = app.get(TranscriptService)
+  const smartAudioBufferService = app.get(SmartAudioBufferService)
+  const glmAsrClient = app.get(GlmAsrClient)
   const speechService = app.get(SpeechService)
   const speakerService = app.get(SpeakerService)
   const transcriptStreamService = app.get(TranscriptStreamService)
   const turnSegmentationService = app.get(TurnSegmentationService)
+  const debugErrorService = app.get(DebugErrorService)
   const transcriptAnalysisChunkModel = app.get(getModelToken(TranscriptAnalysisChunk.name))
   const transcriptAnalysisStateModel = app.get(getModelToken(TranscriptAnalysisState.name))
   const transcriptAnalysisGlmClient = app.get(TranscriptAnalysisGlmClient)
@@ -113,6 +127,7 @@ async function bootstrap() {
     transcriptAnalysisStateModel,
     transcriptStreamService,
     transcriptAnalysisGlmClient,
+    debugErrorService,
     configService,
     (data: TranscriptAnalysisUpsertData) => {
       broadcastToSession(data.sessionId, {
@@ -121,10 +136,28 @@ async function bootstrap() {
       })
     }
   )
+  const transcriptEventSegmentModel = app.get(getModelToken(TranscriptEventSegment.name))
+  const transcriptEventSegmentationGlmClient = app.get(TranscriptEventSegmentationGlmClient)
+  const transcriptEventSegmentationService = new TranscriptEventSegmentationService(
+    transcriptEventSegmentModel,
+    transcriptStreamService,
+    transcriptEventSegmentationGlmClient,
+    debugErrorService,
+    configService,
+    (data: TranscriptEventSegmentDTO) => {
+      broadcastToSession(data.sessionId, {
+        type: 'transcript_event_segment_upsert',
+        data,
+      })
+    }
+  )
 
   const transcriptPipeline = process.env.TRANSCRIPT_PIPELINE || 'raw_llm'
   const rawEventStreamEnabled = true // 默认启用原文事件流
-  const turnSegmentationEnabled = rawEventStreamEnabled
+  const turnSegmentationEnabled =
+    rawEventStreamEnabled &&
+    ((process.env.TRANSCRIPT_SEGMENT_ENABLED || '').trim().toLowerCase() === '1' ||
+      (process.env.TRANSCRIPT_SEGMENT_ENABLED || '').trim().toLowerCase() === 'true')
 
   // WebSocket Logger
   const wsLogger = new Logger('WebSocket')
@@ -134,6 +167,8 @@ async function bootstrap() {
   // 使用 Map 代替 WeakMap，确保 clientId 在连接期间保持稳定
   const clientIds = new Map<WebSocket, string>()
   const audioStarted = new WeakSet<WebSocket>()
+  const modelByClientId = new Map<string, string>()
+  const glmQueueByClientId = new Map<string, Promise<void>>()
 
   const sessionClients = new Map<string, Set<WebSocket>>()
   const activeSpeechByClientId = new Map<
@@ -179,9 +214,24 @@ async function bootstrap() {
   const triggerSegmentationOnStopTranscribe =
     process.env.TRANSCRIPT_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE !== '0'
 
+  const transcriptEventSegmentationTimerBySession = new Map<string, ReturnType<typeof setTimeout>>()
+  const transcriptEventSegmentationInFlight = new Set<string>()
+  const transcriptEventSegmentationPending = new Set<string>()
+  const transcriptEventSegmentationIntervalMs = readNumberFromEnv(
+    'TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS',
+    3000,
+    value => value >= 0 && value <= 10 * 60 * 1000
+  )
+  const triggerEventSegmentationOnEndTurn =
+    process.env.TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_END_TURN !== '0'
+  const triggerEventSegmentationOnStopTranscribe =
+    process.env.TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE !== '0'
+
   wss.on('connection', (ws: WebSocket) => {
     const clientId = createClientId()
     clientIds.set(ws, clientId)
+    modelByClientId.set(clientId, 'doubao')
+    smartAudioBufferService.updateConfig(clientId)
     wsLogger.log(`Client connected, clientId: ${clientId}`)
 
     ws.on('message', async (data: Buffer) => {
@@ -213,6 +263,7 @@ async function bootstrap() {
                 segmentKeyContentBySessionClient.delete(
                   getSegmentKeyMapKey(previousSessionId, clientId)
                 )
+                smartAudioBufferService.flush(clientId)
               }
 
               clientSessions.set(ws, nextSessionId)
@@ -291,12 +342,21 @@ async function bootstrap() {
             break
 
           case 'start_transcribe':
-            ws.send(
-              JSON.stringify({
-                type: 'status',
-                data: { status: 'transcribe_started' },
-              })
-            )
+            {
+              const clientId = getClientId(ws)
+              if (clientId) {
+                const model = resolveAsrModel(message?.model)
+                modelByClientId.set(clientId, model)
+                const asrConfig = readAsrConfig(message)
+                smartAudioBufferService.updateConfig(clientId, asrConfig)
+              }
+              ws.send(
+                JSON.stringify({
+                  type: 'status',
+                  data: { status: 'transcribe_started' },
+                })
+              )
+            }
             break
 
           case 'stop_transcribe':
@@ -304,7 +364,32 @@ async function bootstrap() {
               const clientId = getClientId(ws)
               if (clientId) {
                 const sessionId = clientSessions.get(ws)
-                if (turnModeEnabled) {
+                const model = resolveClientModel(clientId)
+                if (!turnModeEnabled && model === 'glm') {
+                  if (sessionId) {
+                    const flushed = smartAudioBufferService.flush(clientId, { force: true })
+                    if (flushed.buffer) {
+                      await enqueueGlmTranscription(sessionId, clientId, flushed.buffer)
+                    } else {
+                      const pending = glmQueueByClientId.get(clientId)
+                      if (pending) {
+                        await pending
+                      }
+                      await finalizeActiveSpeechForClient(clientId)
+                    }
+
+                    if (triggerSegmentationOnStopTranscribe) {
+                      triggerTurnSegmentationNow(sessionId, 'stop_transcribe')
+                    }
+                    if (triggerEventSegmentationOnStopTranscribe) {
+                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
+                    }
+                    triggerTranscriptAnalysisNow(sessionId)
+                  } else {
+                    smartAudioBufferService.flush(clientId)
+                    await finalizeActiveSpeechForClient(clientId)
+                  }
+                } else if (turnModeEnabled) {
                   if (sessionId) {
                     await finalizeTurnForClient(sessionId, clientId)
                   } else {
@@ -336,6 +421,9 @@ async function bootstrap() {
                     if (triggerSegmentationOnStopTranscribe) {
                       triggerTurnSegmentationNow(sessionId, 'stop_transcribe')
                     }
+                    if (triggerEventSegmentationOnStopTranscribe) {
+                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
+                    }
                     triggerTranscriptAnalysisNow(sessionId)
                   } else {
                     // 没有返回转写结果，也要关闭当前活跃段落，避免前端一直认为该段落未结束
@@ -366,7 +454,20 @@ async function bootstrap() {
                 break
               }
 
-              if (turnModeEnabled) {
+              const model = resolveClientModel(clientId)
+
+              if (!turnModeEnabled && model === 'glm') {
+                const flushed = smartAudioBufferService.flush(clientId, { force: true })
+                if (flushed.buffer) {
+                  await enqueueGlmTranscription(sessionId, clientId, flushed.buffer)
+                } else {
+                  const pending = glmQueueByClientId.get(clientId)
+                  if (pending) {
+                    await pending
+                  }
+                  await finalizeActiveSpeechForClient(clientId)
+                }
+              } else if (turnModeEnabled) {
                 await finalizeTurnForClient(sessionId, clientId)
               } else {
                 const result = await transcriptService.finalizeAudio(clientId, sessionId, {
@@ -396,6 +497,9 @@ async function bootstrap() {
               }
               if (triggerSegmentationOnEndTurn) {
                 triggerTurnSegmentationNow(sessionId, 'end_turn')
+              }
+              if (triggerEventSegmentationOnEndTurn) {
+                triggerTranscriptEventSegmentationNow(sessionId, 'end_turn')
               }
               triggerTranscriptAnalysisNow(sessionId)
               ws.send(
@@ -449,6 +553,15 @@ async function bootstrap() {
             return
           }
 
+          const model = resolveClientModel(clientId)
+          if (model === 'glm') {
+            const appended = smartAudioBufferService.appendAudio(clientId, data as Buffer)
+            if (appended.buffer) {
+              void enqueueGlmTranscription(sessionId, clientId, appended.buffer)
+            }
+            return
+          }
+
           const result = await transcriptService.processBinaryAudio(
             clientId,
             data as Buffer,
@@ -495,6 +608,9 @@ async function bootstrap() {
       if (clientId) {
         transcriptService.removeClient(clientId)
         turnDetectorByClientId.delete(clientId)
+        smartAudioBufferService.clear(clientId)
+        modelByClientId.delete(clientId)
+        glmQueueByClientId.delete(clientId)
         void finalizeActiveSpeechForClient(clientId)
       }
       const sessionId = clientSessions.get(ws)
@@ -517,6 +633,141 @@ async function bootstrap() {
   // 获取客户端 ID（不再动态创建，确保会话稳定性）
   function getClientId(ws: WebSocket): string | null {
     return clientIds.get(ws) || null
+  }
+
+  function resolveAsrModel(raw: unknown): string {
+    if (typeof raw !== 'string') return 'doubao'
+    const normalized = raw.trim().toLowerCase()
+    return normalized || 'doubao'
+  }
+
+  function resolveClientModel(clientId: string): string {
+    return resolveAsrModel(modelByClientId.get(clientId))
+  }
+
+  function readAsrConfig(message: Record<string, unknown>): Partial<AsrConfigDto> {
+    const rawConfig =
+      message.asrConfig && typeof message.asrConfig === 'object'
+        ? (message.asrConfig as Record<string, unknown>)
+        : {}
+
+    return {
+      bufferDurationMs: readNumber(rawConfig.bufferDurationMs ?? message.bufferDurationMs),
+      minAudioLengthMs: readNumber(rawConfig.minAudioLengthMs ?? message.minAudioLengthMs),
+      language: readString(rawConfig.language ?? message.language),
+      hotwords: readStringArray(rawConfig.hotwords ?? message.hotwords),
+      prompt: readString(rawConfig.prompt ?? message.prompt),
+    }
+  }
+
+  function readNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : undefined
+    }
+    return undefined
+  }
+
+  function readString(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined
+    const trimmed = value.trim()
+    return trimmed ? trimmed : undefined
+  }
+
+  function readStringArray(value: unknown): string[] | undefined {
+    if (!Array.isArray(value)) return undefined
+    const filtered = value.filter(item => typeof item === 'string') as string[]
+    return filtered.length > 0 ? filtered : undefined
+  }
+
+  function enqueueGlmTranscription(
+    sessionId: string,
+    clientId: string,
+    audioBuffer: Buffer
+  ): Promise<void> {
+    const task = async () => {
+      await processGlmBuffer(sessionId, clientId, audioBuffer)
+    }
+
+    const previous = glmQueueByClientId.get(clientId) ?? Promise.resolve()
+    const next = previous
+      .then(task)
+      .catch(error => {
+        const message = error instanceof Error ? error.message : String(error)
+        wsLogger.error(`GLM ASR failed, clientId=${clientId}: ${message}`)
+        sendErrorToClient(clientId, message)
+      })
+      .finally(() => {
+        if (glmQueueByClientId.get(clientId) === next) {
+          glmQueueByClientId.delete(clientId)
+        }
+      })
+
+    glmQueueByClientId.set(clientId, next)
+    return next
+  }
+
+  async function processGlmBuffer(
+    sessionId: string,
+    clientId: string,
+    audioBuffer: Buffer
+  ): Promise<void> {
+    const config = smartAudioBufferService.getConfig(clientId)
+    const fallbackSegmentKey = `glm:${clientId}:${Date.now()}:${Math.random()
+      .toString(36)
+      .slice(2, 10)}`
+    let segmentKey: string | undefined
+
+    for await (const chunk of glmAsrClient.transcribeStream(audioBuffer, {
+      language: config.language,
+      hotwords: config.hotwords,
+      prompt: config.prompt,
+    })) {
+      if (!segmentKey) {
+        segmentKey = chunk.requestId ? `glm:${chunk.requestId}` : fallbackSegmentKey
+      }
+
+      if (!chunk.text) {
+        if (chunk.isFinal) {
+          await finalizeActiveSpeechForClient(clientId)
+        }
+        continue
+      }
+
+      const speakerMeta = ensureSpeakerMeta(sessionId, clientId)
+      await persistAndBroadcastTranscript(sessionId, clientId, {
+        content: chunk.text,
+        confidence: 0,
+        isFinal: chunk.isFinal,
+        speakerId: speakerMeta.speakerId,
+        speakerName: speakerMeta.speakerName,
+        segmentKey,
+      })
+
+      await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
+        content: chunk.text,
+        isFinal: chunk.isFinal,
+        speakerId: speakerMeta.speakerId,
+        speakerName: speakerMeta.speakerName,
+        segmentKey,
+        asrTimestampMs: Date.now(),
+      })
+    }
+  }
+
+  function sendErrorToClient(clientId: string, error: string): void {
+    for (const [ws, id] of clientIds.entries()) {
+      if (id !== clientId) continue
+      if (ws.readyState !== WebSocket.OPEN) continue
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          data: { error },
+        })
+      )
+      return
+    }
   }
 
   function createClientId(): string {
@@ -1054,6 +1305,7 @@ async function bootstrap() {
 
       scheduleTurnSegmentation(sessionId)
       transcriptAnalysisService.schedule(sessionId)
+      scheduleTranscriptEventSegmentation(sessionId)
     } catch (error) {
       wsLogger.warn(
         `Persist transcript event failed, sessionId=${sessionId}, clientId=${clientId}: ${
@@ -1083,6 +1335,26 @@ async function bootstrap() {
     turnSegmentationTimerBySession.set(sessionId, timer)
   }
 
+  function scheduleTranscriptEventSegmentation(sessionId: string): void {
+    if (!rawEventStreamEnabled) return
+    if (!transcriptEventSegmentationIntervalMs || transcriptEventSegmentationIntervalMs <= 0) {
+      void runTranscriptEventSegmentation(sessionId, { force: false, reason: 'interval_disabled' })
+      return
+    }
+
+    const existing = transcriptEventSegmentationTimerBySession.get(sessionId)
+    if (existing) {
+      clearTimeout(existing)
+    }
+
+    const timer = setTimeout(() => {
+      transcriptEventSegmentationTimerBySession.delete(sessionId)
+      void runTranscriptEventSegmentation(sessionId, { force: false, reason: 'debounce' })
+    }, transcriptEventSegmentationIntervalMs)
+
+    transcriptEventSegmentationTimerBySession.set(sessionId, timer)
+  }
+
   function triggerTurnSegmentationNow(sessionId: string, reason: string): void {
     if (!turnSegmentationEnabled) return
 
@@ -1093,6 +1365,18 @@ async function bootstrap() {
     }
 
     void runTurnSegmentation(sessionId, { force: true, reason })
+  }
+
+  function triggerTranscriptEventSegmentationNow(sessionId: string, reason: string): void {
+    if (!rawEventStreamEnabled) return
+
+    const existing = transcriptEventSegmentationTimerBySession.get(sessionId)
+    if (existing) {
+      clearTimeout(existing)
+      transcriptEventSegmentationTimerBySession.delete(sessionId)
+    }
+
+    void runTranscriptEventSegmentation(sessionId, { force: true, reason })
   }
 
   function triggerTranscriptAnalysisNow(sessionId: string): void {
@@ -1151,6 +1435,35 @@ async function bootstrap() {
       turnSegmentationInFlight.delete(sessionId)
       if (turnSegmentationPending.delete(sessionId)) {
         void runTurnSegmentation(sessionId, { force: false, reason: 'pending' })
+      }
+    }
+  }
+
+  async function runTranscriptEventSegmentation(
+    sessionId: string,
+    input: { force: boolean; reason: string }
+  ): Promise<void> {
+    if (transcriptEventSegmentationInFlight.has(sessionId)) {
+      transcriptEventSegmentationPending.add(sessionId)
+      return
+    }
+
+    transcriptEventSegmentationInFlight.add(sessionId)
+    try {
+      await transcriptEventSegmentationService.generateNextSegment({
+        sessionId,
+        force: input.force,
+      })
+    } catch (error) {
+      wsLogger.warn(
+        `Transcript event segmentation task failed, sessionId=${sessionId}, reason=${input.reason}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    } finally {
+      transcriptEventSegmentationInFlight.delete(sessionId)
+      if (transcriptEventSegmentationPending.delete(sessionId)) {
+        void runTranscriptEventSegmentation(sessionId, { force: false, reason: 'pending' })
       }
     }
   }

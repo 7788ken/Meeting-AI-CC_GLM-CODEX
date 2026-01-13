@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config'
 import { TranscriptResultDto } from './dto/transcript.dto'
 import { DoubaoClientManager } from './doubao.client'
 import { DoubaoDecodedMessage } from './doubao.codec'
+import { SmartAudioBufferService } from './smart-audio-buffer.service'
 
 // Socket.IO 的 Socket 类型（使用 any 简化类型）
 type Socket = any
@@ -24,7 +25,8 @@ export class TranscriptService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly doubaoClientManager: DoubaoClientManager
+    private readonly doubaoClientManager: DoubaoClientManager,
+    private readonly smartAudioBufferService: SmartAudioBufferService
   ) {}
 
   addClient(clientId: string, socket: any) {
@@ -33,7 +35,75 @@ export class TranscriptService {
 
   removeClient(clientId: string) {
     this.clients.delete(clientId)
+    this.smartAudioBufferService.clear(clientId)
     void this.doubaoClientManager.close(clientId)
+  }
+
+  async processAudioWithBuffer(
+    clientId: string,
+    audioData: string,
+    sessionId: string,
+    isFinal = false,
+    options?: TranscriptProcessOptions
+  ): Promise<TranscriptResultDto | null> {
+    try {
+      const client = this.doubaoClientManager.getOrCreate(clientId, sessionId)
+      const audioBuffer = this.decodeAudioData(audioData)
+
+      if (!audioBuffer.length && !isFinal) {
+        this.logger.warn(`Empty audio data, clientId=${clientId}`)
+        return null
+      }
+
+      const appended = this.smartAudioBufferService.appendAudio(clientId, audioBuffer)
+      let bufferToSend = appended.buffer
+      let reason = appended.reason
+      let durationMs = appended.durationMs
+      let sendFinal = false
+
+      if (isFinal) {
+        if (!bufferToSend) {
+          const flushed = this.smartAudioBufferService.flush(clientId)
+          bufferToSend = flushed.buffer
+          reason = flushed.reason
+          durationMs = flushed.durationMs
+        }
+        sendFinal = true
+      }
+
+      if (!bufferToSend && !sendFinal) {
+        return null
+      }
+
+      if (bufferToSend && reason !== 'insufficient_audio') {
+        this.logger.debug(
+          `ASR flush trigger: clientId=${clientId}, reason=${reason}, durationMs=${durationMs}`
+        )
+      }
+
+      await client.sendAudio(bufferToSend ?? Buffer.alloc(0), sendFinal)
+
+      const response = await client.nextResponse(this.getResponseTimeoutMs())
+      if (!response) {
+        this.logger.debug(`No response within timeout, clientId=${clientId}`)
+        return null
+      }
+
+      return this.buildTranscriptResult(response, sessionId, clientId)
+    } catch (error) {
+      this.logger.error(
+        `Doubao ASR failed, clientId=${clientId}`,
+        error instanceof Error ? error.stack : String(error)
+      )
+      if (options?.propagateError) {
+        throw error instanceof Error ? error : new Error(String(error))
+      }
+      return null
+    } finally {
+      if (isFinal) {
+        await this.doubaoClientManager.close(clientId)
+      }
+    }
   }
 
   async processAudio(
@@ -88,15 +158,18 @@ export class TranscriptService {
     options?: TranscriptProcessOptions
   ): Promise<TranscriptResultDto | null> {
     try {
-      const client = this.doubaoClientManager.getOrCreate(clientId, sessionId)
+      const appended = this.smartAudioBufferService.appendAudio(clientId, audioBuffer)
 
-      if (!audioBuffer.length) {
-        this.logger.debug(`Empty binary audio data, clientId=${clientId}`)
+      if (!appended.buffer) {
         return null
       }
 
-      // 直接发送 PCM 数据到豆包 ASR
-      await client.sendAudio(audioBuffer, false)
+      this.logger.debug(
+        `ASR flush trigger: clientId=${clientId}, reason=${appended.reason}, durationMs=${appended.durationMs}`
+      )
+
+      const client = this.doubaoClientManager.getOrCreate(clientId, sessionId)
+      await client.sendAudio(appended.buffer, false)
 
       const response = await client.nextResponse(this.getResponseTimeoutMs())
       if (!response) {

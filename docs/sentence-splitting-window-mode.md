@@ -1,4 +1,4 @@
-# 语义分段窗口模式设计
+# 语句拆分窗口模式设计
 
 > 创建时间: 2026-01-13
 > 来源: Claude Code + Codex CLI + 用户讨论
@@ -106,7 +106,7 @@ const { dialogues } = await this.analyzeEventsWithWindow({
 
 ```typescript
 const system = [
-  '你是"会议语义分段器"。你的任务是：判断目标事件是否应与前后事件合并。',
+  '你是"会议语句拆分器"。你的任务是：判断目标事件是否应与前后事件合并。',
   '',
   '输入：',
   '- windowEvents: 窗口内所有事件（含前后文）',

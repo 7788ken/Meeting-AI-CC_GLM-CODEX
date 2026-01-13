@@ -49,6 +49,15 @@
 
         <el-button
           size="small"
+          circle
+          class="settings-trigger"
+          @click="settingsDrawerVisible = true"
+        >
+          <el-icon><Setting /></el-icon>
+        </el-button>
+
+        <el-button
+          size="small"
           type="warning"
           plain
           class="debug-trigger"
@@ -94,18 +103,11 @@
       <!-- 下左：GLM 拆分后的独立发言 -->
       <section class="transcript-panel">
       <div class="panel-header">
-        <h2>语义分段</h2>
+        <h2>语句拆分</h2>
       </div>
 
       <div class="transcript-content">
-        <TurnSegmentsPanel
-          :status="turnSegmentationStore.status"
-          :revision="turnSegmentationStore.revision"
-          :targetRevision="turnSegmentationStore.targetRevision"
-          :segments="turnSegmentationStore.segments"
-          :error="turnSegmentationStore.status === 'failed' ? turnSegmentationStore.error : ''"
-          :getTextByRange="transcriptStreamStore.getTextByRange"
-        />
+        <TranscriptEventSegmentsPanel :segments="transcriptEventSegmentationStore.segments" />
       </div>
     </section>
 
@@ -146,6 +148,7 @@
     </section>
     </div>
 
+    <SettingsDrawer v-model="settingsDrawerVisible" />
     <DebugDrawer v-model="debugDrawerVisible" :session-id="sessionId" />
   </MainLayout>
 </template>
@@ -154,20 +157,24 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Setting } from '@element-plus/icons-vue'
 import { sessionApi, speechApi, analysisApi, type Session, type Speech, type AIAnalysis } from '@/services/api'
 import { exportAnalysis as exportAnalysisService, type ExportFormat } from '@/services/export'
 import { transcription } from '@/services/transcription'
 import type { ConnectionStatus } from '@/services/websocket'
 import { useTranscriptStreamStore } from '@/stores/transcriptStream'
-import { useTurnSegmentationStore } from '@/stores/turnSegmentation'
+import { useTranscriptEventSegmentationStore } from '@/stores/transcriptEventSegmentation'
+import { useAppSettings } from '@/composables/useAppSettings'
 import MainLayout from '@/components/MainLayout.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import RecordButton from '@/components/RecordButton.vue'
-import TurnSegmentsPanel from '@/components/TurnSegmentsPanel.vue'
+import TranscriptEventSegmentsPanel from '@/components/TranscriptEventSegmentsPanel.vue'
 import DebugDrawer from '@/components/DebugDrawer.vue'
+import SettingsDrawer from '@/components/SettingsDrawer.vue'
 
 const router = useRouter()
 const route = useRoute()
+const { settings, updateSettings } = useAppSettings()
 
 // 状态
 const sessionId = ref<string>('')
@@ -178,14 +185,15 @@ const currentAnalysis = ref<AIAnalysis | null>(null)
 const analysisLoading = ref(false)
 const recordingStatus = ref<'idle' | 'connecting' | 'recording' | 'paused' | 'error'>('idle')
 const isPaused = ref(false)
-const selectedAnalysisType = ref<string>('summary')
+const selectedAnalysisType = ref<string>(settings.value.analysisType || 'summary')
 const transcriptRef = ref<HTMLElement>()
 const endingSession = ref(false)
 const sessionEndedOverride = ref(false)
 const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 const debugDrawerVisible = ref(false)
+const settingsDrawerVisible = ref(false)
 const transcriptStreamStore = useTranscriptStreamStore()
-const turnSegmentationStore = useTurnSegmentationStore()
+const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
 
 // 计算属性
 const statusText = computed(() => {
@@ -203,6 +211,10 @@ const isSessionEnded = computed(() => {
   if (sessionEndedOverride.value) return true
   if (!sessionInfo.value) return false
   return !sessionInfo.value.isActive
+})
+
+watch(selectedAnalysisType, (nextType) => {
+  updateSettings({ analysisType: nextType as any })
 })
 
 const wsReconnectTag = computed(() => {
@@ -251,18 +263,18 @@ watch(
 
     sessionId.value = nextSessionId
     transcriptStreamStore.reset()
-    turnSegmentationStore.reset()
+    transcriptEventSegmentationStore.reset()
 
     if (!sessionId.value) return
 
     // 重新绑定 WebSocket（reset 会解绑，需要重新绑定）
     transcriptStreamStore.bindWebSocket()
-    turnSegmentationStore.bindWebSocket()
+    transcriptEventSegmentationStore.bindWebSocket()
 
     await loadSession()
     await loadSpeeches()
     await transcriptStreamStore.loadSnapshot(sessionId.value)
-    await turnSegmentationStore.loadSnapshot(sessionId.value)
+    await transcriptEventSegmentationStore.loadSnapshot(sessionId.value)
   },
   { immediate: true },
 )
@@ -275,15 +287,15 @@ onMounted(async () => {
     await loadSpeeches()
     transcriptStreamStore.bindWebSocket()
     await transcriptStreamStore.loadSnapshot(sessionId.value)
-    turnSegmentationStore.bindWebSocket()
-    await turnSegmentationStore.loadSnapshot(sessionId.value)
+    transcriptEventSegmentationStore.bindWebSocket()
+    await transcriptEventSegmentationStore.loadSnapshot(sessionId.value)
   }
 })
 
 onUnmounted(() => {
   transcription.dispose()
   transcriptStreamStore.reset()
-  turnSegmentationStore.reset()
+  transcriptEventSegmentationStore.reset()
 })
 
 // 加载会话信息
@@ -378,10 +390,15 @@ async function startRecording() {
 
     recordingStatus.value = 'connecting'
 
+    // 读取 ASR 模型配置（优先使用设置面板值，回退到环境变量）
+    const asrModel = (settings.value.asrModel || import.meta.env.VITE_ASR_MODEL || 'doubao') as
+      | 'doubao'
+      | 'glm'
+
     // 设置转写服务回调
     await transcription.start({
       sessionId: sessionId.value,
-      model: 'doubao',
+      model: asrModel,
       onTranscript: (transcript: Speech) => {
         const index = speeches.value.findIndex((item) => item.id === transcript.id)
         if (index >= 0) {
@@ -528,6 +545,17 @@ function scrollToBottom() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.settings-trigger {
+  border-color: #dce4dd;
+  color: #4b6256;
+}
+
+.settings-trigger:hover {
+  background: rgba(45, 106, 79, 0.08);
+  border-color: #2d6a4f;
+  color: #2d6a4f;
 }
 
 .debug-trigger {

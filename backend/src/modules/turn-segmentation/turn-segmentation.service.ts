@@ -10,6 +10,7 @@ import {
 import { TranscriptStreamService } from '../transcript-stream/transcript-stream.service'
 import { TurnSegmentationGlmClient } from './turn-segmentation.glm-client'
 import { buildTurnSegmentationPrompt } from './turn-segmentation.prompt'
+import { DebugErrorService } from '../debug-error/debug-error.service'
 import {
   heuristicSegmentBySpeaker,
   parseTurnSegmentsJson,
@@ -45,6 +46,7 @@ export class TurnSegmentationService {
     private readonly turnSegmentsModel: Model<TurnSegmentsDocument>,
     private readonly transcriptStreamService: TranscriptStreamService,
     private readonly glmClient: TurnSegmentationGlmClient,
+    private readonly debugErrorService: DebugErrorService,
     private readonly configService: ConfigService
   ) {}
 
@@ -262,6 +264,11 @@ export class TurnSegmentationService {
     return 'glm'
   }
 
+  private readGlmModelName(): string {
+    const raw = (process.env.GLM_TURN_SEGMENT_MODEL || '').trim()
+    return raw || 'glm-4.6v-flash'
+  }
+
   private alignStartToExistingBoundary(
     segments: TurnSegmentRange[],
     startEventIndex: number
@@ -321,6 +328,8 @@ export class TurnSegmentationService {
       endEventIndex: input.endEventIndex,
       events: input.events,
     })
+    const promptLength = prompt.system.length + prompt.user.length
+    const glmModel = this.readGlmModelName()
 
     const maxAttempts = 2
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -338,16 +347,42 @@ export class TurnSegmentationService {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        this.logger.error(
-          `GLM segmentation failed, sessionId=${input.sessionId}, rev=${input.targetRevision}, attempt=${attempt}/${maxAttempts}: ${message}`,
-          error instanceof Error ? error.stack : undefined
-        )
+        const logMessage = `GLM segmentation failed, sessionId=${input.sessionId}, rev=${input.targetRevision}, attempt=${attempt}/${maxAttempts}: ${message}`
+        this.logger.error(logMessage, error instanceof Error ? error.stack : undefined)
+        void this.debugErrorService.recordError({
+          sessionId: input.sessionId,
+          level: 'error',
+          message: logMessage,
+          source: 'glm-api',
+          category: 'turn-segmentation',
+          error,
+          context: {
+            model: glmModel,
+            attempt,
+            promptLength,
+            targetRevision: input.targetRevision,
+          },
+          occurredAt: new Date(),
+        })
       }
     }
 
-    this.logger.warn(
-      `GLM segmentation fallback to heuristic, sessionId=${input.sessionId}, rev=${input.targetRevision}`
-    )
+    const warnMessage = `GLM segmentation fallback to heuristic, sessionId=${input.sessionId}, rev=${input.targetRevision}`
+    this.logger.warn(warnMessage)
+    void this.debugErrorService.recordError({
+      sessionId: input.sessionId,
+      level: 'warn',
+      message: warnMessage,
+      source: 'turn-segmentation',
+      category: 'turn-segmentation',
+      context: {
+        model: glmModel,
+        attempt: maxAttempts,
+        promptLength,
+        targetRevision: input.targetRevision,
+      },
+      occurredAt: new Date(),
+    })
     return {
       segments: heuristicSegmentBySpeaker({
         events: input.events,

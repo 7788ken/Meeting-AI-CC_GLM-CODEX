@@ -6,6 +6,7 @@ import {
   TranscriptStreamService,
   TranscriptEventDTO,
 } from '../transcript-stream/transcript-stream.service'
+import { DebugErrorService } from '../debug-error/debug-error.service'
 import { TranscriptAnalysisGlmClient } from './transcript-analysis.glm-client'
 import { buildTranscriptAnalysisPrompt } from './transcript-analysis.prompt'
 import {
@@ -36,6 +37,7 @@ export interface TranscriptAnalysisUpsertData {
     startEventIndex: number
     endEventIndex: number
     content: string
+    correctedContent?: string
   }>
   modelUsed: 'glm' | 'heuristic'
   generatedAt?: string
@@ -54,6 +56,7 @@ export type GetSessionAnalysisResponse = {
       startEventIndex: number
       endEventIndex: number
       content: string
+      correctedContent?: string
     }>
     modelUsed?: 'glm' | 'heuristic'
     generatedAt?: string
@@ -81,6 +84,7 @@ export class TranscriptAnalysisService {
     private readonly stateModel: Model<TranscriptAnalysisStateDocument>,
     private readonly transcriptStreamService: TranscriptStreamService,
     private readonly glmClient: TranscriptAnalysisGlmClient,
+    private readonly debugErrorService: DebugErrorService,
     private readonly configService: ConfigService,
     @Optional() private readonly onChunkUpdate?: TranscriptAnalysisChunkUpdateHandler
   ) {}
@@ -126,6 +130,7 @@ export class TranscriptAnalysisService {
           startEventIndex: dialogue.startEventIndex,
           endEventIndex: dialogue.endEventIndex,
           content: dialogue.content,
+          correctedContent: dialogue.correctedContent,
         })),
         modelUsed: chunk.model ? this.normalizeModelUsed(chunk.model) : undefined,
         generatedAt: chunk.generatedAt ? new Date(chunk.generatedAt).toISOString() : undefined,
@@ -330,6 +335,8 @@ export class TranscriptAnalysisService {
       targetEventIndex: input.targetEventIndex,
       events: input.events,
     })
+    const promptLength = prompt.system.length + prompt.user.length
+    const glmModel = this.readGlmModelName()
 
     const maxAttempts = 2
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -353,14 +360,42 @@ export class TranscriptAnalysisService {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        this.logger.error(
-          `GLM analysis failed, sessionId=${input.sessionId}, attempt=${attempt}/${maxAttempts}: ${message}`,
-          error instanceof Error ? error.stack : undefined
-        )
+        const logMessage = `GLM analysis failed, sessionId=${input.sessionId}, attempt=${attempt}/${maxAttempts}: ${message}`
+        this.logger.error(logMessage, error instanceof Error ? error.stack : undefined)
+        void this.debugErrorService.recordError({
+          sessionId: input.sessionId,
+          level: 'error',
+          message: logMessage,
+          source: 'glm-api',
+          category: 'transcript-analysis',
+          error,
+          context: {
+            model: glmModel,
+            attempt,
+            promptLength,
+            targetEventIndex: input.targetEventIndex,
+          },
+          occurredAt: new Date(),
+        })
       }
     }
 
-    this.logger.warn(`GLM analysis fallback to heuristic, sessionId=${input.sessionId}`)
+    const warnMessage = `GLM analysis fallback to heuristic, sessionId=${input.sessionId}`
+    this.logger.warn(warnMessage)
+    void this.debugErrorService.recordError({
+      sessionId: input.sessionId,
+      level: 'warn',
+      message: warnMessage,
+      source: 'transcript-analysis',
+      category: 'transcript-analysis',
+      context: {
+        model: glmModel,
+        attempt: maxAttempts,
+        promptLength,
+        targetEventIndex: input.targetEventIndex,
+      },
+      occurredAt: new Date(),
+    })
     return {
       dialogues: heuristicDialoguesBySpeaker({
         events: input.events,
@@ -495,6 +530,7 @@ export class TranscriptAnalysisService {
         startEventIndex: dialogue.startEventIndex,
         endEventIndex: dialogue.endEventIndex,
         content: dialogue.content,
+        correctedContent: dialogue.correctedContent,
       })),
       modelUsed: this.normalizeModelUsed(chunk.model),
       generatedAt: chunk.generatedAt ? new Date(chunk.generatedAt).toISOString() : undefined,
@@ -588,6 +624,13 @@ export class TranscriptAnalysisService {
         { new: true }
       )
       .exec()
+  }
+
+  private readGlmModelName(): string {
+    const raw = (process.env.GLM_TRANSCRIPT_ANALYSIS_MODEL || '').trim()
+    if (raw) return raw
+    const fallback = (process.env.GLM_TURN_SEGMENT_MODEL || '').trim()
+    return fallback || 'glm-4.6v-flash'
   }
 
   private readChunkSize(): number {

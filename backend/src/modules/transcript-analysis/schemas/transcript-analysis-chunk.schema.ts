@@ -18,6 +18,9 @@ export class TranscriptDialogue {
 
   @Prop({ required: true })
   content: string
+
+  @Prop()
+  correctedContent?: string // GLM 纠正后的内容；如果 GLM 未返回则为 undefined
 }
 
 export const TranscriptDialogueSchema = SchemaFactory.createForClass(TranscriptDialogue)

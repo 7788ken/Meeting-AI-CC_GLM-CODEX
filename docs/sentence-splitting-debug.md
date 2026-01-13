@@ -1,7 +1,7 @@
-# 语义分段模块 Debug 分析文档
+# 语句拆分模块 Debug 分析文档
 
 > 文档创建时间: 2026-01-12
-> 分析范围: TranscriptAnalysisService (语义分段/转写语义分析模块)
+> 分析范围: TranscriptAnalysisService (语句拆分/转写语句拆分分析模块)
 
 ---
 
@@ -101,7 +101,7 @@ GLM_TRANSCRIPT_ANALYSIS_JSON_MODE=1           # JSON 模式
 
 ```typescript
 const system = [
-  '你是"会议语义分段器"。你的任务是：仅基于输入的转写事件，输出结构化对话分段。',
+  '你是"会议语句拆分器"。你的任务是：仅基于输入的转写事件，输出结构化对话分段。',
   '',
   '强约束：',
   '- 只允许输出 JSON，禁止输出任何 Markdown、解释或多余文本。',
@@ -187,7 +187,7 @@ const system = [
 | 模块 | 文件路径 | 功能 |
 |-----|---------|------|
 | **TurnSegmentationService** | `turn-segmentation/` | 按 speaker turn 分段 |
-| **TranscriptAnalysisService** | `transcript-analysis/` | 也叫"语义分段"，实际也是按 speaker 分段 |
+| **TranscriptAnalysisService** | `transcript-analysis/` | 也叫"语句拆分"（旧称"语义分段"），实际也是按 speaker 分段 |
 
 这两个模块功能高度重复，都只是按说话人合并，真正的"语义分析"缺失。
 
@@ -362,7 +362,7 @@ if (this.queuedSessions.has(sessionId)) {
 
 ```typescript
 const system = [
-  '你是"会议语义分段器"。你的任务是：将每条转写事件分离为独立对话。',
+  '你是"会议语句拆分器"。你的任务是：将每条转写事件分离为独立对话。',
   '',
   '分段规则：',
   '- **每条事件必须成为一个独立的 dialogue**（不再合并同说话人的连续事件）。',
@@ -409,7 +409,7 @@ export class TranscriptDialogue {
 
 ```typescript
 const system = [
-  '你是"会议语义分段与翻译器"。',
+  '你是"会议语句拆分与翻译器"。',
   '',
   '任务：',
   '1. 将每条转写事件分离为独立对话。',
@@ -447,7 +447,7 @@ TRANSCRIPT_ANALYSIS_REQUIRE_FINAL=0     # 处理所有事件
 ### 8.2 MongoDB 检查
 
 ```javascript
-// 查询语义分段结果
+// 查询语句拆分结果
 db.transcript_analysis_chunks.find({ sessionId: "your-session-id" }).sort({ startEventIndex: 1 })
 
 // 检查状态分布
@@ -477,7 +477,7 @@ db.transcript_analysis_chunks.findOne(
 
 | 问题 | 说明 |
 |-----|------|
-| **命名误导** | "语义分段"实际只是"说话人分段" |
+| **命名误导** | "语句拆分"（旧称"语义分段"）实际只是"说话人分段" |
 | **功能缺失** | 无翻译、无真正语义分析 |
 | **前端断联** | 无API、无组件展示分析结果 |
 | **Prompt约束** | 强制合并同说话人内容 |
@@ -524,7 +524,7 @@ db.transcript_analysis_chunks.findOne(
 
 ```
 backend/src/
-├── common/semantic-segmentation/           # 新建公共层
+├── common/sentence-splitting/              # 新建公共层
 │   ├── core/
 │   │   ├── segment.types.ts                # 统一类型定义
 │   │   ├── glm-client.ts                   # 统一GLM客户端
@@ -534,7 +534,7 @@ backend/src/
 │       ├── rule-based-segmenter.ts         # 规则分段器（单句分离）
 │       └── heuristic-segmenter.ts          # 启发式分段器（speaker合并）
 │
-├── modules/transcript-analysis/            # 改造：专注语义分段
+├── modules/transcript-analysis/            # 改造：专注语句拆分
 │   └── transcript-analysis.service.ts      # 使用公共层 + 规则分段
 │
 └── modules/translation/                    # 新建：独立的翻译模块
@@ -592,7 +592,7 @@ export interface TranslationTask {
 ### 10.5 规则分段器实现（零成本单句分离）
 
 ```typescript
-// common/semantic-segmentation/strategies/rule-based-segmenter.ts
+// common/sentence-splitting/strategies/rule-based-segmenter.ts
 export function segmentByEvent(input: {
   events: TranscriptEventDTO[]
 }): SemanticSegment[] {
@@ -672,7 +672,7 @@ TRANSLATION_ON_DEMAND=true               # 按需翻译
 
 **Phase 1: 公共层提取** (1-2天)
 ```
-1. 创建 common/semantic-segmentation/ 目录
+1. 创建 common/sentence-splitting/ 目录
 2. 提取 GLM Client → glm-client.ts
 3. 提取 Prompt Builder → prompt-builder.ts
 4. 提取 Validation → validation.ts
@@ -729,7 +729,7 @@ TRANSLATION_ON_DEMAND=true               # 按需翻译
 |-----|------|------|
 | TurnSegmentationService 是否保留？ | A: 废弃迁移 / B: 保留 | 前端兼容性 |
 | 翻译是否必需？ | A: 默认开启 / B: 按需开启 | 成本和复杂度 |
-| 真正的语义分段是否需要？ | 按话题分段（需LLM） | 未来需求 |
+| 是否需要引入真正的语义分段（按话题分段）？ | 按话题分段（需LLM） | 未来需求 |
 
 ---
 
@@ -971,7 +971,7 @@ interface SemanticSegment {
 
 **Phase 1: 规则分段器实现** (1-2天)
 ```typescript
-// common/semantic-segmentation/strategies/hybrid-segmenter.ts
+// common/sentence-splitting/strategies/hybrid-segmenter.ts
 export class HybridSegmenter {
   segment(input: Event[]): SegmentResult {
     // 1. 规则预分段

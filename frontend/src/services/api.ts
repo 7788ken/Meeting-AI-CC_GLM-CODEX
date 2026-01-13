@@ -93,6 +93,29 @@ export interface TurnSegmentsSnapshot {
   generatedAt?: string
 }
 
+// ==================== 语句拆分（transcript_events_segments） ====================
+
+export interface TranscriptEventSegment {
+  id: string
+  sessionId: string
+  sequence: number
+  content: string
+  sourceStartEventIndex: number
+  sourceEndEventIndex: number
+  sourceRevision: number
+  prevSegmentId?: string
+  status: 'completed' | 'failed'
+  error?: string
+  model?: string
+  generatedAt?: string
+  createdAt?: string
+}
+
+export interface TranscriptEventSegmentsSnapshot {
+  sessionId: string
+  segments: TranscriptEventSegment[]
+}
+
 // ==================== 会话调试错误 ====================
 
 export interface DebugError {
@@ -234,6 +257,14 @@ export const transcriptStreamApi = {
     const query = limit == null ? '' : `?limit=${encodeURIComponent(String(limit))}`
     return get<ApiResponse<TranscriptStreamSnapshot>>(`/transcript-stream/session/${sessionId}${query}`)
   },
+}
+
+export const transcriptEventSegmentationApi = {
+  // 获取会话语句拆分快照（用于刷新恢复）
+  getSnapshot: (sessionId: string) =>
+    get<ApiResponse<TranscriptEventSegmentsSnapshot>>(
+      `/transcript-event-segmentation/session/${sessionId}`
+    ),
 }
 
 export const turnSegmentationApi = {

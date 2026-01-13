@@ -56,7 +56,7 @@ export class TranscriptGateway implements OnGatewayConnection, OnGatewayDisconne
   @SubscribeMessage('audio:data')
   async handleAudioData(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
     // 处理音频数据
-    const result = await this.transcriptService.processAudio(
+    const result = await this.transcriptService.processAudioWithBuffer(
       client.id,
       data.audioData,
       data.sessionId,

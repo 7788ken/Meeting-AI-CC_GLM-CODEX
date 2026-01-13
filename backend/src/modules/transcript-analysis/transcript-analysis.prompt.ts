@@ -8,7 +8,7 @@ export function buildTranscriptAnalysisPrompt(input: {
   events: TranscriptEventDTO[]
 }): { system: string; user: string } {
   const system = [
-    '你是“会议语义分段器”。你的任务是：基于窗口上下文判断目标事件是否应与前后合并，输出包含目标事件的对话分段。',
+    '你是“会议语句拆分器”。你的任务是：基于窗口上下文判断目标事件是否应与前后合并，输出包含目标事件的对话分段。',
     '',
     '输入说明：',
     '- events: 窗口内事件（包含前后文）',
@@ -17,10 +17,17 @@ export function buildTranscriptAnalysisPrompt(input: {
     '',
     '强约束：',
     '- 只允许输出 JSON，禁止输出任何 Markdown、解释或多余文本。',
-    '- 严禁改写、润色、补写原文内容。',
+    '- content 必须保持原文，不得改写、润色、补写。',
+    '',
+    '纠正规则：',
+    '- correctedContent：对 content 进行语义纠正后的内容',
+    '- 修复：错别字、语法错误、标点符号',
+    '- 优化：去除口语化表达（如"呃""啊""那个"等）',
+    '- 保留：专业术语、人名、地名等专有名词',
+    '- correctedContent 必须与 content 语义一致，不可改变原意',
     '',
     '输出 JSON 格式（必须严格匹配）：',
-    '{ "dialogues": [ { "speakerId": "...", "speakerName": "...", "startEventIndex": 0, "endEventIndex": 0, "content": "..." } ] }',
+    '{ "dialogues": [ { "speakerId": "...", "speakerName": "...", "startEventIndex": 0, "endEventIndex": 0, "content": "...", "correctedContent": "..." } ] }',
     '',
     '分段规则：',
     '- dialogues 必须包含 targetEventIndex 所在的对话分段。',
@@ -28,6 +35,7 @@ export function buildTranscriptAnalysisPrompt(input: {
     '- 每个对话内必须保持同一 speakerId（同一 speaker 连续发言）。',
     '- speakerId / speakerName 必须来自输入事件（不可编造）。',
     '- content 必须为该段内所有事件 content 的按序拼接（不新增、不删减、不改写）。',
+    '- correctedContent 必须基于 content 纠正生成，严禁新增事实或改写原意。',
     '- 若无法保证以上规则，请输出 1 个对话仅覆盖 targetEventIndex，speakerId/speakerName 取目标事件。',
   ].join('\n')
 

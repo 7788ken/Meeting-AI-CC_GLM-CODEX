@@ -24,6 +24,20 @@ export const AI_MODELS: SelectOption[] = [
   { label: 'DC', value: 'dc' },
 ]
 
+// ASR 配置
+export type AsrLanguage = 'zh' | 'en' | 'yue' | 'auto'
+
+export interface AsrConfig {
+  // 音频累积配置
+  bufferDurationMs: number
+  minAudioLengthMs: number
+
+  // ASR 模型配置
+  language: AsrLanguage
+  hotwords?: string[]
+  prompt?: string
+}
+
 // 分析类型
 export type AnalysisType = 'core' | 'brief' | 'deep'
 

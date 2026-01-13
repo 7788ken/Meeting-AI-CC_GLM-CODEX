@@ -22,7 +22,7 @@
     </div>
 
     <div v-else class="segment-list">
-      <div v-for="(segment, idx) in segments" :key="idx" class="segment-item">
+      <div v-for="(segment, idx) in orderedSegments" :key="idx" class="segment-item">
         <div class="segment-header">
           <span class="speaker-name">{{ segment.speakerName }}</span>
           <span class="segment-range">#{{ segment.startEventIndex }}-#{{ segment.endEventIndex }}</span>
@@ -34,9 +34,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { TurnSegmentRange } from '@/services/api'
 
-defineProps<{
+const props = defineProps<{
   status: 'processing' | 'completed' | 'failed'
   revision: number
   targetRevision: number
@@ -44,6 +45,10 @@ defineProps<{
   error?: string
   getTextByRange: (startEventIndex: number, endEventIndex: number) => string
 }>()
+
+const orderedSegments = computed(() =>
+  [...props.segments].sort((a, b) => (b.endEventIndex ?? 0) - (a.endEventIndex ?? 0))
+)
 </script>
 
 <style scoped>
@@ -115,4 +120,3 @@ defineProps<{
   color: #111;
 }
 </style>
-

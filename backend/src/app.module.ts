@@ -12,6 +12,7 @@ import { TranscriptModule } from './modules/transcript/transcript.module'
 import { TranscriptStreamModule } from './modules/transcript-stream/transcript-stream.module'
 import { TurnSegmentationModule } from './modules/turn-segmentation/turn-segmentation.module'
 import { TranscriptAnalysisModule } from './modules/transcript-analysis/transcript-analysis.module'
+import { TranscriptEventSegmentationModule } from './modules/transcript-event-segmentation/transcript-event-segmentation.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { DebugErrorModule } from './modules/debug-error/debug-error.module'
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
@@ -36,6 +37,7 @@ import { AppService } from './app.service'
     TranscriptStreamModule,
     TurnSegmentationModule,
     TranscriptAnalysisModule,
+    TranscriptEventSegmentationModule,
     DebugErrorModule,
   ],
   controllers: [AppController],

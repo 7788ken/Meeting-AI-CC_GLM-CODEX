@@ -3,6 +3,8 @@
  * 处理与后端的实时音频传输和转写结果接收
  */
 
+import type { AsrConfig } from '../types'
+
 export interface WebSocketConfig {
   url?: string
   protocols?: string | string[]
@@ -23,6 +25,11 @@ export interface ConnectionStatus {
 }
 
 export type ConnectionStatusHandler = (status: ConnectionStatus) => void
+
+export type StartTranscribePayload = {
+  model?: string
+  asrConfig?: AsrConfig
+}
 
 export type LegacyTranscriptData = {
   id?: string
@@ -69,12 +76,29 @@ export type TurnSegmentsUpsertData = {
   error?: string
 }
 
+export type TranscriptEventSegmentUpsertData = {
+  id: string
+  sessionId: string
+  sequence: number
+  content: string
+  sourceStartEventIndex: number
+  sourceEndEventIndex: number
+  sourceRevision: number
+  prevSegmentId?: string
+  status: 'completed' | 'failed'
+  error?: string
+  model?: string
+  generatedAt?: string
+  createdAt?: string
+}
+
 export type TranscriptMessage =
   | { type: 'transcript'; data: LegacyTranscriptData }
   | { type: 'status'; data: { status?: string; sessionId?: string; speakerId?: string; speakerName?: string } }
   | { type: 'error'; data: { error?: string } }
   | { type: 'transcript_event_upsert'; data: TranscriptEventData }
   | { type: 'turn_segments_upsert'; data: TurnSegmentsUpsertData }
+  | { type: 'transcript_event_segment_upsert'; data: TranscriptEventSegmentUpsertData }
 
 export class WebSocketService {
   private ws: WebSocket | null = null
@@ -90,7 +114,7 @@ export class WebSocketService {
   private connectPromise: Promise<void> | null = null
 
   private lastSessionId: string | null = null
-  private lastTranscribeConfig: { language?: string; model?: string } | null = null
+  private lastTranscribeConfig: StartTranscribePayload | null = null
   private lastSpeaker: { speakerId?: string; speakerName?: string } | null = null
   private isTranscribing = false
 
@@ -282,7 +306,7 @@ export class WebSocketService {
   /**
    * 开始转写
    */
-  startTranscribe(config?: { language?: string; model?: string }): void {
+  startTranscribe(config?: StartTranscribePayload): void {
     this.isTranscribing = true
     this.lastTranscribeConfig = config || null
     this.sendMessage({
