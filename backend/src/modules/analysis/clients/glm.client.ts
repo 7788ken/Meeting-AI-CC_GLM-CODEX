@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
+import * as readline from 'readline'
+import { Readable } from 'stream'
 import { extractGlmTextContent, getGlmAuthorizationToken } from '../../../common/llm/glm'
 
 /**
@@ -12,7 +14,7 @@ import { extractGlmTextContent, getGlmAuthorizationToken } from '../../../common
 export class GlmClient {
   private readonly logger = new Logger(GlmClient.name)
   private readonly apiKey: string
-  private readonly baseURL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+  private readonly defaultEndpoint = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 
   constructor(
     private readonly configService: ConfigService,
@@ -50,6 +52,92 @@ export class GlmClient {
     }
   }
 
+  async streamAnalysis(params: {
+    analysisType: string
+    speeches: Array<{ content: string; speakerName: string }>
+    sessionId: string
+    prompt?: string
+    signal?: AbortSignal
+    onDelta: (delta: string) => void
+  }): Promise<{ fullText: string; modelUsed: string }> {
+    if (!this.apiKey) {
+      throw new Error('GLM_API_KEY not configured')
+    }
+
+    const prompt = this.buildPrompt(params.analysisType, params.speeches, params.prompt)
+    const model = this.requireModelName()
+    const endpoint = this.getEndpoint()
+
+    const requestBody = {
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            {
+              type: 'text',
+              text: '你是一个专业的会议助手，擅长分析会议内容并生成结构化的报告。',
+            },
+          ],
+        },
+        { role: 'user', content: [{ type: 'text', text: prompt }] },
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+      stream: true,
+    }
+
+    const headers = {
+      Authorization: `Bearer ${this.getAuthorizationToken()}`,
+      'Content-Type': 'application/json',
+    }
+
+    const response = await firstValueFrom(
+      this.httpService.post(endpoint, requestBody, {
+        headers,
+        responseType: 'stream',
+        signal: params.signal,
+      })
+    )
+
+    const stream = response.data as Readable
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
+    let fullText = ''
+
+    try {
+      for await (const rawLine of rl) {
+        if (params.signal?.aborted) break
+        const line = typeof rawLine === 'string' ? rawLine.trim() : ''
+        if (!line) continue
+        if (line.startsWith(':')) continue
+        if (!line.startsWith('data:')) continue
+
+        const payload = line.slice('data:'.length).trim()
+        if (!payload) continue
+        if (payload === '[DONE]') break
+
+        let parsed: any
+        try {
+          parsed = JSON.parse(payload)
+        } catch {
+          continue
+        }
+
+        const choice = parsed?.choices?.[0]
+        const delta = extractGlmTextContent(choice?.delta?.content ?? choice?.message?.content)
+        if (!delta) continue
+
+        fullText += delta
+        params.onDelta(delta)
+      }
+    } finally {
+      rl.close()
+      stream.destroy()
+    }
+
+    return { fullText, modelUsed: model }
+  }
+
   private buildPrompt(
     analysisType: string,
     speeches: Array<{ content: string; speakerName: string }>,
@@ -59,9 +147,11 @@ export class GlmClient {
 
     const custom = typeof promptOverride === 'string' ? promptOverride.trim() : ''
     if (custom) {
-      if (custom.includes('{{speeches}}')) {
-        return custom.replace(/{{\s*speeches\s*}}/g, speechesText)
-      }
+      const withSegments = custom
+        .replace(/{{\s*speeches\s*}}/g, speechesText)
+        .replace(/{{\s*segment\s*}}/g, speechesText)
+        .replace(/{{\s*content\s*}}/g, speechesText)
+      if (withSegments !== custom) return withSegments
       return `${custom}\n\n会议发言：\n${speechesText}`
     }
 
@@ -84,6 +174,7 @@ export class GlmClient {
 
   private async callGlmAPI(prompt: string): Promise<any> {
     const model = this.requireModelName()
+    const endpoint = this.getEndpoint()
     const requestBody = {
       model,
       messages: [
@@ -113,7 +204,7 @@ export class GlmClient {
     this.logger.debug('Calling GLM API...')
 
     const response = await firstValueFrom(
-      this.httpService.post(this.baseURL, requestBody, { headers })
+      this.httpService.post(endpoint, requestBody, { headers })
     )
 
     if (extractGlmTextContent(response.data?.choices?.[0]?.message?.content)) {
@@ -131,6 +222,10 @@ export class GlmClient {
 
   private getAuthorizationToken(): string {
     return getGlmAuthorizationToken(this.apiKey)
+  }
+
+  private getEndpoint(): string {
+    return (this.configService.get<string>('GLM_ENDPOINT') || '').trim() || this.defaultEndpoint
   }
 
   private getModelName(): string {
@@ -155,9 +250,10 @@ export class GlmClient {
     }
 
     try {
+      const endpoint = this.getEndpoint()
       const response = await firstValueFrom(
         this.httpService.post(
-          this.baseURL,
+          endpoint,
           {
             model,
             messages: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }],

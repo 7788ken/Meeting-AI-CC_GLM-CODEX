@@ -101,6 +101,18 @@ export interface TranscriptEventSegmentsSnapshot {
   segments: TranscriptEventSegment[]
 }
 
+export interface TranscriptEventSegmentationConfig {
+  systemPrompt: string
+  strictSystemPrompt: string
+  windowEvents: number
+  intervalMs: number
+  triggerOnEndTurn: boolean
+  triggerOnStopTranscribe: boolean
+  model: string
+  maxTokens: number
+  jsonMode: boolean
+}
+
 // ==================== 会话调试错误 ====================
 
 export interface DebugError {
@@ -216,10 +228,6 @@ export const analysisApi = {
   generate: (data: AnalysisRequest) =>
     post<ApiResponse<AIAnalysis>>('/analysis/generate', data),
 
-  // 获取或生成 AI 分析（使用缓存）
-  getOrCreate: (data: AnalysisRequest) =>
-    post<ApiResponse<AIAnalysis>>('/analysis/get-or-create', data),
-
   // 获取分析详情
   get: (analysisId: string) =>
     get<ApiResponse<AIAnalysis>>(`/analysis/${analysisId}`),
@@ -256,6 +264,21 @@ export const transcriptEventSegmentationApi = {
     post<ApiResponse<{ started: boolean }>>(
       `/transcript-event-segmentation/session/${sessionId}/rebuild`,
       {}
+    ),
+}
+
+export const transcriptEventSegmentationConfigApi = {
+  get: () =>
+    get<ApiResponse<TranscriptEventSegmentationConfig>>('/transcript-event-segmentation/config'),
+  reset: () =>
+    post<ApiResponse<TranscriptEventSegmentationConfig>>(
+      '/transcript-event-segmentation/config/reset',
+      {}
+    ),
+  update: (data: Partial<TranscriptEventSegmentationConfig>) =>
+    put<ApiResponse<TranscriptEventSegmentationConfig>>(
+      '/transcript-event-segmentation/config',
+      data
     ),
 }
 

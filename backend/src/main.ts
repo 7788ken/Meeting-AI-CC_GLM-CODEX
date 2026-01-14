@@ -17,6 +17,7 @@ import {
   TranscriptEventSegmentDTO,
   TranscriptEventSegmentationProgressDTO,
 } from './modules/transcript-event-segmentation/transcript-event-segmentation.service'
+import { TranscriptEventSegmentationConfigService } from './modules/transcript-event-segmentation/transcript-event-segmentation-config.service'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { SpeakerService } from './modules/speech/speaker.service'
@@ -109,6 +110,7 @@ async function bootstrap() {
   const transcriptStreamService = app.get(TranscriptStreamService)
   const debugErrorService = app.get(DebugErrorService)
   const transcriptEventSegmentationService = app.get(TranscriptEventSegmentationService)
+  const transcriptEventSegmentationConfigService = app.get(TranscriptEventSegmentationConfigService)
   transcriptEventSegmentationService.setOnSegmentUpdate((data: TranscriptEventSegmentDTO) => {
     broadcastToSession(data.sessionId, {
       type: 'transcript_event_segment_upsert',
@@ -179,15 +181,11 @@ async function bootstrap() {
   const transcriptEventSegmentationTimerBySession = new Map<string, ReturnType<typeof setTimeout>>()
   const transcriptEventSegmentationInFlight = new Set<string>()
   const transcriptEventSegmentationPending = new Set<string>()
-  const transcriptEventSegmentationIntervalMs = readNumberFromEnv(
-    'TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS',
-    3000,
-    value => value >= 0 && value <= 10 * 60 * 1000
-  )
-  const triggerEventSegmentationOnEndTurn =
-    process.env.TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_END_TURN !== '0'
-  const triggerEventSegmentationOnStopTranscribe =
-    process.env.TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE !== '0'
+  const getSegmentationConfig = () => transcriptEventSegmentationConfigService.getConfig()
+  const getSegmentationIntervalMs = () => getSegmentationConfig().intervalMs
+  const shouldTriggerEventSegmentationOnEndTurn = () => getSegmentationConfig().triggerOnEndTurn
+  const shouldTriggerEventSegmentationOnStopTranscribe = () =>
+    getSegmentationConfig().triggerOnStopTranscribe
 
   wss.on('connection', (ws: WebSocket) => {
     const clientId = createClientId()
@@ -345,7 +343,7 @@ async function bootstrap() {
                       await finalizeActiveSpeechForClient(clientId)
                     }
 
-                    if (triggerEventSegmentationOnStopTranscribe) {
+                    if (shouldTriggerEventSegmentationOnStopTranscribe()) {
                       triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
                     }
                   } else {
@@ -382,7 +380,7 @@ async function bootstrap() {
                       audioDurationMs: result.audioDurationMs,
                     })
 
-                    if (triggerEventSegmentationOnStopTranscribe) {
+                    if (shouldTriggerEventSegmentationOnStopTranscribe()) {
                       triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
                     }
                   } else {
@@ -461,7 +459,7 @@ async function bootstrap() {
                   await finalizeActiveSpeechForClient(clientId)
                 }
               }
-              if (triggerEventSegmentationOnEndTurn) {
+              if (shouldTriggerEventSegmentationOnEndTurn()) {
                 triggerTranscriptEventSegmentationNow(sessionId, 'end_turn')
               }
               ws.send(
@@ -1327,7 +1325,8 @@ async function bootstrap() {
   function scheduleTranscriptEventSegmentation(sessionId: string): void {
     if (!rawEventStreamEnabled) return
     if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) return
-    if (!transcriptEventSegmentationIntervalMs || transcriptEventSegmentationIntervalMs <= 0) {
+    const intervalMs = getSegmentationIntervalMs()
+    if (!intervalMs || intervalMs <= 0) {
       void runTranscriptEventSegmentation(sessionId, { force: false, reason: 'interval_disabled' })
       return
     }
@@ -1340,7 +1339,7 @@ async function bootstrap() {
     const timer = setTimeout(() => {
       transcriptEventSegmentationTimerBySession.delete(sessionId)
       void runTranscriptEventSegmentation(sessionId, { force: false, reason: 'debounce' })
-    }, transcriptEventSegmentationIntervalMs)
+    }, intervalMs)
 
     transcriptEventSegmentationTimerBySession.set(sessionId, timer)
   }

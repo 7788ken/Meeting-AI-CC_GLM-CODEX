@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common'
+import { Injectable, NotFoundException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model, Types } from 'mongoose'
@@ -7,6 +7,8 @@ import { AnalysisDto, GenerateAnalysisDto } from './dto/analysis.dto'
 import { AnalysisType } from './dto/analysis.enum'
 import { ModelManagerService, AIModelType } from './model-manager.service'
 import { SpeechService } from '../speech/speech.service'
+import { GlmClient } from './clients/glm.client'
+import { StreamSegmentAnalysisDto } from './dto/segment-analysis.dto'
 
 /**
  * AI 分析服务 (B1026)
@@ -15,11 +17,10 @@ import { SpeechService } from '../speech/speech.service'
  */
 @Injectable()
 export class AnalysisService {
-  private readonly logger = new Logger(AnalysisService.name)
-
   constructor(
     @InjectModel(Analysis.name) private analysisModel: Model<AnalysisDocument>,
     private readonly modelManager: ModelManagerService,
+    private readonly glmClient: GlmClient,
     private readonly speechService: SpeechService,
     private readonly configService: ConfigService
   ) {}
@@ -112,40 +113,6 @@ export class AnalysisService {
   }
 
   /**
-   * 获取或生成缓存的分析结果
-   */
-  async getOrCreate(dto: GenerateAnalysisDto): Promise<AnalysisDto> {
-    const modelType = dto.model
-      ? this.parseModelType(dto.model)
-      : this.modelManager.getDefaultModel()
-    const analysisType = this.normalizeAnalysisType(dto.analysisType)
-
-    // 查找是否已有缓存的分析
-    const existing = await this.analysisModel
-      .findOne({
-        sessionId: dto.sessionId,
-        analysisType,
-        modelUsed: modelType,
-        status: 'completed',
-        createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // 24小时内
-      })
-      .sort({ createdAt: -1 })
-
-    if (existing) {
-      // 标记为缓存
-      existing.isCached = true
-      existing.cachedAt = new Date()
-      await existing.save()
-
-      this.logger.log(`Using cached analysis for session ${dto.sessionId}`)
-      return this.toDto(existing)
-    }
-
-    // 生成新的分析
-    return this.generate(dto)
-  }
-
-  /**
    * 删除会话的所有分析记录
    */
   async deleteBySession(sessionId: string): Promise<void> {
@@ -231,5 +198,34 @@ export class AnalysisService {
       generatedAt: analysis.generatedAt,
       createdAt: analysis.createdAt,
     }
+  }
+
+  async streamSegmentAnalysis(
+    dto: StreamSegmentAnalysisDto,
+    options: { signal?: AbortSignal; onDelta: (delta: string) => void }
+  ): Promise<{ fullText: string; modelUsed: string }> {
+    const sessionId = (dto.sessionId || '').trim()
+    if (!sessionId) {
+      throw new Error('sessionId is required')
+    }
+
+    const content = typeof dto.content === 'string' ? dto.content : ''
+    const safeContent = content.trim()
+    if (!safeContent) {
+      throw new Error('content is required')
+    }
+
+    const sequence =
+      typeof dto.sequence === 'number' && Number.isFinite(dto.sequence) ? Math.floor(dto.sequence) : null
+    const speakerName = sequence == null ? '片段' : `片段#${sequence}`
+
+    return this.glmClient.streamAnalysis({
+      analysisType: (dto.analysisType || 'summary').trim() || 'summary',
+      sessionId,
+      speeches: [{ speakerName, content: safeContent }],
+      prompt: dto.prompt,
+      signal: options.signal,
+      onDelta: options.onDelta,
+    })
   }
 }

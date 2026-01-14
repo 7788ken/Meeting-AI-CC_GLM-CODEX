@@ -1,5 +1,5 @@
 <template>
-  <MainLayout :style="{ '--app-bottom-inset': actionBarEnabled ? (isNarrow ? '128px' : '84px') : '0px' }">
+  <MainLayout :style="{ '--app-bottom-inset': appBottomInsetStyle }">
     <template #header>
       <AppHeader
         title="AI会议助手"
@@ -42,27 +42,15 @@
     <section :class="['realtime-transcript-bar', { collapsed: realtimeCollapsed }]" class="app-surface">
       <div class="realtime-header">
         <div class="realtime-title">
-          <h3>原文流</h3>
+          <h3>语音转写</h3>
           <el-button size="small" class="ghost-button" @click="realtimeCollapsed = !realtimeCollapsed">
             {{ realtimeCollapsed ? '展开' : '折叠' }}
           </el-button>
         </div>
 	        <div class="realtime-status">
-	          <el-tag v-if="recordingStatus === 'recording'" type="success" size="small">录制中</el-tag>
-	          <el-tag v-else-if="recordingStatus === 'paused'" type="warning" size="small">已暂停</el-tag>
-	          <el-tag v-else type="info" size="small">未录制</el-tag>
+	           
 	          <el-tag type="info" size="small">事件数: {{ transcriptStreamStore.events.length }}</el-tag>
-	          <el-tag
-	            v-if="transcriptEventSegmentationStore.pointerEventIndex != null"
-	            :type="transcriptEventSegmentationStore.isInFlight ? 'warning' : 'info'"
-	            size="small"
-	          >
-	            {{ transcriptEventSegmentationStore.isInFlight ? '拆分中' : '已拆分到' }}:
-	            #{{ transcriptEventSegmentationStore.pointerEventIndex }}
-	            <template v-if="maxAvailableEventIndex != null">
-	              /#{{ maxAvailableEventIndex }}
-	            </template>
-	          </el-tag>
+	          
 	          <el-tag v-if="segmentationStageText" :type="segmentationStageTagType" size="small">
 	            LLM: {{ segmentationStageText }}
 	          </el-tag>
@@ -142,7 +130,20 @@
 	      <transition name="panel-fade" mode="out-in">
 	      <section v-if="!isNarrow || activePane === 'segments'" class="transcript-panel app-surface">
 	      <div class="panel-header">
-	        <h2>语句拆分</h2>
+	        <div class="panel-title-row">
+            <h2>语句拆分</h2>
+            <el-tag
+	            v-if="transcriptEventSegmentationStore.pointerEventIndex != null"
+	            :type="transcriptEventSegmentationStore.isInFlight ? 'warning' : 'info'"
+	            size="small"
+	          >
+	            {{ transcriptEventSegmentationStore.isInFlight ? '拆分中' : '拆分进度' }}:
+	            #{{ transcriptEventSegmentationStore.pointerEventIndex }}
+	            <template v-if="maxAvailableEventIndex != null">
+	              /#{{ maxAvailableEventIndex }}
+	            </template>
+	          </el-tag>
+          </div>
 	        <div class="panel-actions">
 	          <el-button
 	            size="small"
@@ -175,7 +176,9 @@
 	          :order="transcriptSegmentOrder"
 	          :loading="transcriptEventSegmentationStore.isLoadingSnapshot"
 	          :progress="transcriptEventSegmentationStore.progress"
+	          :analyzingSegmentKey="analyzingSegmentKey"
 	          @select-range="focusRealtimeRange"
+	          @analyze-segment="analyzeSegment"
 	        />
 	      </div>
 	    </section>
@@ -190,16 +193,17 @@
           <el-button size="small" class="ghost-button" @click="promptDialogVisible = true">
             提示词：{{ selectedPromptTemplate?.name || '未选择' }}
           </el-button>
+          <el-tag v-if="analysisSourceLabel" type="info" size="small">{{ analysisSourceLabel }}</el-tag>
           <el-tag v-if="currentAnalysis?.isCached" type="info" size="small">缓存</el-tag>
         </div>
       </div>
       <div class="analysis-content">
-        <div v-if="analysisLoading" v-loading="true" class="analysis-loading"></div>
-        <div v-else-if="currentAnalysis" class="analysis-result">
+        <div v-if="currentAnalysis" class="analysis-result">
           <div class="analysis-meta">
             <span>模型: {{ currentAnalysis.modelUsed }}</span>
             <span v-if="currentAnalysis.processingTime">耗时: {{ currentAnalysis.processingTime }}ms</span>
             <span>状态: {{ statusText }}</span>
+            <el-tag v-if="analysisLoading" type="warning" size="small">生成中...</el-tag>
           </div>
           <div class="analysis-text" v-html="renderMarkdown(currentAnalysis.result)"></div>
           <div class="analysis-actions">
@@ -214,9 +218,10 @@
               </template>
             </el-dropdown>
             <el-button size="small" @click="copyAnalysis">复制</el-button>
-            <el-button size="small" type="primary" @click="generateAnalysis">重新生成</el-button>
+            <el-button size="small" type="primary" @click="regenerateAnalysis">重新生成</el-button>
           </div>
         </div>
+        <div v-else-if="analysisLoading" v-loading="true" class="analysis-loading"></div>
         <div v-else class="empty-state">
           <el-empty description="停止录音后将自动生成分析（可在此选择提示词模板）" />
         </div>
@@ -278,10 +283,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 	  type Session,
 	  type Speech,
 	  type AIAnalysis,
+	  type TranscriptEventSegment,
 	} from '@/services/api'
 	import { exportAnalysis as exportAnalysisService, type ExportFormat } from '@/services/export'
 	import { transcription } from '@/services/transcription'
 	import { websocket, type ConnectionStatus, type TranscriptEventSegmentationProgressData } from '@/services/websocket'
+  import { getApiBaseUrl } from '@/services/http'
 		import { useTranscriptStreamStore } from '@/stores/transcriptStream'
 		import { useTranscriptEventSegmentationStore } from '@/stores/transcriptEventSegmentation'
 		import { useAppSettings } from '@/composables/useAppSettings'
@@ -303,6 +310,12 @@ const speeches = ref<Speech[]>([])
 const selectedSpeechId = ref<string>('')
 const currentAnalysis = ref<AIAnalysis | null>(null)
 const analysisLoading = ref(false)
+const analyzingSegmentKey = ref<string | null>(null)
+type AnalysisContext =
+  | { kind: 'meeting' }
+  | { kind: 'segment'; segment: TranscriptEventSegment; promptTemplateId?: string }
+const analysisContext = ref<AnalysisContext>({ kind: 'meeting' })
+let analysisStreamAbortController: AbortController | null = null
 const recordingStatus = ref<'idle' | 'connecting' | 'recording' | 'paused' | 'error'>('idle')
 const isPaused = ref(false)
 const transcriptRef = ref<HTMLElement>()
@@ -328,12 +341,30 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	const isNarrow = ref(false)
 	const activePane = ref<'segments' | 'analysis'>('segments')
 	const actionBarEnabled = computed(() => true)
-	const actionBarRef = ref<{ openHelp: () => void } | null>(null)
+	type MeetingActionBarExpose = { openHelp: () => void; hostEl?: { value: HTMLElement | null } }
+	const actionBarRef = ref<MeetingActionBarExpose | null>(null)
+	const actionBarInsetPx = ref(0)
+	const appBottomInsetStyle = computed(() => `${actionBarInsetPx.value}px`)
 	const promptDialogVisible = ref(false)
 	const selectedPromptTemplateId = ref<string>('')
-	const lastAutoAnalysisKey = ref('')
 		const transcriptStreamStore = useTranscriptStreamStore()
 		const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
+
+	const ACTION_BAR_BOTTOM_OFFSET_PX = 12
+	let actionBarResizeObserver: ResizeObserver | null = null
+	function updateActionBarInset(): void {
+	  if (!actionBarEnabled.value) {
+	    actionBarInsetPx.value = 0
+	    return
+	  }
+	  const hostEl = actionBarRef.value?.hostEl?.value
+	  if (!hostEl) {
+	    actionBarInsetPx.value = 0
+	    return
+	  }
+	  const height = hostEl.getBoundingClientRect().height
+	  actionBarInsetPx.value = height > 0 ? Math.ceil(height + ACTION_BAR_BOTTOM_OFFSET_PX) : 0
+	}
 
 	let mediaQuery: MediaQueryList | null = null
 	function updateIsNarrow(): void {
@@ -520,6 +551,13 @@ const statusText = computed(() => {
   return statusMap[currentAnalysis.value.status] || currentAnalysis.value.status
 })
 
+const analysisSourceLabel = computed(() => {
+  const ctx = analysisContext.value
+  if (ctx.kind !== 'segment') return ''
+  const seq = ctx.segment.sequence
+  return Number.isFinite(seq) ? `片段 @${seq}` : '片段'
+})
+
 const isSessionEnded = computed(() => {
   if (sessionEndedOverride.value) return true
   if (!sessionInfo.value) return false
@@ -580,22 +618,6 @@ const recordingTag = computed(() => {
   return { type: 'info' as const, text: '未录制' }
 })
 
-watch(
-  [() => recordingStatus.value, () => speeches.value.length, () => selectedPromptTemplateId.value],
-  () => {
-    if (!sessionId.value) return
-    if (recordingStatus.value !== 'idle' && recordingStatus.value !== 'error') return
-    if (speeches.value.length === 0) return
-    const tpl = selectedPromptTemplate.value
-    if (!tpl) return
-
-    const analysisType = buildPromptAnalysisType(tpl)
-    const key = `${sessionId.value}:${analysisType}:${speeches.value.length}`
-    if (key === lastAutoAnalysisKey.value) return
-    lastAutoAnalysisKey.value = key
-    void generateAnalysis()
-  },
-)
 
 	const wsReconnectTag = computed(() => {
   const status = wsConnectionStatus.value
@@ -691,7 +713,6 @@ watch(
     realtimeStickToBottom.value = true
     currentAnalysis.value = null
     analysisLoading.value = false
-    lastAutoAnalysisKey.value = ''
 
     if (!sessionId.value) return
 
@@ -727,6 +748,14 @@ watch(
 	  mediaQuery.addEventListener('change', updateIsNarrow)
 	  window.addEventListener('keydown', handleGlobalKeydown, true)
 
+	  await nextTick()
+	  const hostEl = actionBarRef.value?.hostEl?.value
+	  if (hostEl) {
+	    actionBarResizeObserver = new ResizeObserver(updateActionBarInset)
+	    actionBarResizeObserver.observe(hostEl)
+	    updateActionBarInset()
+	  }
+
 	  sessionId.value = route.params.id as string || route.query.id as string || ''
 	  if (sessionId.value) {
 	    await loadSession()
@@ -744,6 +773,14 @@ onUnmounted(() => {
   if (mediaQuery) {
     mediaQuery.removeEventListener('change', updateIsNarrow)
     mediaQuery = null
+  }
+  if (actionBarResizeObserver) {
+    actionBarResizeObserver.disconnect()
+    actionBarResizeObserver = null
+  }
+  if (analysisStreamAbortController) {
+    analysisStreamAbortController.abort()
+    analysisStreamAbortController = null
   }
   transcription.dispose()
   transcriptStreamStore.reset()
@@ -966,8 +1003,9 @@ async function generateAnalysis() {
   const analysisType = buildPromptAnalysisType(tpl)
 
   analysisLoading.value = true
+  analysisContext.value = { kind: 'meeting' }
   try {
-    const response = await analysisApi.getOrCreate({
+    const response = await analysisApi.generate({
       sessionId: sessionId.value,
       speechIds: speeches.value.map(s => s.id),
       analysisType,
@@ -980,6 +1018,210 @@ async function generateAnalysis() {
     ElMessage.error('生成分析失败')
   } finally {
     analysisLoading.value = false
+  }
+}
+
+async function regenerateAnalysis(): Promise<void> {
+  const ctx = analysisContext.value
+  if (ctx.kind === 'segment') {
+    await analyzeSegment(ctx.segment)
+    return
+  }
+  await generateAnalysis()
+}
+
+function getSegmentKey(segment: TranscriptEventSegment): string {
+  const id = typeof segment.id === 'string' ? segment.id.trim() : ''
+  if (id) return id
+  return String(segment.sequence ?? '')
+}
+
+function joinApiPath(pathname: string): string {
+  const base = getApiBaseUrl()
+  const normalizedBase = typeof base === 'string' ? base.replace(/\/+$/, '') : '/api'
+  const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`
+  return `${normalizedBase}${normalizedPath}`
+}
+
+async function analyzeSegment(segment: TranscriptEventSegment): Promise<void> {
+  const tpl = selectedPromptTemplate.value
+  if (!tpl) {
+    ElMessage.warning('请先选择提示词模板')
+    return
+  }
+
+  const segmentContent = typeof segment.content === 'string' ? segment.content.trim() : ''
+  if (!segmentContent) {
+    ElMessage.warning('片段内容为空，无法分析')
+    return
+  }
+
+  if (analysisStreamAbortController) {
+    analysisStreamAbortController.abort()
+    analysisStreamAbortController = null
+  }
+
+  const analysisType = `segment:${buildPromptAnalysisType(tpl)}`
+  const localId = `local:segment:${getSegmentKey(segment)}:${Date.now()}`
+  const startTime = Date.now()
+
+  analysisContext.value = { kind: 'segment', segment, promptTemplateId: tpl.id }
+  analyzingSegmentKey.value = getSegmentKey(segment)
+  activePane.value = 'analysis'
+
+  currentAnalysis.value = {
+    id: localId,
+    sessionId: sessionId.value,
+    analysisType,
+    modelUsed: 'glm',
+    result: '',
+    status: 'processing',
+    createdAt: new Date().toISOString(),
+    isCached: false,
+  }
+
+  analysisLoading.value = true
+  const abortController = new AbortController()
+  analysisStreamAbortController = abortController
+  const isCurrent = () => analysisStreamAbortController === abortController
+
+  try {
+    await streamSseJson(
+      joinApiPath('/analysis/segment/stream'),
+      {
+        sessionId: sessionId.value,
+        segmentId: segment.id,
+        sequence: segment.sequence,
+        content: segmentContent,
+        analysisType,
+        prompt: tpl.prompt,
+      },
+      {
+        signal: abortController.signal,
+        onEvent: (event, data) => {
+          if (!currentAnalysis.value) return
+          if (event === 'meta') {
+            const model = typeof data?.modelUsed === 'string' ? data.modelUsed.trim() : ''
+            if (model) currentAnalysis.value.modelUsed = model
+            return
+          }
+
+          if (event === 'chunk') {
+            const delta = typeof data?.delta === 'string' ? data.delta : ''
+            if (!delta) return
+            currentAnalysis.value.result += delta
+            return
+          }
+
+          if (event === 'done') {
+            const model = typeof data?.modelUsed === 'string' ? data.modelUsed.trim() : ''
+            if (model) currentAnalysis.value.modelUsed = model
+            currentAnalysis.value.status = 'completed'
+            currentAnalysis.value.processingTime = Date.now() - startTime
+            return
+          }
+
+          if (event === 'error') {
+            const message = typeof data?.message === 'string' ? data.message : '生成分析失败'
+            throw new Error(message)
+          }
+        },
+      }
+    )
+
+    if (currentAnalysis.value?.status === 'processing') {
+      currentAnalysis.value.status = 'completed'
+      currentAnalysis.value.processingTime = Date.now() - startTime
+    }
+  } catch (error) {
+    if (abortController.signal.aborted) {
+      return
+    }
+    if (currentAnalysis.value) {
+      currentAnalysis.value.status = 'failed'
+      currentAnalysis.value.processingTime = Date.now() - startTime
+    }
+    console.error('片段分析失败:', error)
+    ElMessage.error(error instanceof Error ? error.message : '片段分析失败')
+  } finally {
+    if (isCurrent()) {
+      analysisStreamAbortController = null
+      analysisLoading.value = false
+      analyzingSegmentKey.value = null
+    }
+  }
+}
+
+async function streamSseJson(
+  url: string,
+  body: unknown,
+  options: { signal: AbortSignal; onEvent: (event: string, data: any) => void }
+): Promise<void> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify(body),
+    signal: options.signal,
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(text || `请求失败: ${response.status}`)
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('浏览器不支持流式读取')
+  }
+
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    buffer = buffer.replace(/\r\n/g, '\n')
+
+    while (true) {
+      const sepIndex = buffer.indexOf('\n\n')
+      if (sepIndex < 0) break
+
+      const rawEvent = buffer.slice(0, sepIndex)
+      buffer = buffer.slice(sepIndex + 2)
+
+      const lines = rawEvent.split('\n').map(line => line.trimEnd())
+      let eventName = 'message'
+      const dataLines: string[] = []
+
+      for (const line of lines) {
+        if (line.startsWith('event:')) {
+          eventName = line.slice('event:'.length).trim() || 'message'
+          continue
+        }
+        if (line.startsWith('data:')) {
+          dataLines.push(line.slice('data:'.length).trim())
+        }
+      }
+
+      if (!dataLines.length) continue
+      const dataText = dataLines.join('\n')
+      if (dataText === '[DONE]') {
+        options.onEvent('done', null)
+        return
+      }
+
+      let data: any = null
+      try {
+        data = JSON.parse(dataText)
+      } catch {
+        data = { raw: dataText }
+      }
+      options.onEvent(eventName, data)
+    }
   }
 }
 
@@ -1186,7 +1428,7 @@ function getEventDurationText(eventIndex: number): string | null {
 }
 
 .realtime-transcript-bar.collapsed {
-  height: 54px;
+  height: 42px;
 }
 
 .realtime-header {
@@ -1223,6 +1465,7 @@ function getEventDurationText(eventIndex: number): string | null {
 .realtime-content {
   flex: 1;
   overflow: hidden;
+  padding: 10px 0 10px;
 }
 
 .realtime-placeholder {
@@ -1235,7 +1478,7 @@ function getEventDurationText(eventIndex: number): string | null {
 }
 
 .realtime-stream-scroll {
-  padding: 10px 16px;
+  padding: 0px 10px;
   overflow-y: auto;
   height: 100%;
 }
@@ -1329,7 +1572,8 @@ function getEventDurationText(eventIndex: number): string | null {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
-  overflow: hidden;
+  min-height: 0;
+  overflow: visible;
 }
 
 .content-area.narrow {
@@ -1372,18 +1616,21 @@ function getEventDurationText(eventIndex: number): string | null {
 .transcript-panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
 .transcript-content {
   flex: 1;
   overflow: hidden;
+  padding:10px 0;
 }
 
 /* 分析面板 */
 .analysis-panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1402,6 +1649,14 @@ function getEventDurationText(eventIndex: number): string | null {
   font-size: 16px;
   font-weight: 650;
   color: var(--ink-900);
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .panel-actions {

@@ -31,14 +31,14 @@ vi.mock('element-plus', async () => {
 // Mock API
 vi.mock('@/services/api', () => ({
   analysisApi: {
-    getOrCreate: vi.fn(),
+    generate: vi.fn(),
   },
 }))
 
 import { analysisApi } from '@/services/api'
 
 describe('AIAnalysisPanel.vue', () => {
-  let wrapper: VueWrapper
+  let wrapper: VueWrapper<any>
 
   const mockSpeeches: Speech[] = [
     {
@@ -195,12 +195,12 @@ describe('AIAnalysisPanel.vue', () => {
     })
 
     it('应该调用 API 生成分析', async () => {
-      vi.mocked(analysisApi.getOrCreate).mockResolvedValue({
+      vi.mocked(analysisApi.generate).mockResolvedValue({
         data: mockAnalysis,
       } as any)
 
       await wrapper.vm.handleAnalysis()
-      expect(analysisApi.getOrCreate).toHaveBeenCalledWith({
+      expect(analysisApi.generate).toHaveBeenCalledWith({
         sessionId: 'session-1',
         speechIds: ['1'],
         analysisType: 'summary',
@@ -209,7 +209,7 @@ describe('AIAnalysisPanel.vue', () => {
     })
 
     it('应该在成功后设置分析结果', async () => {
-      vi.mocked(analysisApi.getOrCreate).mockResolvedValue({
+      vi.mocked(analysisApi.generate).mockResolvedValue({
         data: mockAnalysis,
       } as any)
 
@@ -221,7 +221,7 @@ describe('AIAnalysisPanel.vue', () => {
     })
 
     it('应该在失败时处理错误', async () => {
-      vi.mocked(analysisApi.getOrCreate).mockRejectedValue(new Error('API 错误'))
+      vi.mocked(analysisApi.generate).mockRejectedValue(new Error('API 错误'))
 
       await wrapper.vm.handleAnalysis()
       await nextTick()
@@ -450,7 +450,7 @@ describe('AIAnalysisPanel.vue', () => {
     })
 
     it('应该正确显示 GLM 模型名称', () => {
-      wrapper.vm.currentAnalysis = { ...mockAnalysis, modelUsed: 'glm-4.6v-flash' }
+      wrapper.vm.currentAnalysis = { ...mockAnalysis, modelUsed: 'glm-any' }
       expect(wrapper.vm.modelText).toBe('智谱 GLM')
     })
 

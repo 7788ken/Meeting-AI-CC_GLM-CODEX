@@ -363,6 +363,12 @@ export class ModelManagerService {
    * 启动定期健康检查
    */
   private startHealthCheck(): void {
+    const enabled = this.readBooleanFromEnv('HEALTH_CHECK_ENABLED', true)
+    if (!enabled) {
+      this.logger.log('Health check disabled by HEALTH_CHECK_ENABLED')
+      return
+    }
+
     const interval = this.configService.get<number>('HEALTH_CHECK_INTERVAL', 5 * 60 * 1000) // 默认 5 分钟
 
     // 初始健康检查
@@ -378,6 +384,15 @@ export class ModelManagerService {
     }, interval)
 
     this.logger.log(`Health check started with interval: ${interval}ms`)
+  }
+
+  private readBooleanFromEnv(key: string, fallback: boolean): boolean {
+    const raw = this.configService.get<string>(key) ?? process.env[key]
+    if (raw == null || raw === '') return fallback
+    const normalized = String(raw).trim().toLowerCase()
+    if (normalized === '0' || normalized === 'false') return false
+    if (normalized === '1' || normalized === 'true') return true
+    return fallback
   }
 
   /**

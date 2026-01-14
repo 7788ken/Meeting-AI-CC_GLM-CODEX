@@ -1,5 +1,5 @@
 <template>
-  <div class="actionbar-host" :aria-hidden="!enabled">
+  <div ref="hostRef" class="actionbar-host" :aria-hidden="!enabled">
     <div v-if="enabled" class="actionbar app-surface">
       <div class="left">
         <div class="hint">
@@ -82,6 +82,8 @@ import { computed, ref } from 'vue'
 
 type RecordingStatus = 'idle' | 'connecting' | 'recording' | 'paused' | 'error'
 
+const hostRef = ref<HTMLElement | null>(null)
+
 const props = defineProps<{
   enabled: boolean
   compact: boolean
@@ -106,7 +108,7 @@ function openHelp(): void {
   helpVisible.value = true
 }
 
-defineExpose({ openHelp })
+defineExpose({ openHelp, hostEl: hostRef })
 
 function handleMoreCommand(command: string): void {
   switch (command) {
@@ -138,12 +140,13 @@ const muteButtonText = computed(() => (props.isPaused ? '继续' : '切麦/闭�
 
 <style scoped>
 .actionbar-host {
-  position: fixed;
+  /* position: fixed;
   left: 50%;
-  bottom: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   width: min(1400px, calc(100vw - 24px));
-  z-index: 30;
+  z-index: 30; */
+  pointer-events: none;
 }
 
 .actionbar {
@@ -152,6 +155,7 @@ const muteButtonText = computed(() => (props.isPaused ? '继续' : '切麦/闭�
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
+  pointer-events: auto;
 }
 
 .left {

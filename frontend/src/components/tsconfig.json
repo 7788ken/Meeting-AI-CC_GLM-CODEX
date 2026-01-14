@@ -1,0 +1,14 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["./*.spec.ts", "./*.vue", "../env.d.ts"],
+  "exclude": ["../../node_modules", "../../dist"]
+}

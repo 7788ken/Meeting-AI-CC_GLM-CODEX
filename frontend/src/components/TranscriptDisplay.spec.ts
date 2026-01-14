@@ -20,7 +20,7 @@ vi.mock('element-plus', async () => {
 })
 
 describe('TranscriptDisplay.vue', () => {
-  let wrapper: VueWrapper
+  let wrapper: VueWrapper<any>
 
   const mockSpeeches: Speech[] = [
     {

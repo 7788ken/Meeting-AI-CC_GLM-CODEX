@@ -308,29 +308,6 @@ describe('API Services', () => {
       })
     })
 
-    describe('getOrCreate', () => {
-      it('应该获取或创建缓存的 AI 分析', async () => {
-        const requestData = {
-          sessionId: 'session-1',
-          speechIds: ['speech-1'],
-          analysisType: 'action-items' as const,
-          model: 'doubao',
-        }
-        vi.mocked(post).mockResolvedValue({
-          data: {
-            id: 'analysis-1',
-            result: '行动项列表',
-            isCached: true,
-          },
-        })
-
-        const result = await analysisApi.getOrCreate(requestData)
-
-        expect(post).toHaveBeenCalledWith('/analysis/get-or-create', requestData)
-        expect(result.data.isCached).toBe(true)
-      })
-    })
-
     describe('get', () => {
       it('应该获取分析详情', async () => {
         const mockAnalysis = {

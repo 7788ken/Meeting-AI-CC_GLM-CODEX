@@ -1,6 +1,11 @@
-import { BadRequestException, Controller, Get, Param, Post } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Get, Param, Post, Put } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Public } from '../auth/decorators/public.decorator'
+import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
+import {
+  TranscriptEventSegmentationConfigDto,
+  UpdateTranscriptEventSegmentationConfigDto,
+} from './dto/transcript-event-segmentation-config.dto'
 import {
   TranscriptEventSegmentationService,
   TranscriptEventSegmentsSnapshotDTO,
@@ -10,7 +15,8 @@ import {
 @Controller('transcript-event-segmentation')
 export class TranscriptEventSegmentationController {
   constructor(
-    private readonly transcriptEventSegmentationService: TranscriptEventSegmentationService
+    private readonly transcriptEventSegmentationService: TranscriptEventSegmentationService,
+    private readonly transcriptEventSegmentationConfigService: TranscriptEventSegmentationConfigService
   ) {}
 
   @Public()
@@ -37,5 +43,31 @@ export class TranscriptEventSegmentationController {
       throw new BadRequestException('sessionId is required')
     }
     return this.transcriptEventSegmentationService.rebuildFromStart(normalized)
+  }
+
+  @Public()
+  @Get('config')
+  @ApiOperation({ summary: '获取语句拆分配置' })
+  @ApiResponse({ status: 200, type: TranscriptEventSegmentationConfigDto })
+  async getConfig(): Promise<TranscriptEventSegmentationConfigDto> {
+    return this.transcriptEventSegmentationConfigService.getConfig()
+  }
+
+  @Public()
+  @Post('config/reset')
+  @ApiOperation({ summary: '重置语句拆分配置为默认值（来自环境变量与默认 prompt）' })
+  @ApiResponse({ status: 200, type: TranscriptEventSegmentationConfigDto })
+  async resetConfig(): Promise<TranscriptEventSegmentationConfigDto> {
+    return this.transcriptEventSegmentationConfigService.resetConfig()
+  }
+
+  @Public()
+  @Put('config')
+  @ApiOperation({ summary: '更新语句拆分配置' })
+  @ApiResponse({ status: 200, type: TranscriptEventSegmentationConfigDto })
+  async updateConfig(
+    @Body() dto: UpdateTranscriptEventSegmentationConfigDto
+  ): Promise<TranscriptEventSegmentationConfigDto> {
+    return this.transcriptEventSegmentationConfigService.updateConfig(dto)
   }
 }

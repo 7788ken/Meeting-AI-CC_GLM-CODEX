@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
-import { ConfigService } from '@nestjs/config'
 import { TranscriptStreamService } from '../transcript-stream/transcript-stream.service'
 import type { TranscriptEventDTO } from '../transcript-stream/transcript-stream.service'
 import { DebugErrorService } from '../debug-error/debug-error.service'
 import { TranscriptEventSegmentationGlmClient } from './transcript-event-segmentation.glm-client'
+import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
 import { buildTranscriptEventSegmentationPrompt } from './transcript-event-segmentation.prompt'
 import { parseTranscriptEventSegmentJson } from './transcript-event-segmentation.validation'
 import {
@@ -82,7 +82,7 @@ export class TranscriptEventSegmentationService {
     private readonly transcriptStreamService: TranscriptStreamService,
     private readonly glmClient: TranscriptEventSegmentationGlmClient,
     private readonly debugErrorService: DebugErrorService,
-    private readonly configService: ConfigService
+    private readonly configService: TranscriptEventSegmentationConfigService
   ) {}
 
   setOnSegmentUpdate(handler?: TranscriptEventSegmentUpdateHandler | null): void {
@@ -258,18 +258,7 @@ export class TranscriptEventSegmentationService {
   }
 
   private readChunkSize(): number {
-    const raw =
-      this.configService.get<string>('TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE') ||
-      process.env.TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE ||
-      this.configService.get<string>('TRANSCRIPT_ANALYSIS_CHUNK_SIZE') ||
-      process.env.TRANSCRIPT_ANALYSIS_CHUNK_SIZE ||
-      this.configService.get<string>('TRANSCRIPT_ANALYSIS_WINDOW_SIZE') ||
-      process.env.TRANSCRIPT_ANALYSIS_WINDOW_SIZE ||
-      this.configService.get<string>('TRANSCRIPT_EVENTS_SEGMENT_WINDOW_EVENTS') ||
-      process.env.TRANSCRIPT_EVENTS_SEGMENT_WINDOW_EVENTS
-    const value = Number(raw)
-    if (!Number.isFinite(value)) return 120
-    return Math.max(5, Math.min(2000, Math.floor(value)))
+    return this.configService.getConfig().windowEvents
   }
 
   private buildGlmErrorContext(error: unknown): Record<string, unknown> | null {
@@ -362,6 +351,8 @@ export class TranscriptEventSegmentationService {
       endEventIndex: input.sourceEndEventIndex,
       events: input.events,
       extractedText,
+      systemPrompt: this.configService.getConfig().systemPrompt,
+      strictSystemPrompt: this.configService.getConfig().strictSystemPrompt,
     })
     const promptLength = prompt.system.length + prompt.user.length
 
@@ -408,6 +399,8 @@ export class TranscriptEventSegmentationService {
           events: input.events,
           extractedText,
           strictEcho: true,
+          systemPrompt: this.configService.getConfig().systemPrompt,
+          strictSystemPrompt: this.configService.getConfig().strictSystemPrompt,
         })
         const retryRaw = await this.glmClient.generateStructuredJson(retryPrompt)
         const retryParsed = parseTranscriptEventSegmentJson(retryRaw)

@@ -49,10 +49,10 @@
 	│  - previousSentence(A) + events(B) → C   │
 	│  - append segment into transcript_events_segments │
 	└────────┬─────────────────────────────────┘
-	         │ GLM API Call
+	         │ LLM API Call
 	         ▼
 	┌─────────────────────────────────┐
-	│  GLM-4.6v-flash                 │
+	│  LLM-大模型                 │
 	│  - 生成下一句 nextSentence       │
 	└────────┬────────────────────────┘
 	         │
@@ -85,7 +85,7 @@ TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_END_TURN=1
 TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE=1
 
 GLM_API_KEY=...                               # GLM API Key
-GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL=glm-4.6v-flash
+GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL=glm-4XXX
 GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS=2000
 GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE=1
 ```
@@ -923,7 +923,7 @@ SEGMENTATION_MAX_SEGMENT_LENGTH=200         # 单段最大字符数
 
 # ========== LLM 配置 ==========
 SEGMENTATION_LLM_ENABLED=true               # 是否启用LLM校正
-SEGMENTATION_LLM_MODEL=glm-4.6v-flash       # LLM模型
+SEGMENTATION_LLM_MODEL=glm-4xxxxx       # LLM模型
 SEGMENTATION_LLM_FLAGS_REQUIRED=low_conf,conflict  # 触发LLM的标记类型
 ```
 

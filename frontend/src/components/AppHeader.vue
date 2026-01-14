@@ -76,8 +76,10 @@ const statusText = computed(() => (props.status === 'active' ? '会话进行中'
 }
 
 .status-dot {
+  display: inline-flex;
   width: 6px;
   height: 6px;
+  flex: 0 0 6px;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.24);
 }

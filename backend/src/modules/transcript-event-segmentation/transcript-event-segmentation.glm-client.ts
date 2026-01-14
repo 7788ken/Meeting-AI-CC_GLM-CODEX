@@ -3,16 +3,21 @@ import { ConfigService } from '@nestjs/config'
 import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
 import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/llm/glm'
+import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
 
 @Injectable()
 export class TranscriptEventSegmentationGlmClient {
   private readonly logger = new Logger(TranscriptEventSegmentationGlmClient.name)
   private readonly defaultMaxTokens = 2000
   private readonly defaultBumpMaxTokensTo = 4096
+  private readonly defaultRetryMax = 2
+  private readonly defaultRetryBaseMs = 500
+  private readonly defaultRetryMaxMs = 8000
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly httpService: HttpService
+    private readonly httpService: HttpService,
+    private readonly segmentationConfigService: TranscriptEventSegmentationConfigService
   ) {}
 
   async generateStructuredJson(params: { system: string; user: string }): Promise<string> {
@@ -36,6 +41,7 @@ export class TranscriptEventSegmentationGlmClient {
       ],
       temperature: 0.2,
       max_tokens: maxTokens,
+      thinking: { type: 'disabled' },
     }
 
     const headers = {
@@ -69,7 +75,7 @@ export class TranscriptEventSegmentationGlmClient {
   }
 
   getModelName(): string {
-    const raw = (this.configService.get<string>('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') || '').trim()
+    const raw = this.segmentationConfigService.getConfig().model.trim()
     if (!raw) {
       throw new Error('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL not configured')
     }
@@ -77,8 +83,7 @@ export class TranscriptEventSegmentationGlmClient {
   }
 
   private readMaxTokens(): number {
-    const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS || '').trim()
-    const value = Number(raw)
+    const value = this.segmentationConfigService.getConfig().maxTokens
     if (Number.isFinite(value) && value >= 256) return Math.floor(value)
     return this.defaultMaxTokens
   }
@@ -91,9 +96,7 @@ export class TranscriptEventSegmentationGlmClient {
   }
 
   private shouldUseJsonMode(): boolean {
-    const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE || '').trim().toLowerCase()
-    if (!raw) return true
-    return raw !== '0' && raw !== 'false'
+    return this.segmentationConfigService.getConfig().jsonMode
   }
 
   private withJsonMode(
@@ -109,9 +112,7 @@ export class TranscriptEventSegmentationGlmClient {
     headers: Record<string, string>
     requestBody: Record<string, unknown>
   }): Promise<string> {
-    const response = await firstValueFrom(
-      this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
-    )
+    const response = await this.postWithRetry(input)
 
     const extracted = this.extractStructuredTextFromGlmResponse(response.data)
 
@@ -136,9 +137,7 @@ export class TranscriptEventSegmentationGlmClient {
         `GLM completion truncated (finish_reason=length), retrying with max_tokens=${bumpMaxTokensTo}`
       )
       const bumpedBody = { ...input.requestBody, max_tokens: bumpMaxTokensTo, temperature: 0 }
-      const bumpedResponse = await firstValueFrom(
-        this.httpService.post(input.endpoint, bumpedBody, { headers: input.headers })
-      )
+      const bumpedResponse = await this.postWithRetry({ ...input, requestBody: bumpedBody })
       const bumpedExtracted = this.extractStructuredTextFromGlmResponse(bumpedResponse.data)
 
       if (bumpedExtracted.text) {
@@ -154,6 +153,119 @@ export class TranscriptEventSegmentationGlmClient {
     }
 
     throw this.buildInvalidResponseError(response, extracted.finishReason)
+  }
+
+  private async postWithRetry(input: {
+    endpoint: string
+    headers: Record<string, string>
+    requestBody: Record<string, unknown>
+  }): Promise<{ data?: unknown; status?: unknown }> {
+    const maxRetries = this.readRetryMax()
+    let attempt = 0
+    while (true) {
+      try {
+        return await firstValueFrom(
+          this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
+        )
+      } catch (error) {
+        const status = this.extractStatusCode(error)
+        if (status !== 429 || attempt >= maxRetries) {
+          throw error
+        }
+
+        const delayMs = this.resolveRetryDelayMs(error, attempt)
+        this.logger.warn(
+          `GLM rate limited (429), retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`
+        )
+        await this.sleep(delayMs)
+        attempt += 1
+      }
+    }
+  }
+
+  private extractStatusCode(error: unknown): number | null {
+    if (!error || typeof error !== 'object') return null
+    const source = error as { response?: { status?: unknown }; glmStatus?: unknown }
+    const status = source.response?.status ?? source.glmStatus
+    return typeof status === 'number' && Number.isFinite(status) ? status : null
+  }
+
+  private resolveRetryDelayMs(error: unknown, attempt: number): number {
+    const retryAfterMs = this.readRetryAfterMs(error)
+    if (retryAfterMs != null) return retryAfterMs
+
+    const base = this.readRetryBaseMs()
+    const max = this.readRetryMaxMs()
+    const jitterRange = Math.min(200, base)
+    const jitter = jitterRange > 0 ? Math.floor(Math.random() * jitterRange) : 0
+    const delay = Math.min(max, base * Math.pow(2, attempt) + jitter)
+    return Math.max(0, Math.floor(delay))
+  }
+
+  private readRetryAfterMs(error: unknown): number | null {
+    if (!error || typeof error !== 'object') return null
+    const source = error as { response?: { headers?: Record<string, unknown> } }
+    const headers = source.response?.headers
+    if (!headers) return null
+    const raw = headers['retry-after'] ?? headers['Retry-After']
+    if (raw == null) return null
+    const value = Array.isArray(raw) ? raw[0] : raw
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0, Math.floor(value * 1000))
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return null
+      const asNumber = Number(trimmed)
+      if (Number.isFinite(asNumber)) {
+        return Math.max(0, Math.floor(asNumber * 1000))
+      }
+      const asDate = Date.parse(trimmed)
+      if (!Number.isNaN(asDate)) {
+        const delta = asDate - Date.now()
+        return Math.max(0, Math.floor(delta))
+      }
+    }
+    return null
+  }
+
+  private readRetryMax(): number {
+    const value = this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX')
+    if (Number.isFinite(value) && value >= 0 && value <= 10) {
+      return Math.floor(value)
+    }
+    return this.defaultRetryMax
+  }
+
+  private readRetryBaseMs(): number {
+    const value = this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS')
+    if (Number.isFinite(value) && value >= 0 && value <= 60000) {
+      return Math.floor(value)
+    }
+    return this.defaultRetryBaseMs
+  }
+
+  private readRetryMaxMs(): number {
+    const value = this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS')
+    if (Number.isFinite(value) && value >= 0 && value <= 120000) {
+      return Math.floor(value)
+    }
+    return this.defaultRetryMaxMs
+  }
+
+  private readNumberFromEnv(key: string): number | null {
+    const raw = this.configService.get<string>(key) || process.env[key]
+    if (raw == null || raw === '') return null
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : null
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    if (!ms || ms <= 0) {
+      await Promise.resolve()
+      return
+    }
+    await new Promise(resolve => setTimeout(resolve, ms))
   }
 
   private extractStructuredTextFromGlmResponse(data: unknown): {

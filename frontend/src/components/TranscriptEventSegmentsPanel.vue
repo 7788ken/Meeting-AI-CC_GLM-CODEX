@@ -5,13 +5,9 @@
     </div>
 
     <div v-else class="segment-list">
-      <button v-if="progressBadge" type="button" class="segment-item progress-item" disabled>
+      <div v-if="progressBadge" class="segment-item progress-item is-disabled" aria-disabled="true">
         <div class="segment-header">
-          <span class="segment-seq">
-          #{{ progressBadge.sequenceText }}
-{{ progressBadge.title }}
-
-          </span>
+          <span class="segment-seq">#{{ progressBadge.sequenceText }} {{ progressBadge.title }}</span>
           <span class="segment-range">
             {{ progressBadge.rangeText }}
             {{ progressBadge.meta }}
@@ -29,8 +25,8 @@
 
           
         </div>
-      </button>
-      <button v-if="progressErrorBadge" type="button" class="segment-item error-item" disabled>
+      </div>
+      <div v-if="progressErrorBadge" class="segment-item error-item is-disabled" aria-disabled="true">
         <div class="segment-header">
           <span class="segment-seq">#{{ progressErrorBadge.sequenceText }}</span>
           <span class="segment-range">
@@ -38,29 +34,41 @@
           </span>
         </div>
         <div class="segment-content">{{ progressErrorBadge.content }}</div>
-      </button>
-      <button
+      </div>
+      <div
         v-for="segment in orderedSegments"
         :key="segment.id || segment.sequence"
-        type="button"
         class="segment-item"
-        @click="
-          emit('select-range', {
-            start: getDisplayStartIndex(segment),
-            end: getDisplayEndIndex(segment),
-            startOffset: segment.sourceStartEventOffset,
-            endOffset: segment.sourceEndEventOffset,
-          })
-        "
+        role="button"
+        tabindex="0"
+        @click="handleSelect(segment)"
+        @keydown="handleItemKeydown($event, segment)"
       >
         <div class="segment-header">
-          <span class="segment-seq">#{{ segment.sequence }}</span>
-          <span class="segment-range">
-            事件 #{{ getDisplayStartIndex(segment) }}-#{{ getDisplayEndIndex(segment) }}
-          </span>
+          <div class="segment-header-left">
+            <span class="segment-seq">@{{ segment.sequence }} ｜
+            <!-- 事件 范围 -->
+              #{{ getDisplayStartIndex(segment) }}-#{{ getDisplayEndIndex(segment) }}
+            </span>
+          </div>
+          <div class="segment-header-right">
+            <el-tooltip content="AI 分析" placement="bottom">
+              <el-button
+                size="small"
+                circle
+                class="ai-analysis-trigger"
+                :loading="isSegmentAnalyzing(segment)"
+                :disabled="isSegmentAnalyzing(segment)"
+                @click.stop="emit('analyze-segment', segment)"
+                @keydown.stop
+              >
+                <el-icon><MagicStick /></el-icon>
+              </el-button>
+            </el-tooltip>
+          </div>
         </div>
         <div class="segment-content">{{ segment.content }}</div>
-      </button>
+      </div>
     </div>
   </div>
 </template>
@@ -69,16 +77,19 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import type { TranscriptEventSegment } from '@/services/api'
 import type { TranscriptEventSegmentationProgressData } from '@/services/websocket'
+import { MagicStick } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   segments: TranscriptEventSegment[]
   order?: 'asc' | 'desc'
   loading?: boolean
   progress?: TranscriptEventSegmentationProgressData | null
+  analyzingSegmentKey?: string | null
 }>()
 
 const emit = defineEmits<{
   (e: 'select-range', payload: { start: number; end: number; startOffset?: number; endOffset?: number }): void
+  (e: 'analyze-segment', segment: TranscriptEventSegment): void
 }>()
 
 const panelRef = ref<HTMLElement | null>(null)
@@ -97,6 +108,34 @@ function getDisplayStartIndex(segment: TranscriptEventSegment): number {
 
 function getDisplayEndIndex(segment: TranscriptEventSegment): number {
   return segment.sourceEndEventIndexExact ?? segment.sourceEndEventIndex
+}
+
+function getSegmentKey(segment: TranscriptEventSegment): string {
+  const id = typeof segment.id === 'string' ? segment.id.trim() : ''
+  if (id) return id
+  return String(segment.sequence ?? '')
+}
+
+function isSegmentAnalyzing(segment: TranscriptEventSegment): boolean {
+  const currentKey = typeof props.analyzingSegmentKey === 'string' ? props.analyzingSegmentKey : null
+  if (!currentKey) return false
+  return currentKey === getSegmentKey(segment)
+}
+
+function handleSelect(segment: TranscriptEventSegment): void {
+  emit('select-range', {
+    start: getDisplayStartIndex(segment),
+    end: getDisplayEndIndex(segment),
+    startOffset: segment.sourceStartEventOffset,
+    endOffset: segment.sourceEndEventOffset,
+  })
+}
+
+function handleItemKeydown(event: KeyboardEvent, segment: TranscriptEventSegment): void {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    handleSelect(segment)
+  }
 }
 
 function isInFlightStage(stage: TranscriptEventSegmentationProgressData['stage']): boolean {
@@ -214,13 +253,13 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
     border-color 200ms var(--ease-out);
 }
 
-.segment-item:hover:not(:disabled) {
+.segment-item:hover:not(.is-disabled) {
   transform: translateY(-1px);
   box-shadow: var(--shadow-2);
   border-color: rgba(47, 107, 255, 0.22);
 }
 
-.segment-item:disabled {
+.segment-item.is-disabled {
   cursor: default;
   opacity: 0.92;
 }
@@ -306,6 +345,20 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
   margin-bottom: 6px;
 }
 
+.segment-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.segment-header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .segment-seq {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
     'Courier New', monospace;
@@ -316,11 +369,26 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
 .segment-range {
   font-size: 12px;
   color: var(--ink-500);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .segment-content {
   white-space: pre-wrap;
   line-height: 1.5;
   color: var(--ink-900);
+}
+
+.ai-analysis-trigger {
+  border: none;
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed, #2563eb);
+  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.20);
+}
+
+.ai-analysis-trigger:hover {
+  filter: brightness(1.04);
 }
 </style>

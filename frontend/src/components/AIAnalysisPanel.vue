@@ -238,12 +238,18 @@ const MODEL_LABELS: Record<string, string> = {
   qianwen: '千问',
 }
 
-const MODEL_ALIASES: Record<string, string> = {
-  'glm-4.6v-flash': 'glm',
-}
-
 function normalizeModelUsed(model: string): string {
-  return MODEL_ALIASES[model] || model
+  const normalized = (model || '').trim()
+  if (!normalized) return normalized
+  const lower = normalized.toLowerCase()
+
+  if (lower === 'glm' || lower.startsWith('glm-')) return 'glm'
+  if (lower === 'doubao' || lower.startsWith('doubao')) return 'doubao'
+  if (lower === 'qianwen' || lower.startsWith('qwen') || lower.startsWith('qianwen')) {
+    return 'qianwen'
+  }
+
+  return normalized
 }
 
 // 模型显示文本
@@ -313,7 +319,7 @@ async function handleAnalysis() {
   statusMessage.value = '正在分析，请稍候...'
 
   try {
-    const response = await analysisApi.getOrCreate({
+    const response = await analysisApi.generate({
       sessionId: props.sessionId,
       speechIds: props.speeches.map((s) => s.id),
       analysisType: selectedAnalysisType.value as any,

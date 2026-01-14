@@ -12,7 +12,7 @@
       <header class="drawer-header">
         <div class="title-block">
           <div class="title">设置</div>
-          <div class="subtitle">仅影响本地客户端行为，不修改后端</div>
+          <div class="subtitle">多数设置仅影响本地客户端；语句拆分设置会同步到后端</div>
         </div>
         <div class="header-actions">
           <el-button size="small" class="icon-button" @click="visibleProxy = false">
@@ -123,11 +123,11 @@
             <template #label>
               <span class="tab-label">
                 <el-icon><DataAnalysis /></el-icon>
-                提示词
+                AI 分析提示词
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">提示词模板</div>
+              <div class="pane-title">AI 分析提示词模板</div>
               <div class="pane-subtitle">可创建多个模板，并设置默认模板（用于会议 AI 分析）。</div>
 
               <div class="prompts-toolbar">
@@ -182,6 +182,81 @@
             </section>
           </el-tab-pane>
 
+          <el-tab-pane name="segmentation">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Document /></el-icon>
+                语句拆分提示设置
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">语句拆分提示设置</div>
+              <div class="pane-subtitle">配置语句拆分的系统提示词与上下文窗口等参数。</div>
+
+              <el-form label-position="top" :model="form" class="pane-form">
+                <el-form-item label="系统提示词">
+                  <el-input
+                    v-model="form.segmentationSystemPrompt"
+                    type="textarea"
+                    :autosize="{ minRows: 8, maxRows: 18 }"
+                    placeholder="用于语句拆分的系统提示词"
+                  />
+                  <div class="hint">调整后将影响语句拆分的系统提示词规则。</div>
+                </el-form-item>
+
+                <div class="grid two-col">
+                  <el-form-item label="上下文窗口事件数">
+                    <el-input-number
+                      v-model="form.segmentationWindowEvents"
+                      :min="5"
+                      :max="2000"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="拆分触发间隔 (ms)">
+                    <el-input-number
+                      v-model="form.segmentationIntervalMs"
+                      :min="0"
+                      :max="600000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="GLM 模型">
+                    <el-input v-model="form.segmentationModel" placeholder="如 GLM-4X" />
+                  </el-form-item>
+                  <el-form-item label="最大输出 tokens">
+                    <el-input-number
+                      v-model="form.segmentationMaxTokens"
+                      :min="256"
+                      :max="8192"
+                      :step="128"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                </div>
+
+                <div class="grid two-col">
+                  <el-form-item label="JSON 模式">
+                    <el-switch v-model="form.segmentationJsonMode" />
+                  </el-form-item>
+                  <el-form-item label="触发条件：end_turn">
+                    <el-switch v-model="form.segmentationTriggerOnEndTurn" />
+                  </el-form-item>
+                  <el-form-item label="触发条件：stop_transcribe">
+                    <el-switch v-model="form.segmentationTriggerOnStopTranscribe" />
+                  </el-form-item>
+                </div>
+
+                <div class="hint">触发间隔为 0 表示每次事件更新都会尝试拆分；修改后可在会议页点击“重拆”立即生效。</div>
+              </el-form>
+            </section>
+          </el-tab-pane>
+
           <el-tab-pane name="service">
             <template #label>
               <span class="tab-label">
@@ -218,7 +293,7 @@
 
   <el-dialog
     v-model="promptDialogVisible"
-    :title="promptDialogMode === 'create' ? '新建提示词模板' : '编辑提示词模板'"
+    :title="promptDialogMode === 'create' ? '新建 AI 分析提示词模板' : '编辑 AI 分析提示词模板'"
     width="min(92vw, 720px)"
     append-to-body
   >
@@ -226,7 +301,7 @@
       <el-form-item label="模板名称">
         <el-input v-model="promptForm.name" placeholder="例如：会议摘要 / 行动项 / 完整报告" />
       </el-form-item>
-      <el-form-item label="提示词内容">
+      <el-form-item label="AI 分析提示词内容">
         <el-input
           v-model="promptForm.prompt"
           type="textarea"
@@ -251,12 +326,14 @@ import {
   Connection,
   TrendCharts,
   DataAnalysis,
+  Document,
   Microphone,
   Refresh,
   Close,
   Check,
 } from '@element-plus/icons-vue'
 import { useAppSettings, type AppSettings, type AsrModel, type PromptTemplate } from '@/composables/useAppSettings'
+import { transcriptEventSegmentationConfigApi } from '@/services/api'
 import { uuid } from '@/utils/uuid'
 
 const SPEECH_PLACEHOLDER = '{{speeches}}'
@@ -269,7 +346,13 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
 }>()
 
-const { settings, updateSettings, resetSettings, validateSettings } = useAppSettings()
+const {
+  settings,
+  updateSettings,
+  resetSettings,
+  validateSettings,
+  refreshSegmentationConfigFromServer,
+} = useAppSettings()
 
 const visibleProxy = computed({
   get: () => props.modelValue,
@@ -277,7 +360,7 @@ const visibleProxy = computed({
 })
 
 const form = reactive<AppSettings>({ ...settings.value })
-const activeSection = ref<'asr' | 'vad' | 'analysis' | 'service'>('asr')
+const activeSection = ref<'asr' | 'vad' | 'analysis' | 'segmentation' | 'service'>('asr')
 
 const asrModels: Array<{ value: AsrModel; label: string; desc: string }> = [
   { value: 'doubao', label: '豆包 ASR', desc: '实时、低延迟，适合会议录制' },
@@ -290,8 +373,9 @@ const vadPreview = computed(() => {
 
 watch(
   () => props.modelValue,
-  (v) => {
+  async (v) => {
     if (v) {
+      await refreshSegmentationConfigFromServer()
       Object.assign(form, settings.value)
       activeSection.value = 'asr'
     }
@@ -334,12 +418,12 @@ async function deleteTemplate(id: string): Promise<void> {
   const tpl = form.promptTemplates.find(t => t.id === id)
   if (!tpl) return
   if (form.promptTemplates.length <= 1) {
-    ElMessage.warning('至少需要保留一个提示词模板')
+    ElMessage.warning('至少需要保留一个 AI 分析提示词模板')
     return
   }
 
   try {
-    await ElMessageBox.confirm(`确定删除模板「${tpl.name}」吗？删除后不可恢复。`, '删除提示词模板', {
+    await ElMessageBox.confirm(`确定删除模板「${tpl.name}」吗？删除后不可恢复。`, '删除 AI 分析提示词模板', {
       type: 'warning',
       confirmButtonText: '删除',
       cancelButtonText: '取消',
@@ -368,7 +452,7 @@ function saveTemplate(): void {
     return
   }
   if (!prompt) {
-    ElMessage.error('提示词内容不能为空')
+    ElMessage.error('AI 分析提示词内容不能为空')
     return
   }
 
@@ -413,6 +497,29 @@ function formatDateTime(iso: string): string {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
+function buildSegmentationConfigPayload() {
+  return {
+    systemPrompt: form.segmentationSystemPrompt,
+    windowEvents: form.segmentationWindowEvents,
+    intervalMs: form.segmentationIntervalMs,
+    triggerOnEndTurn: form.segmentationTriggerOnEndTurn,
+    triggerOnStopTranscribe: form.segmentationTriggerOnStopTranscribe,
+    model: form.segmentationModel,
+    maxTokens: form.segmentationMaxTokens,
+    jsonMode: form.segmentationJsonMode,
+  }
+}
+
+async function syncSegmentationConfig(): Promise<boolean> {
+  try {
+    await transcriptEventSegmentationConfigApi.update(buildSegmentationConfigPayload())
+    return true
+  } catch (error) {
+    console.error('语句拆分配置同步失败:', error)
+    return false
+  }
+}
+
 const onSave = async () => {
   const errors = validateSettings(form)
   if (errors.length > 0) {
@@ -420,7 +527,12 @@ const onSave = async () => {
     return
   }
   updateSettings(form)
-  ElMessage.success('设置已保存')
+  const synced = await syncSegmentationConfig()
+  if (synced) {
+    ElMessage.success('设置已保存')
+  } else {
+    ElMessage.warning('设置已保存，但语句拆分设置同步失败')
+  }
   visibleProxy.value = false
 }
 
@@ -429,7 +541,25 @@ const onReset = async () => {
     await ElMessageBox.confirm('确定恢复默认设置？', '重置', { type: 'warning' })
     const next = resetSettings()
     Object.assign(form, next)
-    ElMessage.success('已恢复默认值')
+
+    try {
+      const response = await transcriptEventSegmentationConfigApi.reset()
+      updateSettings({
+        segmentationSystemPrompt: response.data.systemPrompt,
+        segmentationWindowEvents: response.data.windowEvents,
+        segmentationIntervalMs: response.data.intervalMs,
+        segmentationTriggerOnEndTurn: response.data.triggerOnEndTurn,
+        segmentationTriggerOnStopTranscribe: response.data.triggerOnStopTranscribe,
+        segmentationModel: response.data.model,
+        segmentationMaxTokens: response.data.maxTokens,
+        segmentationJsonMode: response.data.jsonMode,
+      })
+      Object.assign(form, settings.value)
+      ElMessage.success('已恢复默认值')
+    } catch (error) {
+      console.error('语句拆分配置重置失败:', error)
+      ElMessage.warning('已恢复默认值，但语句拆分设置重置失败')
+    }
   } catch {
     // 用户取消
   }

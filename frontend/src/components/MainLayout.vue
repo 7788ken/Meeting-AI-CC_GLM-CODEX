@@ -20,6 +20,7 @@
   flex-direction: column;
   height: 100vh;
   background: transparent;
+  overflow: hidden;
 }
 
 .meeting-header {
@@ -45,8 +46,9 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow: hidden;
-  padding: 14px 12px calc(12px + var(--app-bottom-inset));
+  min-height: 0;
+  overflow: visible;
+  padding: 14px 12px calc(24px + var(--app-bottom-inset) + env(safe-area-inset-bottom, 0px));
 }
 
 .meeting-main-inner {
@@ -54,6 +56,7 @@
   flex-direction: column;
   gap: 14px;
   height: 100%;
+  min-height: 0;
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
