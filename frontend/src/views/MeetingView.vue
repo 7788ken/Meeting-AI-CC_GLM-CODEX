@@ -1,5 +1,5 @@
 <template>
-  <MainLayout>
+  <MainLayout :style="{ '--app-bottom-inset': actionBarEnabled ? (isNarrow ? '128px' : '84px') : '0px' }">
     <template #header>
       <AppHeader
         title="AI会议助手"
@@ -9,52 +9,19 @@
       />
 
       <div class="header-right">
-        <el-select
-          v-model="selectedAnalysisType"
-          placeholder="分析类型"
-          size="small"
-          style="width: 120px; margin-right: 8px"
-        >
-          <el-option label="会议摘要" value="summary" />
-          <el-option label="行动项" value="action-items" />
-          <el-option label="情感分析" value="sentiment" />
-          <el-option label="关键词" value="keywords" />
-          <el-option label="议题分析" value="topics" />
-        </el-select>
+        <el-tag :type="recordingTag.type" size="small" class="recording-tag">
+          <span class="recording-dot" />
+          {{ recordingTag.text }}
+        </el-tag>
 
-        <el-button
-          size="small"
-          type="danger"
-          :loading="endingSession"
-          :disabled="!sessionId || isSessionEnded"
-          @click="endSession"
-        >
-          结束会话
-        </el-button>
-
-        <RecordButton
-          :status="recordingStatus"
-          :isPaused="isPaused"
-          :disabled="isSessionEnded"
-          disabledText="会话已结束"
-          @toggle="toggleRecording"
-          @pause="pauseRecording"
-        />
-
-        <el-tag v-if="wsReconnectTag" :type="wsReconnectTag.type" size="small">
+        <el-tag v-if="wsReconnectTag" :type="wsReconnectTag.type" size="small" class="ws-tag">
           {{ wsReconnectTag.text }}
         </el-tag>
 
-        <el-button size="small" type="success" @click="generateAnalysis">生成分析</el-button>
-
         <el-tooltip content="设置" placement="bottom">
-          <el-button
-            size="small"
-            circle
-            class="settings-trigger"
-            @click="settingsDrawerVisible = true"
-          >
+          <el-button size="small" circle class="ghost-icon" @click="settingsDrawerVisible = true">
             <el-icon><Setting /></el-icon>
+            <span class="sr-only">设置</span>
           </el-button>
         </el-tooltip>
 
@@ -72,9 +39,14 @@
     </template>
 
     <!-- 上部：原文流（豆包语音识别） -->
-    <section class="realtime-transcript-bar">
+    <section :class="['realtime-transcript-bar', { collapsed: realtimeCollapsed }]" class="app-surface">
       <div class="realtime-header">
-        <h3>原文流</h3>
+        <div class="realtime-title">
+          <h3>原文流</h3>
+          <el-button size="small" class="ghost-button" @click="realtimeCollapsed = !realtimeCollapsed">
+            {{ realtimeCollapsed ? '展开' : '折叠' }}
+          </el-button>
+        </div>
 	        <div class="realtime-status">
 	          <el-tag v-if="recordingStatus === 'recording'" type="success" size="small">录制中</el-tag>
 	          <el-tag v-else-if="recordingStatus === 'paused'" type="warning" size="small">已暂停</el-tag>
@@ -96,36 +68,79 @@
 	          </el-tag>
 	        </div>
 	      </div>
-	      <div class="realtime-content">
+	      <div v-show="!realtimeCollapsed" class="realtime-content">
         <div v-if="transcriptStreamStore.events.length === 0" class="realtime-placeholder">
           暂无实时转写内容
         </div>
-        <div v-else class="realtime-events-scroll">
-          <div
-            v-for="event in transcriptStreamStore.events.slice().reverse()"
-            :key="event.eventIndex"
-            class="realtime-event-item"
-          >
-            <div class="event-meta-row">
-              <span class="event-index">事件#{{ event.eventIndex }}</span>
-              <span
-                v-if="event.isFinal && getEventDurationText(event.eventIndex)"
-                class="event-duration"
-              >
-                {{ getEventDurationText(event.eventIndex) }}
+        <div v-else ref="realtimeScrollRef" class="realtime-stream-scroll" @scroll="handleRealtimeScroll">
+          <div class="realtime-stream" role="article" aria-label="原文流内容">
+            <span
+              v-for="(event, index) in transcriptStreamStore.events"
+              :key="event.eventIndex"
+              :data-event-index="event.eventIndex"
+              :class="[
+                'realtime-event-item',
+                event.isFinal ? 'is-final' : 'is-draft',
+                focusedEventIndex === event.eventIndex ? 'is-focused' : '',
+                isEventFullyHighlighted(event.eventIndex, event.content) ? 'is-highlighted' : '',
+              ]"
+              :style="{ '--stagger': index }"
+              :title="`事件#${event.eventIndex}`"
+            >
+              <span class="event-inline-meta">
+                <span class="event-index">#{{ event.eventIndex }}</span>
+                <span
+                  v-if="event.isFinal && getEventDurationText(event.eventIndex)"
+                  class="event-duration"
+                >
+                  {{ getEventDurationText(event.eventIndex) }}
+                </span>
               </span>
-              <span v-if="event.isFinal" class="event-final">final</span>
-            </div>
-            <div class="event-text">{{ event.content }}</div>
+              <span class="event-text">
+                <template v-if="getEventHighlightParts(event.eventIndex, event.content)?.mode === 'partial'">
+                  <span>{{ getEventHighlightParts(event.eventIndex, event.content)?.before }}</span>
+                  <span class="event-text-highlight">
+                    {{ getEventHighlightParts(event.eventIndex, event.content)?.highlight }}
+                  </span>
+                  <span>{{ getEventHighlightParts(event.eventIndex, event.content)?.after }}</span>
+                </template>
+                <template v-else>
+                  {{ event.content }}
+                </template>
+              </span>
+              <span class="event-sep"> </span>
+            </span>
           </div>
         </div>
       </div>
     </section>
 
+    <div v-if="isNarrow" class="mobile-pane-switch app-surface" role="tablist" aria-label="工作台分区">
+      <button
+        type="button"
+        :class="['pane-tab', activePane === 'segments' ? 'is-active' : '']"
+        role="tab"
+        :aria-selected="activePane === 'segments'"
+        @click="activePane = 'segments'"
+      >
+        语句拆分
+      </button>
+      <button
+        type="button"
+        :class="['pane-tab', activePane === 'analysis' ? 'is-active' : '']"
+        role="tab"
+        :aria-selected="activePane === 'analysis'"
+        @click="activePane = 'analysis'"
+      >
+        AI分析
+      </button>
+    </div>
+
     <!-- 下部：左右分栏 -->
-    <div class="content-area">
+    <div class="content-area" :class="{ narrow: isNarrow }">
       <!-- 下左：GLM 拆分后的独立发言 -->
-	      <section class="transcript-panel">
+	      <transition name="panel-fade" mode="out-in">
+	      <section v-if="!isNarrow || activePane === 'segments'" class="transcript-panel app-surface">
 	      <div class="panel-header">
 	        <h2>语句拆分</h2>
 	        <div class="panel-actions">
@@ -160,15 +175,23 @@
 	          :order="transcriptSegmentOrder"
 	          :loading="transcriptEventSegmentationStore.isLoadingSnapshot"
 	          :progress="transcriptEventSegmentationStore.progress"
+	          @select-range="focusRealtimeRange"
 	        />
 	      </div>
 	    </section>
+	    </transition>
 
     <!-- 右侧：AI分析区 -->
-    <section class="analysis-panel">
+    <transition name="panel-fade" mode="out-in">
+    <section v-if="!isNarrow || activePane === 'analysis'" class="analysis-panel app-surface">
       <div class="panel-header">
         <h2>AI分析</h2>
-        <el-tag v-if="currentAnalysis?.isCached" type="info" size="small">缓存</el-tag>
+        <div class="analysis-header-right">
+          <el-button size="small" class="ghost-button" @click="promptDialogVisible = true">
+            提示词：{{ selectedPromptTemplate?.name || '未选择' }}
+          </el-button>
+          <el-tag v-if="currentAnalysis?.isCached" type="info" size="small">缓存</el-tag>
+        </div>
       </div>
       <div class="analysis-content">
         <div v-if="analysisLoading" v-loading="true" class="analysis-loading"></div>
@@ -195,14 +218,50 @@
           </div>
         </div>
         <div v-else class="empty-state">
-          <el-empty description="选择发言记录后点击「生成分析」" />
+          <el-empty description="停止录音后将自动生成分析（可在此选择提示词模板）" />
         </div>
       </div>
     </section>
+    </transition>
     </div>
+
+    <MeetingActionBar
+      ref="actionBarRef"
+      :enabled="actionBarEnabled"
+      :compact="isNarrow"
+      :disabled="!sessionId"
+      :ending="endingSession"
+      :isSessionEnded="isSessionEnded"
+      :recordingStatus="recordingStatus"
+      :isPaused="isPaused"
+      @toggle-recording="toggleRecording"
+      @toggle-mute="pauseRecording"
+      @open-prompts="promptDialogVisible = true"
+      @end-session="endSession"
+      @toggle-realtime="realtimeCollapsed = !realtimeCollapsed"
+    />
 
     <SettingsDrawer v-model="settingsDrawerVisible" />
     <DebugDrawer v-model="debugDrawerVisible" :session-id="sessionId" />
+
+    <el-dialog
+      v-model="promptDialogVisible"
+      title="提示词选择"
+      width="min(92vw, 640px)"
+      append-to-body
+    >
+      <el-select v-model="selectedPromptTemplateId" placeholder="选择提示词模板" style="width: 100%">
+        <el-option v-for="tpl in promptTemplates" :key="tpl.id" :label="tpl.name" :value="tpl.id" />
+      </el-select>
+      <div class="prompt-preview">
+        <div class="prompt-preview-title">模板内容预览</div>
+        <pre class="prompt-preview-body">{{ selectedPromptTemplate?.prompt || '' }}</pre>
+      </div>
+      <template #footer>
+        <el-button size="small" class="ghost-button" @click="settingsDrawerVisible = true">管理模板</el-button>
+        <el-button size="small" @click="promptDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </MainLayout>
 </template>
 
@@ -228,10 +287,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 		import { useAppSettings } from '@/composables/useAppSettings'
 import MainLayout from '@/components/MainLayout.vue'
 import AppHeader from '@/components/AppHeader.vue'
-import RecordButton from '@/components/RecordButton.vue'
 import TranscriptEventSegmentsPanel from '@/components/TranscriptEventSegmentsPanel.vue'
 import DebugDrawer from '@/components/DebugDrawer.vue'
 import SettingsDrawer from '@/components/SettingsDrawer.vue'
+import MeetingActionBar from '@/components/MeetingActionBar.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -246,8 +305,18 @@ const currentAnalysis = ref<AIAnalysis | null>(null)
 const analysisLoading = ref(false)
 const recordingStatus = ref<'idle' | 'connecting' | 'recording' | 'paused' | 'error'>('idle')
 const isPaused = ref(false)
-const selectedAnalysisType = ref<string>(settings.value.analysisType || 'summary')
 const transcriptRef = ref<HTMLElement>()
+const realtimeScrollRef = ref<HTMLElement | null>(null)
+const focusedEventIndex = ref<number | null>(null)
+type HighlightedRange = {
+  startEventIndex: number
+  endEventIndex: number
+  startOffset?: number
+  endOffset?: number
+}
+
+const highlightedRange = ref<HighlightedRange | null>(null)
+const realtimeStickToBottom = ref(true)
 const endingSession = ref(false)
 const sessionEndedOverride = ref(false)
 const wsConnectionStatus = ref<ConnectionStatus | null>(null)
@@ -255,8 +324,189 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	const settingsDrawerVisible = ref(false)
 	const transcriptSegmentOrder = ref<'asc' | 'desc'>('desc')
 	const rebuildingTranscriptSegments = ref(false)
+	const realtimeCollapsed = ref(false)
+	const isNarrow = ref(false)
+	const activePane = ref<'segments' | 'analysis'>('segments')
+	const actionBarEnabled = computed(() => true)
+	const actionBarRef = ref<{ openHelp: () => void } | null>(null)
+	const promptDialogVisible = ref(false)
+	const selectedPromptTemplateId = ref<string>('')
+	const lastAutoAnalysisKey = ref('')
 		const transcriptStreamStore = useTranscriptStreamStore()
 		const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
+
+	let mediaQuery: MediaQueryList | null = null
+	function updateIsNarrow(): void {
+	  if (!mediaQuery) return
+	  isNarrow.value = mediaQuery.matches
+	}
+
+	function isEditableTarget(target: EventTarget | null): boolean {
+	  const el = target as HTMLElement | null
+	  if (!el) return false
+	  if (el.isContentEditable) return true
+	  const tag = el.tagName?.toLowerCase()
+	  if (!tag) return false
+	  return tag === 'input' || tag === 'textarea' || tag === 'select'
+	}
+
+	function handleGlobalKeydown(event: KeyboardEvent): void {
+	  if (event.defaultPrevented) return
+	  if (event.altKey || event.metaKey || event.ctrlKey) return
+	  if (isEditableTarget(event.target)) return
+
+	  const key = event.key?.toLowerCase()
+	  if (key === 'm') {
+	    if (recordingStatus.value === 'recording' || recordingStatus.value === 'paused') {
+	      event.preventDefault()
+	      pauseRecording()
+	    } else {
+	      ElMessage.info('未录音，无法切麦/闭麦')
+	    }
+	    return
+	  }
+
+	  if (key === 'r') {
+	    event.preventDefault()
+	    void toggleRecording()
+	    return
+	  }
+
+	  if (key === 'p') {
+	    event.preventDefault()
+	    promptDialogVisible.value = true
+	    return
+	  }
+
+	  if (event.key === '?') {
+	    event.preventDefault()
+	    actionBarRef.value?.openHelp()
+	  }
+	}
+
+
+
+async function focusRealtimeRange(payload: {
+  start: number
+  end: number
+  startOffset?: number
+  endOffset?: number
+}): Promise<void> {
+  const start = Math.floor(Number(payload.start) || 0)
+  const end = Math.floor(Number(payload.end) || 0)
+  const normalizedStart = Math.max(0, Math.min(start, end))
+  const normalizedEnd = Math.max(0, Math.max(start, end))
+
+  const hasOffsets =
+    typeof payload.startOffset === 'number' && typeof payload.endOffset === 'number' && start <= end
+  highlightedRange.value = {
+    startEventIndex: normalizedStart,
+    endEventIndex: normalizedEnd,
+    startOffset: hasOffsets ? Math.max(0, Math.floor(payload.startOffset as number)) : undefined,
+    endOffset: hasOffsets ? Math.max(0, Math.floor(payload.endOffset as number)) : undefined,
+  }
+  await focusRealtimeEventIndex(normalizedStart)
+}
+
+	async function focusRealtimeEventIndex(eventIndex: number): Promise<void> {
+	  const normalized = Math.max(0, Math.floor(Number(eventIndex) || 0))
+	  realtimeCollapsed.value = false
+	  await nextTick()
+	  const container = realtimeScrollRef.value
+	  if (!container) return
+	  const target = container.querySelector(`[data-event-index="${normalized}"]`) as HTMLElement | null
+	  if (!target) return
+
+	  focusedEventIndex.value = normalized
+	  target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+	  window.setTimeout(() => {
+	    if (focusedEventIndex.value === normalized) {
+	      focusedEventIndex.value = null
+	    }
+	  }, 1200)
+	}
+
+function isEventFullyHighlighted(eventIndex: number, content: string): boolean {
+  const parts = getEventHighlightParts(eventIndex, content)
+  return parts?.mode === 'full'
+}
+
+function getEventHighlightParts(
+  eventIndex: number,
+  content: string
+): { mode: 'full' | 'partial'; before: string; highlight: string; after: string } | null {
+  const range = highlightedRange.value
+  if (!range) return null
+  if (eventIndex < range.startEventIndex || eventIndex > range.endEventIndex) return null
+
+  const hasOffsets = typeof range.startOffset === 'number' && typeof range.endOffset === 'number'
+  if (!hasOffsets) {
+    return { mode: 'full', before: '', highlight: '', after: '' }
+  }
+
+  const text = typeof content === 'string' ? content : ''
+  if (!text) return null
+
+  const clampOffset = (value: number) => Math.max(0, Math.min(value, text.length))
+
+  if (range.startEventIndex === range.endEventIndex) {
+    const start = clampOffset(range.startOffset as number)
+    const end = clampOffset(range.endOffset as number)
+    if (start >= end) {
+      return { mode: 'full', before: '', highlight: '', after: '' }
+    }
+    if (start === 0 && end === text.length) {
+      return { mode: 'full', before: '', highlight: '', after: '' }
+    }
+    return {
+      mode: 'partial',
+      before: text.slice(0, start),
+      highlight: text.slice(start, end),
+      after: text.slice(end),
+    }
+  }
+
+  if (eventIndex === range.startEventIndex) {
+    const start = clampOffset(range.startOffset as number)
+    if (start >= text.length) {
+      return { mode: 'full', before: '', highlight: '', after: '' }
+    }
+    if (start === 0) {
+      return { mode: 'full', before: '', highlight: '', after: '' }
+    }
+    return {
+      mode: 'partial',
+      before: text.slice(0, start),
+      highlight: text.slice(start),
+      after: '',
+    }
+  }
+
+  if (eventIndex === range.endEventIndex) {
+    const end = clampOffset(range.endOffset as number)
+    if (end <= 0) {
+      return { mode: 'full', before: '', highlight: '', after: '' }
+    }
+    if (end === text.length) {
+      return { mode: 'full', before: '', highlight: '', after: '' }
+    }
+    return {
+      mode: 'partial',
+      before: '',
+      highlight: text.slice(0, end),
+      after: text.slice(end),
+    }
+  }
+
+  return { mode: 'full', before: '', highlight: '', after: '' }
+}
+
+	function handleRealtimeScroll(): void {
+	  const el = realtimeScrollRef.value
+	  if (!el) return
+	  const distanceToBottom = el.scrollHeight - (el.scrollTop + el.clientHeight)
+	  realtimeStickToBottom.value = distanceToBottom < 80
+	}
 
 // 计算属性
 const statusText = computed(() => {
@@ -276,9 +526,76 @@ const isSessionEnded = computed(() => {
   return !sessionInfo.value.isActive
 })
 
-watch(selectedAnalysisType, (nextType) => {
-  updateSettings({ analysisType: nextType as any })
+const promptTemplates = computed(() => settings.value.promptTemplates || [])
+const selectedPromptTemplate = computed(() => {
+  const list = promptTemplates.value
+  if (!list.length) return null
+  return list.find(t => t.id === selectedPromptTemplateId.value) || list[0]
 })
+
+watch(
+  promptTemplates,
+  (list) => {
+    if (selectedPromptTemplateId.value) return
+    if (!list.length) return
+    selectedPromptTemplateId.value = list[0].id
+  },
+  { immediate: true },
+)
+
+watch(
+  () => settings.value.activePromptTemplateId,
+  (next) => {
+    const candidate = typeof next === 'string' ? next.trim() : ''
+    if (!candidate) return
+    if (candidate === selectedPromptTemplateId.value) return
+    selectedPromptTemplateId.value = candidate
+  },
+  { immediate: true },
+)
+
+watch(
+  () => settings.value.defaultPromptTemplateId,
+  (next) => {
+    if (selectedPromptTemplateId.value) return
+    const candidate = typeof next === 'string' ? next.trim() : ''
+    if (!candidate) return
+    selectedPromptTemplateId.value = candidate
+  },
+  { immediate: true },
+)
+
+watch(selectedPromptTemplateId, (nextId) => {
+  const normalized = typeof nextId === 'string' ? nextId.trim() : ''
+  if (!normalized) return
+  updateSettings({ activePromptTemplateId: normalized })
+})
+
+const recordingTag = computed(() => {
+  if (isSessionEnded.value) return { type: 'info' as const, text: '会话已结束' }
+  if (recordingStatus.value === 'recording') return { type: 'success' as const, text: '录制中' }
+  if (recordingStatus.value === 'paused') return { type: 'warning' as const, text: '已静音' }
+  if (recordingStatus.value === 'connecting') return { type: 'warning' as const, text: '连接中' }
+  if (recordingStatus.value === 'error') return { type: 'danger' as const, text: '录音出错' }
+  return { type: 'info' as const, text: '未录制' }
+})
+
+watch(
+  [() => recordingStatus.value, () => speeches.value.length, () => selectedPromptTemplateId.value],
+  () => {
+    if (!sessionId.value) return
+    if (recordingStatus.value !== 'idle' && recordingStatus.value !== 'error') return
+    if (speeches.value.length === 0) return
+    const tpl = selectedPromptTemplate.value
+    if (!tpl) return
+
+    const analysisType = buildPromptAnalysisType(tpl)
+    const key = `${sessionId.value}:${analysisType}:${speeches.value.length}`
+    if (key === lastAutoAnalysisKey.value) return
+    lastAutoAnalysisKey.value = key
+    void generateAnalysis()
+  },
+)
 
 	const wsReconnectTag = computed(() => {
   const status = wsConnectionStatus.value
@@ -347,7 +664,7 @@ watch(selectedAnalysisType, (nextType) => {
 	  }
 	}
 
-watch(
+	watch(
   () => route.params.id,
   async (nextId) => {
     const paramId = Array.isArray(nextId) ? nextId[0] : nextId
@@ -369,6 +686,12 @@ watch(
     sessionId.value = nextSessionId
     transcriptStreamStore.reset()
     transcriptEventSegmentationStore.reset()
+    focusedEventIndex.value = null
+    highlightedRange.value = null
+    realtimeStickToBottom.value = true
+    currentAnalysis.value = null
+    analysisLoading.value = false
+    lastAutoAnalysisKey.value = ''
 
     if (!sessionId.value) return
 
@@ -385,8 +708,25 @@ watch(
   { immediate: true },
 )
 
+	watch(
+	  () => transcriptStreamStore.events.length,
+	  async () => {
+	    if (!realtimeStickToBottom.value) return
+	    if (realtimeCollapsed.value) return
+	    await nextTick()
+	    const el = realtimeScrollRef.value
+	    if (!el) return
+	    el.scrollTop = el.scrollHeight
+	  },
+	)
+
 // 初始化
 	onMounted(async () => {
+	  mediaQuery = window.matchMedia('(max-width: 960px)')
+	  updateIsNarrow()
+	  mediaQuery.addEventListener('change', updateIsNarrow)
+	  window.addEventListener('keydown', handleGlobalKeydown, true)
+
 	  sessionId.value = route.params.id as string || route.query.id as string || ''
 	  if (sessionId.value) {
 	    await loadSession()
@@ -400,6 +740,11 @@ watch(
 	})
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown, true)
+  if (mediaQuery) {
+    mediaQuery.removeEventListener('change', updateIsNarrow)
+    mediaQuery = null
+  }
   transcription.dispose()
   transcriptStreamStore.reset()
   transcriptEventSegmentationStore.reset()
@@ -612,12 +957,21 @@ async function generateAnalysis() {
     return
   }
 
+  const tpl = selectedPromptTemplate.value
+  if (!tpl) {
+    ElMessage.warning('请先选择提示词模板')
+    return
+  }
+
+  const analysisType = buildPromptAnalysisType(tpl)
+
   analysisLoading.value = true
   try {
     const response = await analysisApi.getOrCreate({
       sessionId: sessionId.value,
       speechIds: speeches.value.map(s => s.id),
-      analysisType: selectedAnalysisType.value as any,
+      analysisType,
+      prompt: tpl.prompt,
     })
     currentAnalysis.value = response.data || null
     ElMessage.success('AI分析生成成功')
@@ -627,6 +981,12 @@ async function generateAnalysis() {
   } finally {
     analysisLoading.value = false
   }
+}
+
+function buildPromptAnalysisType(tpl: { id: string; updatedAt?: string }): string {
+  const id = typeof tpl.id === 'string' ? tpl.id.trim() : ''
+  const stamp = typeof tpl.updatedAt === 'string' ? tpl.updatedAt.trim() : ''
+  return stamp ? `prompt:${id}@${stamp}` : `prompt:${id}`
 }
 
 // 复制分析
@@ -714,7 +1074,83 @@ function getEventDurationText(eventIndex: number): string | null {
 .header-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.recording-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: rgba(15, 23, 42, 0.10);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(10px);
+}
+
+.recording-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.22);
+}
+
+.recording-tag.el-tag--success .recording-dot {
+  background: var(--success-500);
+  animation: pulse-ring 1.3s var(--ease-out) infinite;
+}
+
+.recording-tag.el-tag--warning .recording-dot {
+  background: var(--warning-500);
+}
+
+.recording-tag.el-tag--danger .recording-dot {
+  background: var(--danger-500);
+}
+
+.ghost-icon {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink-700);
+}
+
+.ws-tag {
+  max-width: 46vw;
+}
+
+.analysis-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prompt-preview {
+  margin-top: 12px;
+}
+
+.prompt-preview-title {
+  font-size: 12px;
+  color: var(--ink-500);
+  margin-bottom: 6px;
+}
+
+.prompt-preview-body {
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: rgba(15, 23, 42, 0.04);
+  color: var(--ink-700);
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ghost-button {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 0.55);
 }
 
 .settings-trigger {
@@ -743,12 +1179,14 @@ function getEventDurationText(eventIndex: number): string | null {
 /* 实时转写固定区域（上部） */
 .realtime-transcript-bar {
   flex-shrink: 0;
-  height:200px;
+  height: 220px;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
-  border-radius: 8px;
   overflow: hidden;
+}
+
+.realtime-transcript-bar.collapsed {
+  height: 54px;
 }
 
 .realtime-header {
@@ -756,20 +1194,30 @@ function getEventDurationText(eventIndex: number): string | null {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid #e8e8e8;
-  background-color: #fafafa;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  background: rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(10px);
+}
+
+.realtime-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .realtime-header h3 {
   margin: 0;
   font-size: 14px;
-  font-weight: 600;
-  color: #333;
+  font-weight: 650;
+  color: var(--ink-900);
 }
 
 .realtime-status {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .realtime-content {
@@ -786,55 +1234,73 @@ function getEventDurationText(eventIndex: number): string | null {
   font-size: 13px;
 }
 
-.realtime-events-scroll {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 8px;
-  padding: 8px 16px;
+.realtime-stream-scroll {
+  padding: 10px 16px;
   overflow-y: auto;
   height: 100%;
 }
 
 .realtime-event-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  background-color: #f9f9f9;
-  border-radius: 6px;
+  display: inline;
   font-size: 13px;
+  line-height: 1.8;
+  animation: rise-in 220ms var(--ease-out) both;
+  animation-delay: calc(var(--stagger, 0) * 20ms);
 }
 
-.event-meta-row {
-  display: flex;
+.realtime-stream {
+  color: var(--ink-900);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.event-inline-meta {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  margin-right: 6px;
+  vertical-align: baseline;
+}
+
+.realtime-event-item.is-focused {
+  box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.10);
+  border-radius: 8px;
+}
+
+.realtime-event-item.is-highlighted {
+  background: rgba(245, 158, 11, 0.22);
+  border-radius: 8px;
+}
+
+.realtime-event-item.is-highlighted.is-focused {
+  background: rgba(245, 158, 11, 0.28);
 }
 
 .event-index {
   flex-shrink: 0;
   padding: 2px 8px;
   border-radius: 999px;
-  background-color: #e6f4ff;
-  color: #1677ff;
+  background: rgba(47, 107, 255, 0.10);
+  color: var(--brand-700);
   font-size: 12px;
   font-weight: 500;
 }
 
 .event-text {
-  color: #333;
-  white-space: pre-wrap;
-  word-break: break-word;
+  color: var(--ink-900);
   line-height: 1.6;
 }
 
-.event-final {
-  flex-shrink: 0;
-  padding: 1px 6px;
+.event-text-highlight {
+  background: rgba(245, 158, 11, 0.32);
   border-radius: 4px;
-  background-color: #e6f4ff;
-  color: #1677ff;
-  font-size: 11px;
+  padding: 0 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.realtime-event-item.is-draft .event-text {
+  color: var(--ink-500);
 }
 
 .event-duration {
@@ -853,21 +1319,59 @@ function getEventDurationText(eventIndex: number): string | null {
     monospace;
 }
 
+.event-sep {
+  display: inline;
+}
+
 /* 下部内容区域（左右分栏） */
 .content-area {
   flex: 1;
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
   overflow: hidden;
+}
+
+.content-area.narrow {
+  grid-template-columns: 1fr;
+}
+
+.mobile-pane-switch {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.pane-tab {
+  flex: 1;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-700);
+  transition:
+    transform 200ms var(--ease-out),
+    background 200ms var(--ease-out),
+    border-color 200ms var(--ease-out),
+    color 200ms var(--ease-out);
+}
+
+.pane-tab:hover {
+  transform: translateY(-1px);
+}
+
+.pane-tab.is-active {
+  background: rgba(47, 107, 255, 0.14);
+  border-color: rgba(47, 107, 255, 0.30);
+  color: var(--ink-900);
 }
 
 /* 转写面板 */
 .transcript-panel {
-  flex: 4;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
-  border-radius: 8px;
   overflow: hidden;
 }
 
@@ -878,11 +1382,8 @@ function getEventDurationText(eventIndex: number): string | null {
 
 /* 分析面板 */
 .analysis-panel {
-  flex: 4;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
-  border-radius: 8px;
   overflow: hidden;
 }
 
@@ -891,14 +1392,16 @@ function getEventDurationText(eventIndex: number): string | null {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  background: rgba(255, 255, 255, 0.40);
+  backdrop-filter: blur(10px);
 }
 
 .panel-header h2 {
   margin: 0;
   font-size: 16px;
-  font-weight: 600;
-  color: #333;
+  font-weight: 650;
+  color: var(--ink-900);
 }
 
 .panel-actions {
@@ -1015,18 +1518,19 @@ function getEventDurationText(eventIndex: number): string | null {
 
 .analysis-meta {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   padding: 12px 16px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
   font-size: 12px;
-  color: #999;
+  color: var(--ink-500);
+  flex-wrap: wrap;
 }
 
 .analysis-text {
   flex: 1;
   padding: 16px;
   line-height: 1.8;
-  color: #333;
+  color: var(--ink-700);
   white-space: pre-wrap;
   overflow-y: auto;
 }
@@ -1046,20 +1550,27 @@ function getEventDurationText(eventIndex: number): string | null {
   display: flex;
   justify-content: flex-end;
   padding: 12px 16px;
-  border-top: 1px solid #e8e8e8;
+  border-top: 1px solid rgba(15, 23, 42, 0.10);
   gap: 8px;
+}
+
+.panel-fade-enter-active,
+.panel-fade-leave-active {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+
+.panel-fade-enter-from,
+.panel-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 /* 响应式 */
 @media (max-width: 768px) {
-  .transcript-panel,
-  .analysis-panel {
-    flex: none;
-    height: 50%;
-  }
-
-  .header-right .el-select {
-    display: none;
+  .realtime-transcript-bar {
+    height: 190px;
   }
 }
 </style>

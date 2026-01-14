@@ -168,6 +168,69 @@ Socket.IO 网关，处理前端 WebSocket 连接。
 | `audio:data` | `transcript:result` | 发送音频数据 |
 | `audio:end` | `audio:ended` | 结束音频流 |
 
+## 语句拆分（Transcript Event Segmentation）
+
+将 Transcript 事件流拆为“可阅读的句子段落”，**只从原文截取**，不允许编造。
+
+### 输入与输出
+
+- **输入**：`sessionId`、`previousSentence`、事件窗口（`startEventIndex`~`endEventIndex`）
+- **输出**：1..N 条 `segment`（允许一个事件窗口产出多句），落库并广播更新
+
+### 处理链路
+
+1. **窗口准备与定位**
+   - 拼接事件窗口为 `windowText`
+   - 归一化（去标点/空白）定位 `previousSentence` 的最后出现位置
+   - 找不到时窗口倍增（最多 2000 events），仍找不到则跳过本次生成，避免上下文错位
+2. **确定性边界提取（不依赖 LLM）**
+   - 从 `previousSentence` 之后开始截取
+   - 优先截到首个句末标点（。！？?!；;）
+   - 若无句末标点，尝试“问题引导语”（如“对第一个问题…”）
+   - 若仍无，尝试“软边界”：`的啊 + 指代词`（如“的啊这个/我们/他/她/…”）
+   - 都未命中则取窗口末尾
+3. **悬空尾巴抑制（增量/重建）**
+   - 若截取到窗口末尾且无句末标点、长度较短（<120），则**暂不落库**，等待后续事件补全
+   - 仅在重建流程的最后一次 `forceFlush` 才允许落库尾巴
+4. **LLM 断句（最小化）**
+   - LLM 只允许在 `extractedText` 开头输出“下一句/下一段”的**前缀**
+   - 允许插入少量标点/空格，不允许增删改字
+5. **输出校验**
+   - 归一化比对：要求 LLM 输出是 `extractedText` 的前缀
+   - 若前缀疑似“时间短语 + 动词”（如“二零二六年一月九号”后跟“刚刚创建”），拒绝该短前缀
+6. **落库与广播**
+   - 通过校验则落库
+   - 失败时走兜底（见下）
+
+### 提示词（摘要）
+
+- System Prompt 约束：只输出 JSON `{ "nextSentence": "..." }`
+- 非 strictEcho：`nextSentence` 必须为 `extractedText` 前缀，可加少量标点
+- strictEcho：必须与 `extractedText` 完全一致（仅允许首尾空白差异）
+
+完整提示词见：`backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.prompt.ts`
+
+### 兜底与容错
+
+- LLM 输出不符合前缀/一致性约束：
+  - 触发 strictEcho 重试
+  - 仍失败：降级为 extractor 输出，`status=failed` 并记录 `error`
+  - 写入 debugError，保证服务不中断
+- `previousSentence` 找不到时：跳过本次生成，不阻塞后续任务
+
+### 关键配置
+
+- `TRANSCRIPT_EVENTS_SEGMENT_WINDOW_EVENTS`：增量窗口大小（默认 120）
+- `TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN`：单次触发最多生成段数
+- `GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL`：模型选择
+
+### 关键文件
+
+- 抽取器：`backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.extraction.ts`
+- 服务核心：`backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.service.ts`
+- 提示词：`backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.prompt.ts`
+- 调度触发：`backend/src/main.ts`
+
 ## 环境配置
 
 在 `backend/.env` 文件中配置：

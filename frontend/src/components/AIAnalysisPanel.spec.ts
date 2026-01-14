@@ -450,8 +450,8 @@ describe('AIAnalysisPanel.vue', () => {
     })
 
     it('应该正确显示 GLM 模型名称', () => {
-      wrapper.vm.currentAnalysis = { ...mockAnalysis, modelUsed: 'glm-4' }
-      expect(wrapper.vm.modelText).toBe('智谱 GLM-4.6V-Flash')
+      wrapper.vm.currentAnalysis = { ...mockAnalysis, modelUsed: 'glm-4.6v-flash' }
+      expect(wrapper.vm.modelText).toBe('智谱 GLM')
     })
 
     it('应该正确显示豆包模型名称', () => {

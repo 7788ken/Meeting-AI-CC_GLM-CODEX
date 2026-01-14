@@ -23,7 +23,7 @@ export class TranscriptAnalysisGlmClient {
       (this.configService.get<string>('GLM_ENDPOINT') || '').trim() ||
       'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 
-    const model = this.readModel()
+    const model = this.getModelName()
     const maxTokens = this.readMaxTokens()
     const useJsonMode = this.shouldUseJsonMode()
     const requestBody = {
@@ -70,9 +70,12 @@ export class TranscriptAnalysisGlmClient {
     return content
   }
 
-  private readModel(): string {
-    const raw = (process.env.GLM_TRANSCRIPT_ANALYSIS_MODEL || '').trim()
-    return raw || 'glm-4.6v-flash'
+  getModelName(): string {
+    const raw = (this.configService.get<string>('GLM_TRANSCRIPT_ANALYSIS_MODEL') || '').trim()
+    if (!raw) {
+      throw new Error('GLM_TRANSCRIPT_ANALYSIS_MODEL not configured')
+    }
+    return raw
   }
 
   private readMaxTokens(): number {

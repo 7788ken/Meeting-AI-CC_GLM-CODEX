@@ -35,12 +35,13 @@ export class DoubaoClient {
     analysisType: string
     speeches: Array<{ content: string; speakerName: string }>
     sessionId: string
+    prompt?: string
   }): Promise<string> {
     if (!this.apiKey || !this.endpointId) {
       throw new Error('DOUBAO_API_KEY or DOUBAO_ENDPOINT_ID not configured')
     }
 
-    const prompt = this.buildPrompt(params.analysisType, params.speeches)
+    const prompt = this.buildPrompt(params.analysisType, params.speeches, params.prompt)
 
     try {
       const response = await this.callDoubaoAPI(prompt)
@@ -55,9 +56,18 @@ export class DoubaoClient {
 
   private buildPrompt(
     analysisType: string,
-    speeches: Array<{ content: string; speakerName: string }>
+    speeches: Array<{ content: string; speakerName: string }>,
+    promptOverride?: string
   ): string {
     const speechesText = speeches.map(s => `${s.speakerName}: ${s.content}`).join('\n')
+
+    const custom = typeof promptOverride === 'string' ? promptOverride.trim() : ''
+    if (custom) {
+      if (custom.includes('{{speeches}}')) {
+        return custom.replace(/{{\s*speeches\s*}}/g, speechesText)
+      }
+      return `${custom}\n\n会议发言：\n${speechesText}`
+    }
 
     const prompts: Record<string, string> = {
       summary: `请根据以下会议发言内容，生成一份简洁的会议摘要：

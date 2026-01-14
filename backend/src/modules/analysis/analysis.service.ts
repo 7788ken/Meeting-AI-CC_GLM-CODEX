@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model, Types } from 'mongoose'
 import { Analysis, AnalysisDocument } from './schemas/analysis.schema'
 import { AnalysisDto, GenerateAnalysisDto } from './dto/analysis.dto'
-import { AIModel, AnalysisType } from './dto/analysis.enum'
+import { AnalysisType } from './dto/analysis.enum'
 import { ModelManagerService, AIModelType } from './model-manager.service'
 import { SpeechService } from '../speech/speech.service'
 
@@ -19,7 +20,8 @@ export class AnalysisService {
   constructor(
     @InjectModel(Analysis.name) private analysisModel: Model<AnalysisDocument>,
     private readonly modelManager: ModelManagerService,
-    private readonly speechService: SpeechService
+    private readonly speechService: SpeechService,
+    private readonly configService: ConfigService
   ) {}
 
   /**
@@ -30,11 +32,12 @@ export class AnalysisService {
 
     // 确定使用的模型
     const modelType = dto.model ? this.parseModelType(dto.model) : undefined
+    const analysisType = this.normalizeAnalysisType(dto.analysisType)
 
     // 创建分析记录（初始状态为 processing）
     const analysis = new this.analysisModel({
       sessionId: dto.sessionId,
-      analysisType: dto.analysisType || AnalysisType.SUMMARY,
+      analysisType,
       modelUsed: modelType || this.modelManager.getDefaultModel(),
       modelVersion: 'auto',
       result: '',
@@ -48,10 +51,11 @@ export class AnalysisService {
     try {
       // 调用 AI 模型生成分析
       const { result, modelUsed } = await this.callAIModel(
-        dto.analysisType || AnalysisType.SUMMARY,
+        analysisType,
         dto.sessionId,
         dto.speechIds,
-        modelType
+        modelType,
+        dto.prompt
       )
 
       const processingTime = Date.now() - startTime
@@ -114,12 +118,13 @@ export class AnalysisService {
     const modelType = dto.model
       ? this.parseModelType(dto.model)
       : this.modelManager.getDefaultModel()
+    const analysisType = this.normalizeAnalysisType(dto.analysisType)
 
     // 查找是否已有缓存的分析
     const existing = await this.analysisModel
       .findOne({
         sessionId: dto.sessionId,
-        analysisType: dto.analysisType || AnalysisType.SUMMARY,
+        analysisType,
         modelUsed: modelType,
         status: 'completed',
         createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // 24小时内
@@ -151,10 +156,11 @@ export class AnalysisService {
    * 调用 AI 模型生成分析
    */
   private async callAIModel(
-    analysisType: AnalysisType,
+    analysisType: string,
     sessionId: string,
     speechIds: string[],
-    modelType?: AIModelType
+    modelType?: AIModelType,
+    prompt?: string
   ): Promise<{ result: string; modelUsed: string }> {
     // 获取发言记录内容
     const speeches = await this.getSpeechesForAnalysis(speechIds)
@@ -164,23 +170,25 @@ export class AnalysisService {
       speeches,
       sessionId,
       modelType,
+      prompt,
     })
+  }
+
+  private normalizeAnalysisType(value?: string): string {
+    const normalized = typeof value === 'string' ? value.trim() : ''
+    return normalized || AnalysisType.SUMMARY
   }
 
   /**
    * 解析模型类型
    */
   private parseModelType(model: string): AIModelType {
-    if (Object.values(AIModelType).includes(model as AIModelType)) {
-      return model as AIModelType
+    const normalized = typeof model === 'string' ? model.trim() : ''
+    if (Object.values(AIModelType).includes(normalized as AIModelType)) {
+      return normalized as AIModelType
     }
-    // 兼容旧的模型名称
-    if (
-      model === 'glm-4.6v-flash' ||
-      model === 'glm-4' ||
-      model === 'glm-4-flash' ||
-      model === AIModel.GLM
-    ) {
+    const glmAlias = (this.configService.get<string>('GLM_ANALYSIS_MODEL') || '').trim()
+    if (glmAlias && normalized === glmAlias) {
       return AIModelType.GLM
     }
     return AIModelType.GLM

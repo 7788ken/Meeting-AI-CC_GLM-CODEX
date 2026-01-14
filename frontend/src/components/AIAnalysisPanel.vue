@@ -232,18 +232,25 @@ const statusClass = computed(() => {
   return `status-${analysisStatus.value}`
 })
 
+const MODEL_LABELS: Record<string, string> = {
+  glm: '智谱 GLM',
+  doubao: '豆包',
+  qianwen: '千问',
+}
+
+const MODEL_ALIASES: Record<string, string> = {
+  'glm-4.6v-flash': 'glm',
+}
+
+function normalizeModelUsed(model: string): string {
+  return MODEL_ALIASES[model] || model
+}
+
 // 模型显示文本
 const modelText = computed(() => {
   if (!currentAnalysis.value) return ''
-  const modelMap: Record<string, string> = {
-    'glm': '智谱 GLM-4.6V-Flash',
-    'glm-4.6v-flash': '智谱 GLM-4.6V-Flash',
-    'glm-4': '智谱 GLM-4.6V-Flash',
-    'doubao': '豆包',
-    'glm-4-flash': '智谱 GLM-4.6V-Flash',
-    'qianwen': '千问',
-  }
-  return modelMap[currentAnalysis.value.modelUsed] || currentAnalysis.value.modelUsed
+  const normalized = normalizeModelUsed(currentAnalysis.value.modelUsed)
+  return MODEL_LABELS[normalized] || currentAnalysis.value.modelUsed
 })
 
 // 状态显示文本

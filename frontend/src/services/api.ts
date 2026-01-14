@@ -83,6 +83,10 @@ export interface TranscriptEventSegment {
   content: string
   sourceStartEventIndex: number
   sourceEndEventIndex: number
+  sourceStartEventIndexExact?: number
+  sourceStartEventOffset?: number
+  sourceEndEventIndexExact?: number
+  sourceEndEventOffset?: number
   sourceRevision: number
   prevSegmentId?: string
   status: 'completed' | 'failed'
@@ -202,7 +206,8 @@ export const speechApi = {
 export interface AnalysisRequest {
   sessionId: string
   speechIds: string[]
-  analysisType?: 'summary' | 'action-items' | 'sentiment' | 'keywords' | 'topics' | 'full-report'
+  analysisType?: string
+  prompt?: string
   model?: string
 }
 

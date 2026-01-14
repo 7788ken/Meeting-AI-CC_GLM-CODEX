@@ -11,6 +11,7 @@ import { parseTranscriptEventSegmentJson } from './transcript-event-segmentation
 import {
   extractRawNextSegment,
   normalizeForPunctuationOnlyCompare,
+  resolveEventOffsetRange,
 } from './transcript-event-segmentation.extraction'
 import {
   TranscriptEventSegment,
@@ -25,6 +26,10 @@ export type TranscriptEventSegmentDTO = {
   content: string
   sourceStartEventIndex: number
   sourceEndEventIndex: number
+  sourceStartEventIndexExact?: number
+  sourceStartEventOffset?: number
+  sourceEndEventIndexExact?: number
+  sourceEndEventOffset?: number
   sourceRevision: number
   prevSegmentId?: string
   status: 'completed' | 'failed'
@@ -120,20 +125,41 @@ export class TranscriptEventSegmentationService {
 
     const lastSegment = await this.segmentModel.findOne({ sessionId }).sort({ sequence: -1 }).exec()
 
-    if (!input.force && lastSegment && lastSegment.sourceRevision >= state.revision) {
-      return null
-    }
-
-    const windowSize = this.readChunkSize()
-    const startEventIndex = Math.max(0, endEventIndex - windowSize + 1)
-    const events = await this.transcriptStreamService.getEventsInRange({
+    const baseWindowSize = this.readChunkSize()
+    const maxWindowSize = 2000
+    let windowSize = baseWindowSize
+    let startEventIndex = Math.max(0, endEventIndex - windowSize + 1)
+    let events = await this.transcriptStreamService.getEventsInRange({
       sessionId,
       startEventIndex,
       endEventIndex,
     })
     if (!events.length) return null
 
-    const modelName = this.readModelName()
+    const previousSentence = lastSegment?.content ?? ''
+    if (previousSentence) {
+      let extraction = extractRawNextSegment({ previousSentence, events })
+      while (extraction.previousSentenceFoundAt < 0 && startEventIndex > 0 && windowSize < maxWindowSize) {
+        windowSize = Math.min(maxWindowSize, windowSize * 2)
+        startEventIndex = Math.max(0, endEventIndex - windowSize + 1)
+        events = await this.transcriptStreamService.getEventsInRange({
+          sessionId,
+          startEventIndex,
+          endEventIndex,
+        })
+        if (!events.length) return null
+        extraction = extractRawNextSegment({ previousSentence, events })
+      }
+
+      if (extraction.previousSentenceFoundAt < 0) {
+        this.logger.warn(
+          `Transcript event segmentation skipped: previousSentence out of window, sessionId=${sessionId}, endEventIndex=${endEventIndex}, windowSize=${windowSize}`
+        )
+        return null
+      }
+    }
+
+    const modelName = this.glmClient.getModelName()
 
     const nextSequence = (lastSegment?.sequence ?? 0) + 1
     const created = await this.generateAndPersistSegment({
@@ -141,7 +167,7 @@ export class TranscriptEventSegmentationService {
       taskId: this.createTaskId(),
       mode: 'incremental',
       maxEventIndex: endEventIndex,
-      previousSentence: lastSegment?.content ?? '',
+      previousSentence,
       prevSegmentId: lastSegment?._id,
       nextSequence,
       sourceStartEventIndex: startEventIndex,
@@ -149,6 +175,7 @@ export class TranscriptEventSegmentationService {
       sourceRevision: state.revision,
       events,
       modelName,
+      forceFlush: !!input.force,
     })
 
     return created?.dto ?? null
@@ -216,6 +243,10 @@ export class TranscriptEventSegmentationService {
       content: segment.content,
       sourceStartEventIndex: segment.sourceStartEventIndex,
       sourceEndEventIndex: segment.sourceEndEventIndex,
+      sourceStartEventIndexExact: segment.sourceStartEventIndexExact,
+      sourceStartEventOffset: segment.sourceStartEventOffset,
+      sourceEndEventIndexExact: segment.sourceEndEventIndexExact,
+      sourceEndEventOffset: segment.sourceEndEventOffset,
       sourceRevision: segment.sourceRevision,
       prevSegmentId: segment.prevSegmentId?.toString(),
       status: segment.status,
@@ -239,11 +270,6 @@ export class TranscriptEventSegmentationService {
     const value = Number(raw)
     if (!Number.isFinite(value)) return 120
     return Math.max(5, Math.min(2000, Math.floor(value)))
-  }
-
-  private readModelName(): string {
-    const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL || '').trim()
-    return raw || 'glm-4.6v-flash'
   }
 
   private buildGlmErrorContext(error: unknown): Record<string, unknown> | null {
@@ -285,6 +311,7 @@ export class TranscriptEventSegmentationService {
     sourceRevision: number
     events: TranscriptEventDTO[]
     modelName: string
+    forceFlush?: boolean
   }): Promise<PersistedTranscriptEventSegment | null> {
     const emitProgress = this.createProgressEmitter({
       sessionId: input.sessionId,
@@ -303,11 +330,28 @@ export class TranscriptEventSegmentationService {
       events: input.events,
     })
 
-    const extractedText = extraction.rawSegment || input.events.at(-1)?.content?.trim() || ''
+    const exactOffsetRange = resolveEventOffsetRange(
+      input.events,
+      extraction.startOffset,
+      extraction.endOffset
+    )
+
+    const extractedText = extraction.rawSegment.trim()
     if (!extractedText) {
       this.logger.warn(
         `Transcript event segmentation skipped: extractedText is empty, sessionId=${input.sessionId}`
       )
+      return null
+    }
+
+    const isRebuildFinalFlush = input.mode === 'rebuild' && input.forceFlush
+    const shouldSkipDanglingTail =
+      !isRebuildFinalFlush &&
+      extraction.endReason === 'window_end' &&
+      !extraction.hasSentenceEndPunctuation &&
+      extractedText.length < 120
+
+    if (shouldSkipDanglingTail) {
       return null
     }
 
@@ -335,7 +379,25 @@ export class TranscriptEventSegmentationService {
       let nextSentence = ''
       let persistStatus: TranscriptEventSegmentDTO['status'] = 'completed'
       let persistError: string | undefined
-      if (candidate && normalizedCandidate === normalizedExtracted) {
+
+      const shouldRejectShortPrefix = (value: string): boolean => {
+        if (!value) return false
+        if (value.length >= extractedText.length) return false
+        const tail = extractedText.slice(value.length)
+        const endsWithTemporalSuffix = /([0-9一二三四五六七八九十]+(年|月|日|号)|[年月日号])$/u.test(
+          value
+        )
+        const continuesWithVerb =
+          /^(刚刚|刚才|刚|已经|才|就)?(创建|成立|建立|完成|生成|发布|上线|写成|制作)/u.test(tail)
+        return endsWithTemporalSuffix && continuesWithVerb
+      }
+
+      if (
+        candidate &&
+        normalizedCandidate &&
+        normalizedExtracted.startsWith(normalizedCandidate) &&
+        !shouldRejectShortPrefix(candidate)
+      ) {
         nextSentence = candidate
       } else {
         const retryPrompt = buildTranscriptEventSegmentationPrompt({
@@ -353,12 +415,18 @@ export class TranscriptEventSegmentationService {
           typeof retryParsed.nextSentence === 'string' ? retryParsed.nextSentence.trim() : ''
 
         const extractedTrimmed = extractedText.trim()
-        if (retryCandidate && retryCandidate.trim() === extractedTrimmed) {
-          nextSentence = extractedTrimmed
+        const normalizedRetryCandidate = normalizeForPunctuationOnlyCompare(retryCandidate)
+        if (
+          retryCandidate &&
+          normalizedRetryCandidate &&
+          normalizeForPunctuationOnlyCompare(extractedTrimmed).startsWith(normalizedRetryCandidate) &&
+          !shouldRejectShortPrefix(retryCandidate)
+        ) {
+          nextSentence = retryCandidate
         } else {
           nextSentence = extractedTrimmed
           persistStatus = 'failed'
-          persistError = 'LLM 输出未能满足约束，已降级为 deterministic 边界截取结果'
+          persistError = 'LLM 输出未能满足约束，已降级为 extractor 输出前缀'
 
           void this.debugErrorService.recordError({
             sessionId: input.sessionId,
@@ -389,6 +457,10 @@ export class TranscriptEventSegmentationService {
         content: nextSentence,
         sourceStartEventIndex: input.sourceStartEventIndex,
         sourceEndEventIndex: input.sourceEndEventIndex,
+        sourceStartEventIndexExact: exactOffsetRange?.startEventIndex,
+        sourceStartEventOffset: exactOffsetRange?.startEventOffset,
+        sourceEndEventIndexExact: exactOffsetRange?.endEventIndex,
+        sourceEndEventOffset: exactOffsetRange?.endEventOffset,
         sourceRevision: input.sourceRevision,
         prevSegmentId: input.prevSegmentId,
         status: persistStatus,
@@ -446,7 +518,7 @@ export class TranscriptEventSegmentationService {
     }
 
     const windowSize = this.readChunkSize()
-    const modelName = this.readModelName()
+    const modelName = this.glmClient.getModelName()
 
     let previousSentence = ''
     let prevSegmentId: TranscriptEventSegmentDocument['_id'] | undefined
@@ -454,6 +526,7 @@ export class TranscriptEventSegmentationService {
 
     const maxEvents = 2000
     const cappedEnd = Math.min(endEventIndex, maxEvents - 1)
+    const maxSegmentsPerEvent = 50
     for (let currentEnd = 0; currentEnd <= cappedEnd; currentEnd += 1) {
       const currentStart = Math.max(0, currentEnd - windowSize + 1)
       const events = await this.transcriptStreamService.getEventsInRange({
@@ -465,6 +538,7 @@ export class TranscriptEventSegmentationService {
         continue
       }
 
+      for (let segmentIndex = 0; segmentIndex < maxSegmentsPerEvent; segmentIndex += 1) {
       const created = await this.generateAndPersistSegment({
         sessionId,
         taskId: this.createTaskId(),
@@ -478,15 +552,17 @@ export class TranscriptEventSegmentationService {
         sourceRevision: state.revision,
         events,
         modelName,
+        forceFlush: currentEnd === cappedEnd,
       })
 
-      if (!created) {
-        continue
-      }
+        if (!created) {
+          break
+        }
 
-      previousSentence = created.dto.content
-      prevSegmentId = created.createdId
-      nextSequence += 1
+        previousSentence = created.dto.content
+        prevSegmentId = created.createdId
+        nextSequence += 1
+      }
     }
 
     if (endEventIndex >= maxEvents) {

@@ -23,6 +23,18 @@ export class TranscriptEventSegment {
   @Prop({ required: true })
   sourceEndEventIndex: number
 
+  @Prop()
+  sourceStartEventIndexExact?: number
+
+  @Prop()
+  sourceStartEventOffset?: number
+
+  @Prop()
+  sourceEndEventIndexExact?: number
+
+  @Prop()
+  sourceEndEventOffset?: number
+
   @Prop({ required: true })
   sourceRevision: number
 

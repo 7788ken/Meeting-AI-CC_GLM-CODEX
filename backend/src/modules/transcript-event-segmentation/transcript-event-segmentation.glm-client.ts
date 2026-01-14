@@ -25,7 +25,7 @@ export class TranscriptEventSegmentationGlmClient {
       (this.configService.get<string>('GLM_ENDPOINT') || '').trim() ||
       'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 
-    const model = this.readModel()
+    const model = this.getModelName()
     const maxTokens = this.readMaxTokens()
     const useJsonMode = this.shouldUseJsonMode()
     const requestBody: Record<string, unknown> = {
@@ -68,9 +68,12 @@ export class TranscriptEventSegmentationGlmClient {
     }
   }
 
-  private readModel(): string {
-    const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL || '').trim()
-    return raw || 'glm-4.6v-flash'
+  getModelName(): string {
+    const raw = (this.configService.get<string>('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') || '').trim()
+    if (!raw) {
+      throw new Error('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL not configured')
+    }
+    return raw
   }
 
   private readMaxTokens(): number {

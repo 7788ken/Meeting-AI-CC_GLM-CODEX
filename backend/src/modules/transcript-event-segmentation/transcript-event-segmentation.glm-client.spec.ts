@@ -19,6 +19,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       get: jest.fn((key: string) => {
         if (key === 'GLM_API_KEY') return 'test-key'
         if (key === 'GLM_ENDPOINT') return ''
+        if (key === 'GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') return 'glm-4.6v-flash'
         return null
       }),
     } as any

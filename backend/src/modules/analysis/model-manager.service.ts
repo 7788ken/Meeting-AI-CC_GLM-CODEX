@@ -44,6 +44,7 @@ interface IAIModelClient {
     analysisType: string
     speeches: Array<{ content: string; speakerName: string }>
     sessionId: string
+    prompt?: string
   }): Promise<string>
   healthCheck(): Promise<boolean>
 }
@@ -98,11 +99,12 @@ export class ModelManagerService {
    * 初始化模型配置
    */
   private initializeConfigs(): void {
+    const glmVersion = (this.configService.get<string>('GLM_ANALYSIS_MODEL') || '').trim()
     const configs: ModelConfig[] = [
       {
         type: AIModelType.GLM,
         name: '智谱 GLM',
-        version: 'glm-4.6v-flash',
+        version: glmVersion,
         enabled: this.isModelEnabled('GLM'),
         priority: this.getModelPriority('GLM', 1),
         maxTokens: 2000,
@@ -211,6 +213,7 @@ export class ModelManagerService {
     speeches: Array<{ content: string; speakerName: string }>
     sessionId: string
     modelType?: AIModelType
+    prompt?: string
   }): Promise<{ result: string; modelUsed: string }> {
     const modelType = params.modelType || this.getDefaultModel()
     const client = this.getClient(modelType)
@@ -220,6 +223,7 @@ export class ModelManagerService {
         analysisType: params.analysisType,
         speeches: params.speeches,
         sessionId: params.sessionId,
+        prompt: params.prompt,
       })
 
       // 重置失败计数
@@ -248,6 +252,7 @@ export class ModelManagerService {
           analysisType: params.analysisType,
           speeches: params.speeches,
           sessionId: params.sessionId,
+          prompt: params.prompt,
         })
 
         return {

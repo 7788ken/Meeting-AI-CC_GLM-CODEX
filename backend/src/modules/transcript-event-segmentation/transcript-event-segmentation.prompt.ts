@@ -13,14 +13,14 @@ export function buildTranscriptEventSegmentationPrompt(input: {
   const system = [
     strictEcho
       ? '你是“会议语句拆分器”。你的任务是：原样输出 extractedText，不做任何改动。'
-      : '你是“会议语句拆分器”。你的任务是：对输入的 extractedText 进行最小化断句与标点补全，输出 nextSentence。',
+      : '你是“会议语句拆分器”。你的任务是：从 extractedText 的开头截取出“下一句/下一段”（尽量短且语义完整），并可做最小化断句与标点补全。',
     '',
     '强约束：',
     '- 只允许输出 JSON，禁止输出任何 Markdown、解释或多余文本。',
     '- 只输出一个字段：{ "nextSentence": "..." }',
     strictEcho
       ? '- nextSentence 必须与 extractedText 完全一致（允许去除首尾空白），不得新增/删除/替换任何字符（包括标点与空格）。'
-      : '- nextSentence 只能由 extractedText 的原始字符按顺序组成，允许在字符之间插入少量空格与标点以提升可读性。',
+      : '- nextSentence 必须对应 extractedText 的一个【前缀】（从开头开始，连续截取）；允许在字符之间插入少量空格与标点以提升可读性。',
     strictEcho
       ? '- 严禁任何形式的断句、加标点、加空格、改写、翻译、补全或总结。'
       : '- 严禁新增/删除/替换 extractedText 中的任何汉字/字母/数字（包括语气词“啊”“呢”等），严禁改写、翻译、补全或总结。',

@@ -339,7 +339,7 @@ export class TranscriptAnalysisService {
       events: input.events,
     })
     const promptLength = prompt.system.length + prompt.user.length
-    const glmModel = this.readGlmModelName()
+    const glmModel = this.glmClient.getModelName()
 
     const maxAttempts = 2
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -627,11 +627,6 @@ export class TranscriptAnalysisService {
         { new: true }
       )
       .exec()
-  }
-
-  private readGlmModelName(): string {
-    const raw = (process.env.GLM_TRANSCRIPT_ANALYSIS_MODEL || '').trim()
-    return raw || 'glm-4.6v-flash'
   }
 
   private readChunkSize(): number {

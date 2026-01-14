@@ -1,6 +1,5 @@
-import { IsString, IsArray, IsOptional, IsEnum } from 'class-validator'
+import { IsString, IsArray, IsOptional } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { AnalysisType } from './analysis.enum'
 
 export class GenerateAnalysisDto {
   @ApiProperty({ description: '会话ID' })
@@ -12,14 +11,17 @@ export class GenerateAnalysisDto {
   @IsString({ each: true })
   speechIds: string[]
 
+  @ApiPropertyOptional({ description: '分析类型（可用于区分缓存）', default: 'summary' })
+  @IsOptional()
+  @IsString()
+  analysisType?: string
+
   @ApiPropertyOptional({
-    description: '分析类型',
-    enum: AnalysisType,
-    default: AnalysisType.SUMMARY,
+    description: '提示词模板内容（可选）。支持 {{speeches}} 占位符，未包含时将自动追加发言文本。',
   })
   @IsOptional()
-  @IsEnum(AnalysisType)
-  analysisType?: AnalysisType
+  @IsString()
+  prompt?: string
 
   @ApiPropertyOptional({
     description: 'AI 模型',

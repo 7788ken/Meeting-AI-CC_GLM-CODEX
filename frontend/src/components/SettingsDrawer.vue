@@ -123,24 +123,62 @@
             <template #label>
               <span class="tab-label">
                 <el-icon><DataAnalysis /></el-icon>
-                分析
+                提示词
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">默认分析类型</div>
-              <div class="pane-subtitle">影响头部「分析类型」下拉初始值</div>
+              <div class="pane-title">提示词模板</div>
+              <div class="pane-subtitle">可创建多个模板，并设置默认模板（用于会议 AI 分析）。</div>
 
-              <el-radio-group v-model="form.analysisType" class="choice-grid">
-                <el-radio
-                  v-for="item in analysisTypes"
-                  :key="item.value"
-                  :label="item.value"
-                  border
-                  class="choice-card"
+              <div class="prompts-toolbar">
+                <el-button size="small" type="primary" @click="openCreateDialog">
+                  + 新建模板
+                </el-button>
+              </div>
+
+              <div class="prompts-list">
+                <div
+                  v-for="tpl in form.promptTemplates"
+                  :key="tpl.id"
+                  class="prompt-card"
                 >
-                  <div class="choice-title">{{ item.label }}</div>
-                </el-radio>
-              </el-radio-group>
+                  <div class="prompt-top">
+                    <div class="prompt-title">
+                      <span class="prompt-name">{{ tpl.name }}</span>
+                      <el-tag
+                        v-if="tpl.id === form.defaultPromptTemplateId"
+                        size="small"
+                        type="success"
+                      >
+                        默认
+                      </el-tag>
+                    </div>
+                    <div class="prompt-actions">
+                      <el-button
+                        size="small"
+                        class="ghost-button"
+                        :disabled="tpl.id === form.defaultPromptTemplateId"
+                        @click="setDefaultTemplate(tpl.id)"
+                      >
+                        设为默认
+                      </el-button>
+                      <el-button size="small" class="ghost-button" @click="openEditDialog(tpl.id)">
+                        编辑
+                      </el-button>
+                      <el-button size="small" type="danger" plain @click="deleteTemplate(tpl.id)">
+                        删除
+                      </el-button>
+                    </div>
+                  </div>
+
+                  <div class="prompt-meta">
+                    <span>模板ID: <span class="mono">{{ tpl.id }}</span></span>
+                    <span>更新: {{ formatDateTime(tpl.updatedAt) }}</span>
+                  </div>
+
+                  <pre class="prompt-preview">{{ tpl.prompt }}</pre>
+                </div>
+              </div>
             </section>
           </el-tab-pane>
 
@@ -177,6 +215,33 @@
       </div>
     </div>
   </el-drawer>
+
+  <el-dialog
+    v-model="promptDialogVisible"
+    :title="promptDialogMode === 'create' ? '新建提示词模板' : '编辑提示词模板'"
+    width="min(92vw, 720px)"
+    append-to-body
+  >
+    <el-form label-position="top" :model="promptForm" class="pane-form">
+      <el-form-item label="模板名称">
+        <el-input v-model="promptForm.name" placeholder="例如：会议摘要 / 行动项 / 完整报告" />
+      </el-form-item>
+      <el-form-item label="提示词内容">
+        <el-input
+          v-model="promptForm.prompt"
+          type="textarea"
+          :autosize="{ minRows: 8, maxRows: 18 }"
+          placeholder="支持 {{speeches}} 占位符"
+        />
+        <div class="hint">建议：使用 <span class="mono" v-text="SPEECH_PLACEHOLDER" /> 放置发言内容。</div>
+      </el-form-item>
+    </el-form>
+
+    <template #footer>
+      <el-button size="small" @click="promptDialogVisible = false">取消</el-button>
+      <el-button size="small" type="primary" @click="saveTemplate">保存</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -191,7 +256,10 @@ import {
   Close,
   Check,
 } from '@element-plus/icons-vue'
-import { useAppSettings, type AppSettings, type AsrModel } from '@/composables/useAppSettings'
+import { useAppSettings, type AppSettings, type AsrModel, type PromptTemplate } from '@/composables/useAppSettings'
+import { uuid } from '@/utils/uuid'
+
+const SPEECH_PLACEHOLDER = '{{speeches}}'
 
 const props = defineProps<{
   modelValue: boolean
@@ -211,14 +279,6 @@ const visibleProxy = computed({
 const form = reactive<AppSettings>({ ...settings.value })
 const activeSection = ref<'asr' | 'vad' | 'analysis' | 'service'>('asr')
 
-const analysisTypes = [
-  { label: '会议摘要', value: 'summary' as AppSettings['analysisType'] },
-  { label: '行动项', value: 'action-items' as AppSettings['analysisType'] },
-  { label: '情感分析', value: 'sentiment' as AppSettings['analysisType'] },
-  { label: '关键词', value: 'keywords' as AppSettings['analysisType'] },
-  { label: '议题分析', value: 'topics' as AppSettings['analysisType'] },
-]
-
 const asrModels: Array<{ value: AsrModel; label: string; desc: string }> = [
   { value: 'doubao', label: '豆包 ASR', desc: '实时、低延迟，适合会议录制' },
   { value: 'glm', label: 'GLM ASR', desc: '高精度，适合高噪声场景' },
@@ -237,6 +297,121 @@ watch(
     }
   },
 )
+
+const promptDialogVisible = ref(false)
+const promptDialogMode = ref<'create' | 'edit'>('create')
+const promptEditingId = ref<string>('')
+const promptForm = reactive<{ name: string; prompt: string }>({ name: '', prompt: '' })
+
+function openCreateDialog(): void {
+  promptDialogMode.value = 'create'
+  promptEditingId.value = ''
+  promptForm.name = ''
+  promptForm.prompt = ''
+  promptDialogVisible.value = true
+}
+
+function openEditDialog(id: string): void {
+  const tpl = form.promptTemplates.find(t => t.id === id)
+  if (!tpl) return
+  promptDialogMode.value = 'edit'
+  promptEditingId.value = id
+  promptForm.name = tpl.name
+  promptForm.prompt = tpl.prompt
+  promptDialogVisible.value = true
+}
+
+function setDefaultTemplate(id: string): void {
+  if (!form.promptTemplates.some(t => t.id === id)) return
+  form.defaultPromptTemplateId = id
+  if (!form.activePromptTemplateId) {
+    form.activePromptTemplateId = id
+  }
+  ElMessage.success('默认模板已更新（保存后生效）')
+}
+
+async function deleteTemplate(id: string): Promise<void> {
+  const tpl = form.promptTemplates.find(t => t.id === id)
+  if (!tpl) return
+  if (form.promptTemplates.length <= 1) {
+    ElMessage.warning('至少需要保留一个提示词模板')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(`确定删除模板「${tpl.name}」吗？删除后不可恢复。`, '删除提示词模板', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+
+  form.promptTemplates = form.promptTemplates.filter(t => t.id !== id)
+
+  if (form.defaultPromptTemplateId === id) {
+    form.defaultPromptTemplateId = form.promptTemplates[0]?.id || ''
+  }
+  if (form.activePromptTemplateId === id) {
+    form.activePromptTemplateId = form.defaultPromptTemplateId || form.promptTemplates[0]?.id || ''
+  }
+
+  ElMessage.success('模板已删除（保存后生效）')
+}
+
+function saveTemplate(): void {
+  const name = promptForm.name.trim()
+  const prompt = promptForm.prompt.trim()
+  if (!name) {
+    ElMessage.error('模板名称不能为空')
+    return
+  }
+  if (!prompt) {
+    ElMessage.error('提示词内容不能为空')
+    return
+  }
+
+  const now = new Date().toISOString()
+  if (promptDialogMode.value === 'create') {
+    const newTemplate: PromptTemplate = {
+      id: `tpl_${uuid().slice(0, 8)}`,
+      name,
+      prompt,
+      createdAt: now,
+      updatedAt: now,
+    }
+    form.promptTemplates = [newTemplate, ...(form.promptTemplates || [])]
+    if (!form.defaultPromptTemplateId) {
+      form.defaultPromptTemplateId = newTemplate.id
+    }
+    if (!form.activePromptTemplateId) {
+      form.activePromptTemplateId = newTemplate.id
+    }
+    ElMessage.success('模板已创建（保存后生效）')
+  } else {
+    const id = promptEditingId.value
+    const index = form.promptTemplates.findIndex(t => t.id === id)
+    if (index < 0) return
+    const prev = form.promptTemplates[index]
+    form.promptTemplates[index] = {
+      ...prev,
+      name,
+      prompt,
+      updatedAt: now,
+    }
+    form.promptTemplates = form.promptTemplates.slice()
+    ElMessage.success('模板已更新（保存后生效）')
+  }
+
+  promptDialogVisible.value = false
+}
+
+function formatDateTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
 
 const onSave = async () => {
   const errors = validateSettings(form)
@@ -264,10 +439,10 @@ const onReset = async () => {
 <style scoped>
 .settings-drawer :deep(.el-drawer__body) {
   padding: 0;
-  background: #f5f7fb;
+  background: var(--paper-50);
   background-image:
-    linear-gradient(rgba(24, 144, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(24, 144, 255, 0.06) 1px, transparent 1px);
+    linear-gradient(rgba(47, 107, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 107, 255, 0.06) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
@@ -275,13 +450,7 @@ const onReset = async () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  font-family:
-    "PingFang SC",
-    "Microsoft YaHei",
-    "Noto Sans CJK SC",
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: var(--font-sans);
 }
 
 .drawer-header {
@@ -289,7 +458,7 @@ const onReset = async () => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
 }
@@ -297,11 +466,11 @@ const onReset = async () => {
 .title-block .title {
   font-size: 18px;
   font-weight: 700;
-  color: #1f2328;
+  color: var(--ink-900);
 }
 
 .title-block .subtitle {
-  color: #6b7280;
+  color: var(--ink-500);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -334,13 +503,13 @@ const onReset = async () => {
   line-height: 44px;
   border-radius: 10px;
   margin: 4px 0;
-  color: #4b5563;
+  color: var(--ink-700);
   transition: all 0.15s ease;
 }
 
 .settings-tabs :deep(.el-tabs__item.is-active) {
-  background: rgba(24, 144, 255, 0.10);
-  color: #185abc;
+  background: rgba(47, 107, 255, 0.10);
+  color: var(--brand-700);
 }
 
 .settings-tabs :deep(.el-tabs__active-bar) {
@@ -367,7 +536,7 @@ const onReset = async () => {
   overflow: auto;
   padding: 14px 16px 18px;
   border-radius: 14px;
-  border: 1px solid rgba(24, 144, 255, 0.12);
+  border: 1px solid rgba(47, 107, 255, 0.12);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
 }
@@ -375,13 +544,13 @@ const onReset = async () => {
 .pane-title {
   font-size: 15px;
   font-weight: 700;
-  color: #111827;
+  color: var(--ink-900);
 }
 
 .pane-subtitle {
   margin-top: 4px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--ink-500);
 }
 
 .pane-form {
@@ -397,7 +566,7 @@ const onReset = async () => {
 .hint {
   margin-top: 6px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--ink-500);
 }
 
 .choice-grid {
@@ -418,13 +587,13 @@ const onReset = async () => {
 }
 
 .choice-card.is-checked {
-  border-color: rgba(24, 144, 255, 0.55);
-  background: rgba(24, 144, 255, 0.06);
-  box-shadow: 0 10px 26px rgba(24, 144, 255, 0.10);
+  border-color: rgba(47, 107, 255, 0.55);
+  background: rgba(47, 107, 255, 0.06);
+  box-shadow: 0 10px 26px rgba(47, 107, 255, 0.10);
 }
 
 .choice-card.is-checked .choice-title {
-  color: #185abc;
+  color: var(--brand-700);
 }
 
 .ghost-button {
@@ -440,29 +609,29 @@ const onReset = async () => {
 
 .icon-button:hover,
 .ghost-button:hover {
-  border-color: rgba(24, 144, 255, 0.40);
-  background: rgba(24, 144, 255, 0.06);
+  border-color: rgba(47, 107, 255, 0.40);
+  background: rgba(47, 107, 255, 0.06);
 }
 
 .choice-title {
   font-size: 13px;
   font-weight: 700;
-  color: #111827;
+  color: var(--ink-900);
 }
 
 .choice-desc {
   margin-top: 4px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--ink-500);
 }
 
 .mono-preview {
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px dashed rgba(24, 144, 255, 0.28);
-  background: rgba(24, 144, 255, 0.04);
-  color: #1f2937;
+  border: 1px dashed rgba(47, 107, 255, 0.28);
+  background: rgba(47, 107, 255, 0.04);
+  color: var(--ink-700);
   font-size: 12px;
   font-family:
     "JetBrains Mono",
@@ -473,6 +642,83 @@ const onReset = async () => {
     monospace;
   line-height: 1.6;
   word-break: break-word;
+}
+
+.prompts-toolbar {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.prompts-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.prompt-card {
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.80);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+  padding: 12px 12px;
+}
+
+.prompt-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.prompt-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.prompt-name {
+  font-weight: 700;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.prompt-meta {
+  margin-top: 8px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.prompt-preview {
+  margin-top: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(15, 23, 42, 0.04);
+  color: var(--ink-700);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
 }
 
 .mono-input :deep(.el-input__inner) {

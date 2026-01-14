@@ -2,7 +2,10 @@
   <div class="home-container">
     <header class="home-header">
       <div class="header-left">
-        <h1 class="app-title">AI会议助手</h1>
+        <div class="title-stack">
+          <h1 class="app-title">AI会议助手</h1>
+          <div class="app-subtitle">实时转写 · 语句拆分 · AI 分析</div>
+        </div>
       </div>
       <div class="header-right">
         <el-button type="primary" @click="createMeeting" :loading="loading">
@@ -14,23 +17,29 @@
     <main class="home-main">
       <!-- 分类标签页 -->
       <el-tabs v-model="activeTab" class="meeting-tabs" @tab-change="handleTabChange">
-        <el-tab-pane label="正在进行" name="active">
-          <span slot="label">
-            正在进行
-            <el-badge v-if="activeCount > 0" :value="activeCount" class="tab-badge" />
-          </span>
+        <el-tab-pane name="active">
+          <template #label>
+            <span class="tab-label">
+              正在进行
+              <el-badge v-if="activeCount > 0" :value="activeCount" class="tab-badge" />
+            </span>
+          </template>
         </el-tab-pane>
-        <el-tab-pane label="已结束" name="ended">
-          <span slot="label">
-            已结束
-            <el-badge v-if="endedCount > 0" :value="endedCount" class="tab-badge" />
-          </span>
+        <el-tab-pane name="ended">
+          <template #label>
+            <span class="tab-label">
+              已结束
+              <el-badge v-if="endedCount > 0" :value="endedCount" class="tab-badge" />
+            </span>
+          </template>
         </el-tab-pane>
-        <el-tab-pane label="存档" name="archived">
-          <span slot="label">
-            存档
-            <el-badge v-if="archivedCount > 0" :value="archivedCount" class="tab-badge" />
-          </span>
+        <el-tab-pane name="archived">
+          <template #label>
+            <span class="tab-label">
+              存档
+              <el-badge v-if="archivedCount > 0" :value="archivedCount" class="tab-badge" />
+            </span>
+          </template>
         </el-tab-pane>
       </el-tabs>
 
@@ -38,14 +47,14 @@
       <section v-loading="loading" class="meeting-list">
         <el-row v-if="filteredMeetings.length > 0" :gutter="16">
           <el-col
-            v-for="meeting in filteredMeetings"
+            v-for="(meeting, index) in filteredMeetings"
             :key="meeting.id"
             :xs="24"
             :sm="12"
             :md="8"
             :lg="6"
           >
-            <el-card class="meeting-card" shadow="hover">
+            <el-card class="meeting-card" shadow="hover" :style="{ '--stagger': index }">
               <!-- 卡片头部（点击标题进入会议详情） -->
               <template #header>
                 <div class="card-header" @click="openMeeting(meeting.id)">
@@ -354,22 +363,35 @@ function getMeetingStatusText(meeting: Session): string {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background: transparent;
 }
 
 .home-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 24px;
-  background-color: #fff;
-  border-bottom: 1px solid #e8e8e8;
+  padding: 12px 14px;
+  margin: 12px 12px 0;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(14px);
+  position: sticky;
+  top: 12px;
+  z-index: 10;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .header-right {
@@ -379,45 +401,91 @@ function getMeetingStatusText(meeting: Session): string {
 
 .app-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1890ff;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: var(--ink-900);
+}
+
+.app-subtitle {
+  font-size: 12px;
+  color: var(--ink-500);
+  letter-spacing: 0.2px;
 }
 
 .home-main {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
-  max-height: calc(100vh - 60px);
+  padding: 14px 12px 18px;
+  max-height: calc(100vh - 84px);
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 .meeting-tabs {
-  background-color: #fff;
-  padding: 0 16px;
-  border-radius: 8px 8px 0 0;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-1);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  padding: 6px 10px 0;
+  backdrop-filter: blur(14px);
 }
 
 .tab-badge {
   margin-left: 8px;
 }
 
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meeting-tabs :deep(.el-tabs__header) {
+  margin: 0;
+}
+
+.meeting-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+  background-color: rgba(15, 23, 42, 0.08);
+}
+
+.meeting-tabs :deep(.el-tabs__item) {
+  font-weight: 600;
+  color: var(--ink-700);
+}
+
 .meeting-list {
-  background-color: #fff;
-  padding: 16px;
-  border-radius: 0 0 8px 8px;
+  background: var(--surface);
+  padding: 14px;
+  border: 1px solid var(--surface-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   min-height: 300px;
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(14px);
 }
 
 .meeting-card {
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 220ms var(--ease-out),
+    box-shadow 220ms var(--ease-out),
+    border-color 220ms var(--ease-out);
   height: 100%;
   display: flex;
   flex-direction: column;
+  border-radius: var(--radius-md);
+  border-color: rgba(15, 23, 42, 0.10);
+  animation: rise-in 420ms var(--ease-out) both;
+  animation-delay: calc(var(--stagger, 0) * 48ms);
 }
 
 .meeting-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-3);
+  border-color: rgba(47, 107, 255, 0.24);
 }
 
 .card-header {
@@ -430,8 +498,8 @@ function getMeetingStatusText(meeting: Session): string {
 
 .meeting-title {
   font-size: 15px;
-  font-weight: 600;
-  color: #333;
+  font-weight: 650;
+  color: var(--ink-900);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -449,11 +517,11 @@ function getMeetingStatusText(meeting: Session): string {
   justify-content: space-between;
   margin-top: 8px;
   font-size: 13px;
-  color: #666;
+  color: var(--ink-700);
 }
 
 .card-label {
-  color: #999;
+  color: var(--ink-500);
 }
 
 .card-actions {
@@ -461,7 +529,7 @@ function getMeetingStatusText(meeting: Session): string {
   gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .empty-state {
@@ -476,6 +544,8 @@ function getMeetingStatusText(meeting: Session): string {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+    top: 10px;
+    margin: 10px 10px 0;
   }
 
   .header-right {

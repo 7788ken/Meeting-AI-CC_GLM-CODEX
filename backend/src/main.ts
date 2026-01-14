@@ -1378,10 +1378,19 @@ async function bootstrap() {
 
     transcriptEventSegmentationInFlight.add(sessionId)
     try {
-      await transcriptEventSegmentationService.generateNextSegment({
-        sessionId,
-        force: input.force,
-      })
+      const maxSegmentsPerRun = readNumberFromEnv(
+        'TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN',
+        8,
+        value => value >= 1 && value <= 100
+      )
+
+      for (let i = 0; i < maxSegmentsPerRun; i += 1) {
+        const created = await transcriptEventSegmentationService.generateNextSegment({
+          sessionId,
+          force: input.force,
+        })
+        if (!created) break
+      }
     } catch (error) {
       wsLogger.warn(
         `Transcript event segmentation task failed, sessionId=${sessionId}, reason=${input.reason}: ${

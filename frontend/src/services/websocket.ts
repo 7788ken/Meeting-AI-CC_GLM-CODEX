@@ -71,6 +71,10 @@ export type TranscriptEventSegmentUpsertData = {
   content: string
   sourceStartEventIndex: number
   sourceEndEventIndex: number
+  sourceStartEventIndexExact?: number
+  sourceStartEventOffset?: number
+  sourceEndEventIndexExact?: number
+  sourceEndEventOffset?: number
   sourceRevision: number
   prevSegmentId?: string
   status: 'completed' | 'failed'

@@ -13,7 +13,6 @@ export class GlmClient {
   private readonly logger = new Logger(GlmClient.name)
   private readonly apiKey: string
   private readonly baseURL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
-  private readonly model = 'glm-4.6v-flash'
 
   constructor(
     private readonly configService: ConfigService,
@@ -23,18 +22,22 @@ export class GlmClient {
     if (!this.apiKey) {
       this.logger.warn('GLM_API_KEY not configured')
     }
+    if (!this.getModelName()) {
+      this.logger.warn('GLM_ANALYSIS_MODEL not configured')
+    }
   }
 
   async generateAnalysis(params: {
     analysisType: string
     speeches: Array<{ content: string; speakerName: string }>
     sessionId: string
+    prompt?: string
   }): Promise<string> {
     if (!this.apiKey) {
       throw new Error('GLM_API_KEY not configured')
     }
 
-    const prompt = this.buildPrompt(params.analysisType, params.speeches)
+    const prompt = this.buildPrompt(params.analysisType, params.speeches, params.prompt)
 
     try {
       const response = await this.callGlmAPI(prompt)
@@ -49,9 +52,18 @@ export class GlmClient {
 
   private buildPrompt(
     analysisType: string,
-    speeches: Array<{ content: string; speakerName: string }>
+    speeches: Array<{ content: string; speakerName: string }>,
+    promptOverride?: string
   ): string {
     const speechesText = speeches.map(s => `${s.speakerName}: ${s.content}`).join('\n')
+
+    const custom = typeof promptOverride === 'string' ? promptOverride.trim() : ''
+    if (custom) {
+      if (custom.includes('{{speeches}}')) {
+        return custom.replace(/{{\s*speeches\s*}}/g, speechesText)
+      }
+      return `${custom}\n\n会议发言：\n${speechesText}`
+    }
 
     const prompts: Record<string, string> = {
       summary: `请根据以下会议发言内容，生成一份简洁的会议摘要：\n\n${speechesText}\n\n要求：\n1. 提取核心讨论内容\n2. 总结主要结论\n3. 使用 Markdown 格式`,
@@ -71,8 +83,9 @@ export class GlmClient {
   }
 
   private async callGlmAPI(prompt: string): Promise<any> {
+    const model = this.requireModelName()
     const requestBody = {
-      model: this.model,
+      model,
       messages: [
         {
           role: 'system',
@@ -120,8 +133,24 @@ export class GlmClient {
     return getGlmAuthorizationToken(this.apiKey)
   }
 
+  private getModelName(): string {
+    return (this.configService.get<string>('GLM_ANALYSIS_MODEL') || '').trim()
+  }
+
+  private requireModelName(): string {
+    const model = this.getModelName()
+    if (!model) {
+      throw new Error('GLM_ANALYSIS_MODEL not configured')
+    }
+    return model
+  }
+
   async healthCheck(): Promise<boolean> {
     if (!this.apiKey) {
+      return false
+    }
+    const model = this.getModelName()
+    if (!model) {
       return false
     }
 
@@ -130,7 +159,7 @@ export class GlmClient {
         this.httpService.post(
           this.baseURL,
           {
-            model: this.model,
+            model,
             messages: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }],
             temperature: 0,
             max_tokens: 16,

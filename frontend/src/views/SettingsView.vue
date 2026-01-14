@@ -1,12 +1,15 @@
 <template>
   <div class="settings-container">
-    <header class="settings-header">
-      <h1>设置</h1>
-      <el-button size="small" @click="router.push('/')">返回</el-button>
+    <header class="settings-header app-surface">
+      <div class="title-stack">
+        <h1 class="settings-title">设置</h1>
+        <div class="settings-subtitle">本页为前端本地设置示例（不修改后端）</div>
+      </div>
+      <el-button size="small" class="ghost-button" @click="router.push('/')">← 返回</el-button>
     </header>
 
     <main class="settings-main">
-      <el-card class="settings-card">
+      <el-card class="settings-card" shadow="hover">
         <template #header>
           <h2>录音设置</h2>
         </template>
@@ -33,7 +36,7 @@
         </el-form>
       </el-card>
 
-      <el-card class="settings-card">
+      <el-card class="settings-card" shadow="hover">
         <template #header>
           <h2>转写设置</h2>
         </template>
@@ -57,7 +60,7 @@
         </el-form>
       </el-card>
 
-      <el-card class="settings-card">
+      <el-card class="settings-card" shadow="hover">
         <template #header>
           <h2>AI模型设置</h2>
         </template>
@@ -84,7 +87,7 @@
         </el-form>
       </el-card>
 
-      <el-card class="settings-card">
+      <el-card class="settings-card" shadow="hover">
         <template #header>
           <h2>外观设置</h2>
         </template>
@@ -152,44 +155,79 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #f5f5f5;
+  background: transparent;
 }
 
 .settings-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 24px;
-  background-color: #fff;
-  border-bottom: 1px solid #e8e8e8;
+  padding: 14px 16px;
+  margin: 12px 12px 0;
+  position: sticky;
+  top: 12px;
+  z-index: 10;
 }
 
-.settings-header h1 {
+.title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1890ff;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink-900);
+  letter-spacing: 0.2px;
+}
+
+.settings-subtitle {
+  font-size: 12px;
+  color: var(--ink-500);
+  letter-spacing: 0.2px;
 }
 
 .settings-main {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 14px 12px 18px;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .settings-card {
   margin-bottom: 16px;
+  border-radius: var(--radius-md);
+  border-color: rgba(15, 23, 42, 0.10);
+  animation: rise-in 420ms var(--ease-out) both;
 }
 
 .settings-card :deep(.el-card__header) {
   padding: 12px 16px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  background: rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(10px);
 }
 
 .settings-card h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #333;
+  color: var(--ink-900);
+}
+
+.ghost-button {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+@media (max-width: 768px) {
+  .settings-header {
+    margin: 10px 10px 0;
+    top: 10px;
+  }
 }
 </style>

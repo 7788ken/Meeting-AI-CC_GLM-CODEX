@@ -1,11 +1,15 @@
 <template>
   <div class="meeting-container">
-    <header class="meeting-header">
-      <slot name="header" />
+    <header class="meeting-header app-surface">
+      <div class="meeting-header-inner">
+        <slot name="header" />
+      </div>
     </header>
 
     <main class="meeting-main">
-      <slot />
+      <div class="meeting-main-inner">
+        <slot />
+      </div>
     </main>
   </div>
 </template>
@@ -15,16 +19,26 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #f5f5f5;
+  background: transparent;
 }
 
 .meeting-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 24px;
-  background-color: #fff;
-  border-bottom: 1px solid #e8e8e8;
+  padding: 10px 14px;
+  margin: 12px 12px 0;
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+}
+
+.meeting-header-inner {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
 .meeting-main {
@@ -32,13 +46,27 @@
   flex-direction: column;
   flex: 1;
   overflow: hidden;
-  padding: 16px;
-  gap: 16px;
+  padding: 14px 12px calc(12px + var(--app-bottom-inset));
+}
+
+.meeting-main-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 @media (max-width: 768px) {
   .meeting-main {
     flex-direction: column;
+  }
+
+  .meeting-header {
+    margin: 10px 10px 0;
+    top: 10px;
   }
 }
 </style>
