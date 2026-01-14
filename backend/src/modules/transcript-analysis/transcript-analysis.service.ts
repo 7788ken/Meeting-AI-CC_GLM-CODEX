@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
-import { Model } from 'mongoose'
+import { Model, Types } from 'mongoose'
 import {
   TranscriptStreamService,
   type TranscriptEventDTO,
@@ -9,12 +9,22 @@ import { TranscriptAnalysisGlmClient } from './transcript-analysis.glm-client'
 import {
   buildTranscriptSummaryUserPrompt,
   DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT,
+  buildTranscriptSegmentAnalysisUserPrompt,
+  DEFAULT_TRANSCRIPT_SEGMENT_ANALYSIS_SYSTEM_PROMPT,
   DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT,
 } from './transcript-analysis.prompt'
 import {
   TranscriptAnalysisSummary,
   type TranscriptAnalysisSummaryDocument,
 } from './schemas/transcript-analysis-summary.schema'
+import {
+  TranscriptAnalysisSegmentAnalysis,
+  type TranscriptAnalysisSegmentAnalysisDocument,
+} from './schemas/transcript-analysis-segment.schema'
+import {
+  TranscriptEventSegment,
+  type TranscriptEventSegmentDocument,
+} from '../transcript-event-segmentation/schemas/transcript-event-segment.schema'
 
 export type TranscriptSummaryDTO = {
   sessionId: string
@@ -24,6 +34,18 @@ export type TranscriptSummaryDTO = {
   sourceRevision: number
   sourceEventCount: number
   mode: 'single' | 'chunked'
+}
+
+export type TranscriptSegmentAnalysisDTO = {
+  sessionId: string
+  segmentId: string
+  segmentSequence: number
+  markdown: string
+  model: string
+  generatedAt: string
+  sourceRevision: number
+  sourceStartEventIndex: number
+  sourceEndEventIndex: number
 }
 
 export type TranscriptSummaryStreamEvent =
@@ -46,6 +68,10 @@ export class TranscriptAnalysisService {
   constructor(
     @InjectModel(TranscriptAnalysisSummary.name)
     private readonly summaryModel: Model<TranscriptAnalysisSummaryDocument>,
+    @InjectModel(TranscriptAnalysisSegmentAnalysis.name)
+    private readonly segmentAnalysisModel: Model<TranscriptAnalysisSegmentAnalysisDocument>,
+    @InjectModel(TranscriptEventSegment.name)
+    private readonly segmentModel: Model<TranscriptEventSegmentDocument>,
     private readonly transcriptStreamService: TranscriptStreamService,
     private readonly glmClient: TranscriptAnalysisGlmClient
   ) {}
@@ -280,6 +306,90 @@ export class TranscriptAnalysisService {
     yield { type: 'done', data: { generatedAt } }
   }
 
+  async getStoredSegmentAnalysis(input: {
+    sessionId: string
+    segmentId: string
+  }): Promise<TranscriptSegmentAnalysisDTO | null> {
+    const sessionId = (input.sessionId || '').trim()
+    const segmentId = (input.segmentId || '').trim()
+    if (!sessionId || !segmentId) return null
+
+    let objectId: Types.ObjectId
+    try {
+      objectId = new Types.ObjectId(segmentId)
+    } catch {
+      return null
+    }
+
+    const doc = await this.segmentAnalysisModel.findOne({ sessionId, segmentId: objectId }).exec()
+    if (!doc) return null
+
+    return {
+      sessionId: doc.sessionId,
+      segmentId: String(doc.segmentId),
+      segmentSequence: doc.segmentSequence,
+      markdown: doc.markdown,
+      model: doc.model,
+      generatedAt: doc.generatedAt,
+      sourceRevision: doc.sourceRevision,
+      sourceStartEventIndex: doc.sourceStartEventIndex,
+      sourceEndEventIndex: doc.sourceEndEventIndex,
+    }
+  }
+
+  async generateSegmentAnalysis(input: {
+    sessionId: string
+    segmentId: string
+  }): Promise<TranscriptSegmentAnalysisDTO> {
+    const sessionId = (input.sessionId || '').trim()
+    const segmentId = (input.segmentId || '').trim()
+    if (!sessionId) {
+      throw new Error('sessionId is required')
+    }
+    if (!segmentId) {
+      throw new Error('segmentId is required')
+    }
+
+    let objectId: Types.ObjectId
+    try {
+      objectId = new Types.ObjectId(segmentId)
+    } catch {
+      throw new Error('segmentId is invalid')
+    }
+
+    const segment = await this.segmentModel.findOne({ _id: objectId, sessionId }).exec()
+    if (!segment) {
+      throw new Error('segment not found')
+    }
+
+    const { markdown, model } = await this.glmClient.generateMarkdown({
+      system: DEFAULT_TRANSCRIPT_SEGMENT_ANALYSIS_SYSTEM_PROMPT,
+      user: buildTranscriptSegmentAnalysisUserPrompt({
+        sessionId,
+        revision: segment.sourceRevision,
+        segmentSequence: segment.sequence,
+        segmentContent: String(segment.content || '').trim(),
+        sourceStartEventIndex: segment.sourceStartEventIndex,
+        sourceEndEventIndex: segment.sourceEndEventIndex,
+      }),
+    })
+
+    const dto: TranscriptSegmentAnalysisDTO = {
+      sessionId,
+      segmentId: String(segment._id),
+      segmentSequence: segment.sequence,
+      markdown,
+      model,
+      generatedAt: new Date().toISOString(),
+      sourceRevision: segment.sourceRevision,
+      sourceStartEventIndex: segment.sourceStartEventIndex,
+      sourceEndEventIndex: segment.sourceEndEventIndex,
+    }
+
+    await this.persistSegmentAnalysis(dto)
+    return dto
+  }
+
   private buildEventsText(events: TranscriptEventDTO[]): string {
     return events.map(e => `[${e.eventIndex}] ${String(e.content || '').trim()}`).join('\n')
   }
@@ -353,6 +463,45 @@ export class TranscriptAnalysisService {
     } catch (error) {
       this.logger.error(
         `Persist transcript summary failed, sessionId=${dto.sessionId}`,
+        error instanceof Error ? error.stack : String(error)
+      )
+    }
+  }
+
+  private async persistSegmentAnalysis(dto: TranscriptSegmentAnalysisDTO): Promise<void> {
+    let objectId: Types.ObjectId
+    try {
+      objectId = new Types.ObjectId(dto.segmentId)
+    } catch {
+      this.logger.error(
+        `Persist segment analysis failed, invalid segmentId=${dto.segmentId}, sessionId=${dto.sessionId}`
+      )
+      return
+    }
+
+    try {
+      await this.segmentAnalysisModel
+        .findOneAndUpdate(
+          { sessionId: dto.sessionId, segmentId: objectId },
+          {
+            $set: {
+              sessionId: dto.sessionId,
+              segmentId: objectId,
+              segmentSequence: dto.segmentSequence,
+              markdown: dto.markdown,
+              model: dto.model,
+              generatedAt: dto.generatedAt,
+              sourceRevision: dto.sourceRevision,
+              sourceStartEventIndex: dto.sourceStartEventIndex,
+              sourceEndEventIndex: dto.sourceEndEventIndex,
+            },
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        )
+        .exec()
+    } catch (error) {
+      this.logger.error(
+        `Persist segment analysis failed, sessionId=${dto.sessionId}, segmentId=${dto.segmentId}`,
         error instanceof Error ? error.stack : String(error)
       )
     }

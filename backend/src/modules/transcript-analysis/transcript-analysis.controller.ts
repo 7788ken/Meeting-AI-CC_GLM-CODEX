@@ -5,6 +5,7 @@ import { Public } from '../auth/decorators/public.decorator'
 import {
   TranscriptAnalysisService,
   type TranscriptSummaryDTO,
+  type TranscriptSegmentAnalysisDTO,
   type TranscriptSummaryStreamEvent,
 } from './transcript-analysis.service'
 
@@ -35,6 +36,50 @@ export class TranscriptAnalysisController {
       throw new BadRequestException('sessionId is required')
     }
     return this.transcriptAnalysisService.generateSummary({ sessionId: normalized })
+  }
+
+  @Public()
+  @Get('session/:sessionId/segment/:segmentId/analysis')
+  @ApiOperation({ summary: '获取会话语句的已生成 Markdown 针对性分析（若存在）' })
+  @ApiResponse({ status: 200 })
+  async getStoredSegmentAnalysis(
+    @Param('sessionId') sessionId: string,
+    @Param('segmentId') segmentId: string
+  ): Promise<TranscriptSegmentAnalysisDTO | null> {
+    const normalizedSessionId = sessionId?.trim()
+    const normalizedSegmentId = segmentId?.trim()
+    if (!normalizedSessionId) {
+      throw new BadRequestException('sessionId is required')
+    }
+    if (!normalizedSegmentId) {
+      throw new BadRequestException('segmentId is required')
+    }
+    return this.transcriptAnalysisService.getStoredSegmentAnalysis({
+      sessionId: normalizedSessionId,
+      segmentId: normalizedSegmentId,
+    })
+  }
+
+  @Public()
+  @Post('session/:sessionId/segment/:segmentId/analysis')
+  @ApiOperation({ summary: '对会话指定语句生成 Markdown 针对性分析（落库）' })
+  @ApiResponse({ status: 200 })
+  async generateSegmentAnalysis(
+    @Param('sessionId') sessionId: string,
+    @Param('segmentId') segmentId: string
+  ): Promise<TranscriptSegmentAnalysisDTO> {
+    const normalizedSessionId = sessionId?.trim()
+    const normalizedSegmentId = segmentId?.trim()
+    if (!normalizedSessionId) {
+      throw new BadRequestException('sessionId is required')
+    }
+    if (!normalizedSegmentId) {
+      throw new BadRequestException('segmentId is required')
+    }
+    return this.transcriptAnalysisService.generateSegmentAnalysis({
+      sessionId: normalizedSessionId,
+      segmentId: normalizedSegmentId,
+    })
   }
 
   @Public()

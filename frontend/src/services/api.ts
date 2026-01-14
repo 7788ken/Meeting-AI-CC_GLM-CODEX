@@ -96,6 +96,20 @@ export interface TranscriptSummary {
   mode: 'single' | 'chunked'
 }
 
+// ==================== 语句针对性分析（Markdown） ====================
+
+export interface TranscriptSegmentAnalysis {
+  sessionId: string
+  segmentId: string
+  segmentSequence: number
+  markdown: string
+  model: string
+  generatedAt: string
+  sourceRevision: number
+  sourceStartEventIndex: number
+  sourceEndEventIndex: number
+}
+
 // ==================== 会话调试错误 ====================
 
 export interface DebugError {
@@ -223,8 +237,19 @@ export const transcriptEventSegmentationConfigApi = {
 }
 
 export const transcriptAnalysisApi = {
+  getStoredSummary: (sessionId: string) =>
+    get<ApiResponse<TranscriptSummary | null>>(`/transcript-analysis/session/${sessionId}/summary`),
   generateSummary: (sessionId: string) =>
     post<ApiResponse<TranscriptSummary>>(`/transcript-analysis/session/${sessionId}/summary`, {}),
+  getStoredSegmentAnalysis: (sessionId: string, segmentId: string) =>
+    get<ApiResponse<TranscriptSegmentAnalysis | null>>(
+      `/transcript-analysis/session/${sessionId}/segment/${segmentId}/analysis`
+    ),
+  generateSegmentAnalysis: (sessionId: string, segmentId: string) =>
+    post<ApiResponse<TranscriptSegmentAnalysis>>(
+      `/transcript-analysis/session/${sessionId}/segment/${segmentId}/analysis`,
+      {}
+    ),
 }
 
 export const debugErrorApi = {

@@ -231,9 +231,16 @@
 	        </div>
 
 	        <!-- 加载状态 -->
-	        <div v-if="isAnalyzing && !hasAnalysisContent" class="analysis-loading">
+	        <div v-if="isAnalyzing && !hasAnalysisContent" class="analysis-loading" role="status" aria-live="polite">
 	          <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
-	          <p>正在分析中，请稍候...</p>
+	          <p class="analysis-loading-text">
+	            正在分析中，请稍候
+	            <span class="loading-dots" aria-hidden="true">
+	              <span class="loading-dot" />
+	              <span class="loading-dot" />
+	              <span class="loading-dot" />
+	            </span>
+	          </p>
 	          <p v-if="analysisProgress" class="analysis-progress">{{ analysisProgress }}</p>
 	        </div>
 
@@ -275,7 +282,7 @@
 	            type="primary"
 	            plain
 	            :icon="Refresh"
-	            @click="startTargetAnalysis"
+	            @click="startTargetAnalysis({ force: true })"
 	          >
 	            重新分析
 	          </el-button>
@@ -293,9 +300,16 @@
 	        </div>
 
 	        <!-- 加载状态 -->
-	        <div v-if="isTargetAnalyzing" class="analysis-loading">
+	        <div v-if="isTargetAnalyzing" class="analysis-loading" role="status" aria-live="polite">
 	          <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
-	          <p>正在针对性分析中，请稍候...</p>
+	          <p class="analysis-loading-text">
+	            正在针对性分析中，请稍候
+	            <span class="loading-dots" aria-hidden="true">
+	              <span class="loading-dot" />
+	              <span class="loading-dot" />
+	              <span class="loading-dot" />
+	            </span>
+	          </p>
 	        </div>
 
 	        <!-- 错误状态 -->
@@ -727,12 +741,16 @@ const recordingIndicatorIcon = computed(() => {
       stopRecording()
     }
 
-    sessionId.value = nextSessionId
-    transcriptStreamStore.reset()
-    transcriptEventSegmentationStore.reset()
-    focusedEventIndex.value = null
-    highlightedRange.value = null
-    realtimeStickToBottom.value = true
+	    sessionId.value = nextSessionId
+	    transcriptStreamStore.reset()
+	    transcriptEventSegmentationStore.reset()
+	    clearAnalysis()
+	    clearTargetAnalysis()
+	    analysisMode.value = 'general'
+	    targetSegment.value = null
+	    focusedEventIndex.value = null
+	    highlightedRange.value = null
+	    realtimeStickToBottom.value = true
 
     if (!sessionId.value) return
 
@@ -813,6 +831,7 @@ async function loadSession() {
     const response = await sessionApi.get(sessionId.value)
     sessionInfo.value = response.data || null
     sessionEndedOverride.value = !!sessionInfo.value && !sessionInfo.value.isActive
+    await loadStoredSummary()
   } catch (error) {
     console.error('加载会话失败:', error)
   }
@@ -1012,11 +1031,64 @@ function getEventDurationText(eventIndex: number): string | null {
   return formatDurationMs(durationMs)
 }
 
+function normalizeMarkdown(markdown: string): string {
+  const raw = typeof markdown === 'string' ? markdown : ''
+  if (!raw) return ''
+
+  const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+  let out = raw.replace(/\r\n?/g, '\n')
+
+  // 兼容全角井号（＃）/全角空格
+  out = out.replace(/＃/g, '#').replace(/　/g, ' ')
+
+  // 针对模型常见输出：标题未换行，导致整个内容被解析为单个 h1/h2。
+  // 这里对“已知标题集合”强制补齐前后换行，确保 heading 独立成行。
+  const knownHeadings: Array<{ level: 1 | 2; text: string }> = [
+    { level: 1, text: '会议分析总结' },
+    { level: 2, text: '一句话结论' },
+    { level: 2, text: '议题与结论' },
+    { level: 2, text: '关键要点' },
+    { level: 2, text: '决策' },
+    { level: 2, text: '行动项（TODO）' },
+    { level: 2, text: '风险与阻塞' },
+    { level: 2, text: '待澄清问题' },
+    { level: 2, text: '附：原文引用（可选）' },
+    // 针对性分析（可选标题）
+    { level: 2, text: '语句解读' },
+    { level: 2, text: '可能的意图/风险' },
+    { level: 2, text: '建议的追问' },
+    { level: 2, text: '建议的下一步行动' },
+  ]
+
+  for (const heading of knownHeadings) {
+    const hashes = '#'.repeat(heading.level)
+    const pattern = new RegExp(`${escapeRegExp(hashes)}\\s*${escapeRegExp(heading.text)}`, 'g')
+    out = out.replace(pattern, `\n\n${hashes} ${heading.text}\n\n`)
+  }
+
+  // 标题：确保 # 后有空格（避免 “#标题” 无法识别为 heading）
+  out = out.replace(/^(\s{0,3})(#{1,6})(?!#)(\S)/gm, '$1$2 $3')
+
+  // 模型常见输出：多个列表项被拼在同一行，且紧跟 HTML（如 *<strong>...*<strong>...）。
+  // 仅在 “*< / -< / +<” 这种极不可能是行内强调的场景下断行。
+  out = out.replace(/([^\n])([*+-])(?=<)/g, '$1\n$2')
+
+  // 列表：确保列表标记后有空格（避免 “-事项” / “*事项” 无法识别为 list）
+  out = out.replace(/^(\s{0,3})([*+-])(\S)/gm, '$1$2 $3')
+  out = out.replace(/^(\s{0,3})(\d+\.)(\S)/gm, '$1$2 $3')
+
+  // 收敛空行，避免过多空白
+  out = out.replace(/\n{3,}/g, '\n\n').trim()
+
+  return out
+}
+
 // 分析总结相关
 const renderedAnalysisResult = computed(() => {
   if (!analysisResult.value) return ''
   // 使用 marked.parse 的同步版本
-  const rawHtml = marked.parse(analysisResult.value, {
+  const rawHtml = marked.parse(normalizeMarkdown(analysisResult.value), {
     async: false,
     gfm: true,
     breaks: true,
@@ -1029,7 +1101,7 @@ const hasAnalysisContent = computed(() => !!analysisResult.value)
 // 针对性分析相关
 const renderedTargetAnalysisResult = computed(() => {
   if (!targetAnalysisResult.value) return ''
-  const rawHtml = marked.parse(targetAnalysisResult.value, {
+  const rawHtml = marked.parse(normalizeMarkdown(targetAnalysisResult.value), {
     async: false,
     gfm: true,
     breaks: true,
@@ -1246,6 +1318,22 @@ async function startAnalysis(): Promise<void> {
 	}
 }
 
+async function loadStoredSummary(): Promise<void> {
+  if (!sessionId.value) return
+  if (isAnalyzing.value) return
+  if (analysisResult.value) return
+
+  try {
+    const response = await transcriptAnalysisApi.getStoredSummary(sessionId.value)
+    const markdown = response?.data?.markdown
+    if (typeof markdown === 'string' && markdown.trim()) {
+      analysisResult.value = markdown
+    }
+  } catch (error) {
+    console.error('加载已保存分析总结失败:', error)
+  }
+}
+
 function clearAnalysis(): void {
   if (analysisEventSource) {
     analysisEventSource.close()
@@ -1271,7 +1359,7 @@ function switchToGeneralAnalysis(): void {
 }
 
 // 开始针对性分析
-async function startTargetAnalysis(): Promise<void> {
+async function startTargetAnalysis(options?: { force?: boolean }): Promise<void> {
   if (!sessionId.value) {
     ElMessage.warning('请先加入会话')
     return
@@ -1287,19 +1375,32 @@ async function startTargetAnalysis(): Promise<void> {
     targetAnalysisError.value = ''
 
     const seg = targetSegment.value
+    const force = options?.force === true
 
-    // TODO: 调用后端针对性分析 API
-    // 临时使用模拟数据展示效果
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    if (!force) {
+      try {
+        const stored = await transcriptAnalysisApi.getStoredSegmentAnalysis(sessionId.value, seg.id)
+        const payload = stored?.data
+        if (
+          payload &&
+          typeof payload.markdown === 'string' &&
+          payload.markdown.trim() &&
+          payload.sourceRevision === seg.sourceRevision
+        ) {
+          targetAnalysisResult.value = payload.markdown
+          return
+        }
+      } catch (error) {
+        console.error('加载已保存针对性分析失败:', error)
+      }
+    }
 
-    targetAnalysisResult.value = `
-## 分析要点
-- 该语句是会议讨论中的关键发言
-- 内容清晰，主题明确
-- 建议作为后续待办事项的参考
-
----
-*分析时间: ${new Date().toLocaleString('zh-CN')}*`
+    const response = await transcriptAnalysisApi.generateSegmentAnalysis(sessionId.value, seg.id)
+    const markdown = response?.data?.markdown
+    if (!markdown) {
+      throw new Error('分析服务返回为空')
+    }
+    targetAnalysisResult.value = markdown
 
     ElMessage.success('针对性分析完成')
   } catch (error) {
@@ -1874,6 +1975,57 @@ function clearTargetAnalysis(): void {
   font-size: 14px;
 }
 
+.analysis-loading-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transform: translateY(1px);
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.25;
+  animation: meeting-loading-dot 1.2s infinite ease-in-out;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: -0.3s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: -0.15s;
+}
+
+@keyframes meeting-loading-dot {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.25;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-dot {
+    animation: none;
+    opacity: 0.6;
+    transform: none;
+  }
+}
+
 .analysis-progress {
   font-size: 13px;
   color: var(--ink-400);
@@ -1932,6 +2084,14 @@ function clearTargetAnalysis(): void {
   font-size: 15px;
   font-weight: 600;
   margin: 16px 0 8px;
+}
+
+.analysis-result:deep(h4),
+.analysis-result:deep(h5),
+.analysis-result:deep(h6) {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 14px 0 6px;
 }
 
 .analysis-result:deep(p) {

@@ -4,6 +4,10 @@ export const DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT = `你是一名资深会�
 
 输出要求：
 1) 只输出 Markdown（不要输出多余解释、不要输出代码块中的 JSON）。
+   - 标题必须使用 "# " / "## " / "### "（井号后必须有空格），不要输出 "#标题" 这种格式。
+   - 列表必须使用 "- " / "1. "（标记后必须有空格）。
+   - 每个标题必须独立成行；标题行后必须有空行（即标题与正文之间至少一个空行）。
+   - 禁止输出任何 HTML 标签（如 <strong> / <em>）；加粗用 **文本**，斜体用 *文本*。
 2) 结论与行动项必须从原文中推断，禁止编造；不确定时明确标注“未明确/待确认”。
 3) 尽量使用短句、列表；信息密度高但保持可读性。
 4) 严格遵循以下标题结构（标题不得改名/增删，只允许在标题下补充内容）：
@@ -48,4 +52,39 @@ export function buildTranscriptSummaryUserPrompt(input: {
 
 以下是会议原文（按时间顺序）：
 ${input.eventsText}`
+}
+
+export const DEFAULT_TRANSCRIPT_SEGMENT_ANALYSIS_SYSTEM_PROMPT = `你是一名资深会议分析助手。
+
+你的任务：基于给定的一条“语句拆分结果”（可能是口语/省略/上下文不完整），输出一份**针对性分析**。
+
+输出要求：
+1) 只输出 Markdown。
+   - 标题必须使用 \`## \` / \`### \`（井号后必须有空格）。
+   - 列表必须使用 \`- \` / \`1. \`（标记后必须有空格）。
+   - 每个标题必须独立成行；标题行后必须有空行。
+   - 禁止输出任何 HTML 标签（如 <strong> / <em>）；加粗用 **文本**，斜体用 *文本*。
+2) 禁止编造；不确定就写“未明确/待确认”。
+3) 输出结构建议（可按需省略空内容）：
+
+## 语句解读
+## 可能的意图/风险
+## 建议的追问
+## 建议的下一步行动`
+
+export function buildTranscriptSegmentAnalysisUserPrompt(input: {
+  sessionId: string
+  revision: number
+  segmentSequence: number
+  segmentContent: string
+  sourceStartEventIndex: number
+  sourceEndEventIndex: number
+}): string {
+  return `会话ID：${input.sessionId}
+原文版本：${input.revision}
+语句序号：@${input.segmentSequence}
+原文范围：事件#${input.sourceStartEventIndex} ~ #${input.sourceEndEventIndex}
+
+语句内容：
+${input.segmentContent}`
 }
