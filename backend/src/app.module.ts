@@ -3,11 +3,11 @@ import { ConfigModule } from '@nestjs/config'
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { ConfigurationService } from './config/configuration.service'
 import configuration from './config/configuration'
+import { LlmModule } from './common/llm/llm.module'
 import { PrismaModule } from './database/prisma.module'
 import { MongoDBModule } from './database/mongodb.module'
 import { SessionModule } from './modules/session/session.module'
 import { SpeechModule } from './modules/speech/speech.module'
-import { AnalysisModule } from './modules/analysis/analysis.module'
 import { TranscriptModule } from './modules/transcript/transcript.module'
 import { TranscriptStreamModule } from './modules/transcript-stream/transcript-stream.module'
 import { TranscriptEventSegmentationModule } from './modules/transcript-event-segmentation/transcript-event-segmentation.module'
@@ -25,12 +25,12 @@ import { AppService } from './app.service'
       load: [configuration],
       envFilePath: ['.env.local', '.env'],
     }),
+    LlmModule,
     PrismaModule,
     MongoDBModule,
     AuthModule,
     SessionModule,
     SpeechModule,
-    AnalysisModule,
     TranscriptModule,
     TranscriptStreamModule,
     TranscriptEventSegmentationModule,

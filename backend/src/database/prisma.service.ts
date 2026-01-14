@@ -46,7 +46,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     }
 
     // 按照外键依赖顺序删除
-    await this.speaker.deleteMany()
     await this.session.deleteMany()
   }
 

@@ -6,19 +6,6 @@ export class CreateSpeechDto {
   @IsString()
   sessionId: string
 
-  @ApiProperty({ description: '发言者ID' })
-  @IsString()
-  speakerId: string
-
-  @ApiProperty({ description: '发言者名称' })
-  @IsString()
-  speakerName: string
-
-  @ApiPropertyOptional({ description: '发言者颜色' })
-  @IsOptional()
-  @IsString()
-  speakerColor?: string
-
   @ApiProperty({ description: '发言内容' })
   @IsString()
   content: string
@@ -55,15 +42,6 @@ export class SpeechDto {
 
   @ApiProperty({ description: '会话ID' })
   sessionId: string
-
-  @ApiProperty({ description: '发言者ID' })
-  speakerId: string
-
-  @ApiProperty({ description: '发言者名称' })
-  speakerName: string
-
-  @ApiPropertyOptional({ description: '发言者颜色' })
-  speakerColor?: string
 
   @ApiProperty({ description: '发言内容' })
   content: string

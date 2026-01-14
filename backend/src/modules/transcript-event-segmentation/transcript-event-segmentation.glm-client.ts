@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config'
 import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
 import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/llm/glm'
+import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
 import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
 
 @Injectable()
@@ -10,14 +11,15 @@ export class TranscriptEventSegmentationGlmClient {
   private readonly logger = new Logger(TranscriptEventSegmentationGlmClient.name)
   private readonly defaultMaxTokens = 2000
   private readonly defaultBumpMaxTokensTo = 4096
-  private readonly defaultRetryMax = 2
+  private readonly defaultRetryMax = 5
   private readonly defaultRetryBaseMs = 500
   private readonly defaultRetryMaxMs = 8000
 
   constructor(
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
-    private readonly segmentationConfigService: TranscriptEventSegmentationConfigService
+    private readonly segmentationConfigService: TranscriptEventSegmentationConfigService,
+    private readonly glmRateLimiter: GlmRateLimiter
   ) {}
 
   async generateStructuredJson(params: { system: string; user: string }): Promise<string> {
@@ -58,6 +60,9 @@ export class TranscriptEventSegmentationGlmClient {
         requestBody: this.withJsonMode(requestBody, useJsonMode),
       })
     } catch (error) {
+      if (this.isRateLimitedError(error)) {
+        throw this.attachGlmMeta(error)
+      }
       if (!useJsonMode) {
         throw this.attachGlmMeta(error)
       }
@@ -115,13 +120,23 @@ export class TranscriptEventSegmentationGlmClient {
     const response = await this.postWithRetry(input)
 
     const extracted = this.extractStructuredTextFromGlmResponse(response.data)
+    const isJsonMode = this.isJsonModeRequest(input.requestBody)
 
     if (extracted.text) {
       const normalizedJson = this.extractJsonObjectIfValid(extracted.text)
       if (normalizedJson) {
+        if (
+          isJsonMode &&
+          (this.isEmptyJsonObject(normalizedJson) || this.isMissingNextSentence(normalizedJson))
+        ) {
+          throw this.buildInvalidResponseError(response, extracted.finishReason)
+        }
         return normalizedJson
       }
       if (extracted.finishReason !== 'length') {
+        if (isJsonMode && this.isEmptyJsonObject(extracted.text)) {
+          throw this.buildInvalidResponseError(response, extracted.finishReason)
+        }
         return extracted.text
       }
     }
@@ -164,16 +179,24 @@ export class TranscriptEventSegmentationGlmClient {
     let attempt = 0
     while (true) {
       try {
-        return await firstValueFrom(
-          this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
+        return await this.glmRateLimiter.schedule(() =>
+          firstValueFrom(
+            this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
+          )
         )
       } catch (error) {
         const status = this.extractStatusCode(error)
-        if (status !== 429 || attempt >= maxRetries) {
+        if (status !== 429) {
           throw error
         }
 
+        const retryAfterMs = this.readRetryAfterMs(error)
         const delayMs = this.resolveRetryDelayMs(error, attempt)
+        this.glmRateLimiter.onRateLimit(retryAfterMs ?? delayMs)
+        if (attempt >= maxRetries) {
+          throw error
+        }
+
         this.logger.warn(
           `GLM rate limited (429), retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`
         )
@@ -188,6 +211,10 @@ export class TranscriptEventSegmentationGlmClient {
     const source = error as { response?: { status?: unknown }; glmStatus?: unknown }
     const status = source.response?.status ?? source.glmStatus
     return typeof status === 'number' && Number.isFinite(status) ? status : null
+  }
+
+  private isRateLimitedError(error: unknown): boolean {
+    return this.extractStatusCode(error) === 429
   }
 
   private resolveRetryDelayMs(error: unknown, attempt: number): number {
@@ -320,6 +347,47 @@ export class TranscriptEventSegmentationGlmClient {
     const value = requestBody.max_tokens
     if (typeof value === 'number' && Number.isFinite(value)) return value
     return null
+  }
+
+  private isJsonModeRequest(requestBody: Record<string, unknown>): boolean {
+    const format = requestBody.response_format as { type?: unknown } | undefined
+    return typeof format?.type === 'string' && format.type === 'json_object'
+  }
+
+  private isEmptyJsonObject(text: string): boolean {
+    const trimmed = text.trim()
+    if (!trimmed) return false
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return false
+      }
+      return Object.keys(parsed).length === 0
+    } catch {
+      return false
+    }
+  }
+
+  private isMissingNextSentence(text: string): boolean {
+    const trimmed = text.trim()
+    if (!trimmed) return false
+    try {
+      const parsed = JSON.parse(trimmed) as { nextSentence?: unknown; content?: unknown }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return false
+      }
+
+      const value =
+        typeof parsed.nextSentence === 'string'
+          ? parsed.nextSentence
+          : typeof parsed.content === 'string'
+            ? parsed.content
+            : ''
+
+      return !value.trim()
+    } catch {
+      return false
+    }
   }
 
   private buildInvalidResponseError(

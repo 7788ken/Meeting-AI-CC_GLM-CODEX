@@ -419,7 +419,7 @@ function getMeetingStatusText(meeting: Session): string {
   padding: 14px 12px 18px;
   max-height: calc(100vh - 84px);
   width: 100%;
-  max-width: 1400px;
+  /* max-width: 1400px; */
   margin: 0 auto;
 }
 

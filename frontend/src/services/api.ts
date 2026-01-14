@@ -18,9 +18,6 @@ export interface Session {
 export interface Speech {
   id: string
   sessionId: string
-  speakerId: string
-  speakerName: string
-  speakerColor?: string
   content: string
   confidence: number
   startTime: string
@@ -31,35 +28,10 @@ export interface Speech {
   audioOffset?: number
 }
 
-// AI 分析类型
-export interface AIAnalysis {
-  id: string
-  sessionId: string
-  analysisType: string
-  modelUsed: string
-  result: string
-  status: string
-  processingTime?: number
-  isCached?: boolean
-  generatedAt?: string
-  createdAt: string
-}
-
-// 发言者类型
-export interface Speaker {
-  id: string
-  sessionId: string
-  name: string
-  avatarUrl?: string
-  color: string
-}
-
 // ==================== 原文事件流（Phase 0/1） ====================
 
 export interface TranscriptEvent {
   eventIndex: number
-  speakerId: string
-  speakerName: string
   content: string
   isFinal: boolean
   segmentKey?: string
@@ -106,7 +78,6 @@ export interface TranscriptEventSegmentationConfig {
   strictSystemPrompt: string
   windowEvents: number
   intervalMs: number
-  triggerOnEndTurn: boolean
   triggerOnStopTranscribe: boolean
   model: string
   maxTokens: number
@@ -164,13 +135,6 @@ export const sessionApi = {
   updateStatus: (sessionId: string, status: string) =>
     put<ApiResponse<Session>>(`/sessions/${sessionId}/status`, { status }),
 
-  // 添加发言者
-  addSpeaker: (sessionId: string, data: { name: string; avatarUrl?: string; color?: string }) =>
-    post<ApiResponse<Speaker>>(`/sessions/${sessionId}/speakers`, data),
-
-  // 获取发言者列表
-  getSpeakers: (sessionId: string) =>
-    get<ApiResponse<Speaker[]>>(`/sessions/${sessionId}/speakers`),
 }
 
 // ==================== 发言记录 API ====================
@@ -192,10 +156,6 @@ export const speechApi = {
   list: (sessionId: string) =>
     get<ApiResponse<Speech[]>>(`/speeches/session/${sessionId}`),
 
-  // 获取发言者的所有发言
-  listBySpeaker: (sessionId: string, speakerId: string) =>
-    get<ApiResponse<Speech[]>>(`/speeches/session/${sessionId}/speaker/${speakerId}`),
-
   // 搜索发言记录
   search: (sessionId: string, keyword: string) =>
     get<ApiResponse<Speech[]>>(`/speeches/session/${sessionId}/search?keyword=${encodeURIComponent(keyword)}`),
@@ -211,37 +171,6 @@ export const speechApi = {
   // 删除会话的所有发言
   deleteBySession: (sessionId: string) =>
     del(`/speeches/session/${sessionId}`),
-}
-
-// ==================== AI 分析 API ====================
-
-export interface AnalysisRequest {
-  sessionId: string
-  speechIds: string[]
-  analysisType?: string
-  prompt?: string
-}
-
-export const analysisApi = {
-  // 生成 AI 分析
-  generate: (data: AnalysisRequest) =>
-    post<ApiResponse<AIAnalysis>>('/analysis/generate', data),
-
-  // 获取分析详情
-  get: (analysisId: string) =>
-    get<ApiResponse<AIAnalysis>>(`/analysis/${analysisId}`),
-
-  // 获取会话的所有分析
-  list: (sessionId: string) =>
-    get<ApiResponse<AIAnalysis[]>>(`/analysis/session/${sessionId}`),
-
-  // 获取会话的特定类型分析
-  listByType: (sessionId: string, analysisType: string) =>
-    get<ApiResponse<AIAnalysis[]>>(`/analysis/session/${sessionId}/type/${analysisType}`),
-
-  // 删除会话的所有分析
-  deleteBySession: (sessionId: string) =>
-    del(`/analysis/session/${sessionId}`),
 }
 
 export const transcriptStreamApi = {

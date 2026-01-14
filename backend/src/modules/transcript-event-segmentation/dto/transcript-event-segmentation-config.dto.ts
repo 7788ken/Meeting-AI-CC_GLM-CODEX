@@ -14,9 +14,6 @@ export class TranscriptEventSegmentationConfigDto {
   @ApiProperty({ description: '拆分触发间隔（毫秒）', minimum: 0, maximum: 600000 })
   intervalMs: number
 
-  @ApiProperty({ description: '收到 end_turn 立即触发拆分' })
-  triggerOnEndTurn: boolean
-
   @ApiProperty({ description: '收到 stop_transcribe 立即触发拆分' })
   triggerOnStopTranscribe: boolean
 
@@ -54,11 +51,6 @@ export class UpdateTranscriptEventSegmentationConfigDto {
   @Min(0)
   @Max(600000)
   intervalMs?: number
-
-  @ApiPropertyOptional({ description: '收到 end_turn 立即触发拆分' })
-  @IsOptional()
-  @IsBoolean()
-  triggerOnEndTurn?: boolean
 
   @ApiPropertyOptional({ description: '收到 stop_transcribe 立即触发拆分' })
   @IsOptional()

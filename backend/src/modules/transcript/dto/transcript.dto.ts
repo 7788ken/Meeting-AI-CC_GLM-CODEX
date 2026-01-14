@@ -63,12 +63,6 @@ export class TranscriptResultDto {
   @ApiPropertyOptional({ description: '段落切分键（用于按 utterance 切段）' })
   segmentKey?: string
 
-  @ApiProperty({ description: '发言者ID' })
-  speakerId: string
-
-  @ApiProperty({ description: '发言者名称' })
-  speakerName: string
-
   @ApiProperty({ description: '转写内容' })
   content: string
 

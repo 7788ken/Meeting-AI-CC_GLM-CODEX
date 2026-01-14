@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { sessionApi, speechApi, analysisApi } from './api'
+import { sessionApi, speechApi } from './api'
 import { get, post, put, del } from './http'
 
 // Mock http module
@@ -91,45 +91,6 @@ describe('API Services', () => {
       })
     })
 
-    describe('addSpeaker', () => {
-      it('应该添加发言者', async () => {
-        const speakerData = { name: '张三', color: '#1890ff' }
-        vi.mocked(post).mockResolvedValue({
-          data: { id: 'speaker-1', ...speakerData },
-        })
-
-        const result = await sessionApi.addSpeaker('session-1', speakerData)
-
-        expect(post).toHaveBeenCalledWith('/sessions/session-1/speakers', speakerData)
-        expect(result.data.name).toBe('张三')
-      })
-
-      it('应该添加带头像的发言者', async () => {
-        const speakerData = { name: '李四', avatarUrl: 'http://example.com/avatar.jpg' }
-        vi.mocked(post).mockResolvedValue({
-          data: { id: 'speaker-2', ...speakerData },
-        })
-
-        await sessionApi.addSpeaker('session-1', speakerData)
-
-        expect(post).toHaveBeenCalledWith('/sessions/session-1/speakers', speakerData)
-      })
-    })
-
-    describe('getSpeakers', () => {
-      it('应该获取发言者列表', async () => {
-        const mockSpeakers = [
-          { id: 'speaker-1', name: '张三' },
-          { id: 'speaker-2', name: '李四' },
-        ]
-        vi.mocked(get).mockResolvedValue({ data: mockSpeakers })
-
-        const result = await sessionApi.getSpeakers('session-1')
-
-        expect(get).toHaveBeenCalledWith('/sessions/session-1/speakers')
-        expect(result.data).toEqual(mockSpeakers)
-      })
-    })
   })
 
   describe('speechApi', () => {
@@ -137,7 +98,6 @@ describe('API Services', () => {
       it('应该创建发言记录', async () => {
         const speechData = {
           sessionId: 'session-1',
-          speakerId: 'speaker-1',
           content: '测试内容',
         }
         vi.mocked(post).mockResolvedValue({
@@ -191,18 +151,6 @@ describe('API Services', () => {
         const result = await speechApi.list('session-1')
 
         expect(get).toHaveBeenCalledWith('/speeches/session/session-1')
-        expect(result.data).toEqual(mockSpeeches)
-      })
-    })
-
-    describe('listBySpeaker', () => {
-      it('应该获取发言者的所有发言', async () => {
-        const mockSpeeches = [{ id: 'speech-1', speakerId: 'speaker-1' }]
-        vi.mocked(get).mockResolvedValue({ data: mockSpeeches })
-
-        const result = await speechApi.listBySpeaker('session-1', 'speaker-1')
-
-        expect(get).toHaveBeenCalledWith('/speeches/session/session-1/speaker/speaker-1')
         expect(result.data).toEqual(mockSpeeches)
       })
     })
@@ -285,96 +233,4 @@ describe('API Services', () => {
     })
   })
 
-  describe('analysisApi', () => {
-    describe('generate', () => {
-      it('应该生成 AI 分析', async () => {
-        const requestData = {
-          sessionId: 'session-1',
-          speechIds: ['speech-1', 'speech-2'],
-          analysisType: 'summary' as const,
-        }
-        vi.mocked(post).mockResolvedValue({
-          data: {
-            id: 'analysis-1',
-            result: '会议摘要内容',
-          },
-        })
-
-        const result = await analysisApi.generate(requestData)
-
-        expect(post).toHaveBeenCalledWith('/analysis/generate', requestData)
-        expect(result.data.id).toBe('analysis-1')
-      })
-    })
-
-    describe('get', () => {
-      it('应该获取分析详情', async () => {
-        const mockAnalysis = {
-          id: 'analysis-1',
-          result: '分析内容',
-          status: 'completed',
-        }
-        vi.mocked(get).mockResolvedValue({ data: mockAnalysis })
-
-        const result = await analysisApi.get('analysis-1')
-
-        expect(get).toHaveBeenCalledWith('/analysis/analysis-1')
-        expect(result.data).toEqual(mockAnalysis)
-      })
-    })
-
-    describe('list', () => {
-      it('应该获取会话的所有分析', async () => {
-        const mockAnalyses = [
-          { id: 'analysis-1', analysisType: 'summary' },
-          { id: 'analysis-2', analysisType: 'action-items' },
-        ]
-        vi.mocked(get).mockResolvedValue({ data: mockAnalyses })
-
-        const result = await analysisApi.list('session-1')
-
-        expect(get).toHaveBeenCalledWith('/analysis/session/session-1')
-        expect(result.data).toEqual(mockAnalyses)
-      })
-    })
-
-    describe('listByType', () => {
-      it('应该获取会话的特定类型分析', async () => {
-        const mockAnalyses = [
-          { id: 'analysis-1', analysisType: 'summary' },
-        ]
-        vi.mocked(get).mockResolvedValue({ data: mockAnalyses })
-
-        const result = await analysisApi.listByType('session-1', 'summary')
-
-        expect(get).toHaveBeenCalledWith('/analysis/session/session-1/type/summary')
-        expect(result.data).toEqual(mockAnalyses)
-      })
-    })
-
-    describe('deleteBySession', () => {
-      it('应该删除会话的所有分析', async () => {
-        vi.mocked(del).mockResolvedValue({ data: { success: true } })
-
-        await analysisApi.deleteBySession('session-1')
-
-        expect(del).toHaveBeenCalledWith('/analysis/session/session-1')
-      })
-    })
-  })
-
-  describe('AnalysisRequest 类型', () => {
-    it('应该接受所有有效的分析类型', () => {
-      const validTypes = ['summary', 'action-items', 'sentiment', 'keywords', 'topics', 'full-report'] as const
-
-        validTypes.forEach((type) => {
-          const request = {
-            sessionId: 'session-1',
-            speechIds: ['speech-1'],
-            analysisType: type,
-          }
-          expect(request.analysisType).toBe(type)
-        })
-    })
-  })
 })

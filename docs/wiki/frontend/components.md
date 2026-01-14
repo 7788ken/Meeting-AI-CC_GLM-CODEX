@@ -120,7 +120,6 @@
 
 **功能特性**:
 - 实时显示转写内容
-- 发言者颜色区分
 - 自动滚动控制
 - 实时编辑功能
 - 标记重要内容
@@ -148,33 +147,6 @@
 - 列表展示
 - 搜索过滤 (F1022 - 待实现)
 - 标记管理 (F1023 - 待实现)
-
----
-
-#### SpeakerManager
-
-发言者管理组件。
-
-**位置**: `src/components/SpeakerManager.vue` (F1024)
-
-**Props**:
-| Prop | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `speakers` | `Speaker[]` | `[]` | 发言者列表 |
-| `sessionId` | `string` | - | 会话 ID |
-
-**Emits**:
-| Event | Payload | 说明 |
-|-------|---------|------|
-| `add` | `speaker: Speaker` | 添加发言者 |
-| `update` | `speaker: Speaker` | 更新发言者 |
-| `delete` | `id: string` | 删除发言者 |
-
-**功能**:
-- 发言者列表
-- 添加/编辑发言者
-- 颜色选择
-- 头像上传
 
 ---
 
@@ -268,18 +240,9 @@ AI 模型选择器组件。
           @start="handleStart"
           @stop="handleStop"
         />
-        <TranscriptDisplay
-          :speeches="speeches"
-          :auto-scroll="autoScroll"
-          @update:speech="handleUpdateSpeech"
-        />
       </div>
 
       <div class="right-panel">
-        <SpeakerManager
-          :speakers="speakers"
-          :session-id="sessionId"
-        />
         <AIAnalysisPanel
           :session-id="sessionId"
           :speeches="speeches"

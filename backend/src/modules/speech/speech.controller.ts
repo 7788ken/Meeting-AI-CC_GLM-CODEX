@@ -65,21 +65,6 @@ export class SpeechController {
   }
 
   /**
-   * 获取发言者的所有发言记录 - 公开访问
-   * TODO: 正式版本需添加认证和会话归属校验
-   */
-  @Public()
-  @Get('session/:sessionId/speaker/:speakerId')
-  @ApiOperation({ summary: '获取发言者的所有发言记录' })
-  @ApiResponse({ status: 200, type: [SpeechDto] })
-  async findBySpeaker(
-    @Param('sessionId') sessionId: string,
-    @Param('speakerId') speakerId: string
-  ): Promise<SpeechDto[]> {
-    return this.speechService.findBySpeaker(sessionId, speakerId)
-  }
-
-  /**
    * 搜索发言记录 - 公开访问
    * TODO: 正式版本需添加认证和会话归属校验
    */

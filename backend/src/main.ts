@@ -19,7 +19,6 @@ import {
 import { TranscriptEventSegmentationConfigService } from './modules/transcript-event-segmentation/transcript-event-segmentation-config.service'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
-import { SpeakerService } from './modules/speech/speaker.service'
 import { isSegmentKeyRollback } from './modules/transcript/segment-key'
 import {
   shouldSplitByContent,
@@ -58,11 +57,10 @@ async function bootstrap() {
   // Swagger API文档
   const config = new DocumentBuilder()
     .setTitle('AI会议助手 API')
-    .setDescription('提供实时语音转写和AI分析功能')
+    .setDescription('提供实时语音转写和语句拆分功能')
     .setVersion('1.0')
     .addTag('sessions', '会话管理')
     .addTag('speeches', '发言记录')
-    .addTag('analysis', 'AI分析')
     .addTag('transcript', '实时转写')
     .addTag('transcript-event-segmentation', '语句拆分')
     .addTag('debug-errors', '会话调试报错')
@@ -97,7 +95,6 @@ async function bootstrap() {
   const smartAudioBufferService = app.get(SmartAudioBufferService)
   const glmAsrClient = app.get(GlmAsrClient)
   const speechService = app.get(SpeechService)
-  const speakerService = app.get(SpeakerService)
   const transcriptStreamService = app.get(TranscriptStreamService)
   const debugErrorService = app.get(DebugErrorService)
   const transcriptEventSegmentationService = app.get(TranscriptEventSegmentationService)
@@ -141,16 +138,12 @@ async function bootstrap() {
     {
       sessionId: string
       speechId: string
-      speakerId: string
       segmentKey?: string
       lastContent: string
       lastUpdateAtMs: number
     }
   >()
 
-  const speakerMetaBySessionClient = new Map<string, { speakerId: string; speakerName: string }>()
-  const speakerNameBySessionSpeakerId = new Map<string, string>()
-  const speakerIndexBySession = new Map<string, number>()
 
   // raw_llm：segmentKey -> eventIndex 映射（每 session + client，用于原文流 upsert）
   const segmentKeyToEventIndexBySessionClient = new Map<string, Map<string, number>>()
@@ -165,9 +158,9 @@ async function bootstrap() {
   const transcriptEventSegmentationTimerBySession = new Map<string, ReturnType<typeof setTimeout>>()
   const transcriptEventSegmentationInFlight = new Set<string>()
   const transcriptEventSegmentationPending = new Set<string>()
+  const transcriptEventSegmentationLastRunAtBySession = new Map<string, number>()
   const getSegmentationConfig = () => transcriptEventSegmentationConfigService.getConfig()
   const getSegmentationIntervalMs = () => getSegmentationConfig().intervalMs
-  const shouldTriggerEventSegmentationOnEndTurn = () => getSegmentationConfig().triggerOnEndTurn
   const shouldTriggerEventSegmentationOnStopTranscribe = () =>
     getSegmentationConfig().triggerOnStopTranscribe
 
@@ -212,73 +205,13 @@ async function bootstrap() {
               clientSessions.set(ws, nextSessionId)
               addClientToSession(nextSessionId, ws)
 
-              const ensured = ensureSpeakerMeta(nextSessionId, clientId)
-
               ws.send(
                 JSON.stringify({
                   type: 'status',
                   data: {
                     sessionId: nextSessionId,
                     status: 'session_set',
-                    speakerId: ensured.speakerId,
-                    speakerName: ensured.speakerName,
                   },
-                })
-              )
-            }
-            break
-
-          case 'set_speaker':
-            {
-              const sessionId = clientSessions.get(ws)
-              if (!sessionId) {
-                ws.send(
-                  JSON.stringify({
-                    type: 'error',
-                    data: { error: '会话未设置：请先发送 set_session' },
-                  })
-                )
-                break
-              }
-
-              const rawSpeakerName = message.speakerName
-              const rawSpeakerId = message.speakerId
-
-              const speakerName =
-                typeof rawSpeakerName === 'string' && rawSpeakerName.trim().length > 0
-                  ? rawSpeakerName.trim()
-                  : undefined
-
-              const speakerId =
-                typeof rawSpeakerId === 'string' && rawSpeakerId.trim().length > 0
-                  ? rawSpeakerId.trim()
-                  : undefined
-
-              if (!speakerName && !speakerId) {
-                ws.send(
-                  JSON.stringify({
-                    type: 'error',
-                    data: { error: 'speakerName 或 speakerId 至少需要提供一个' },
-                  })
-                )
-                break
-              }
-
-              const current = ensureSpeakerMeta(sessionId, clientId)
-              const next = {
-                speakerId: speakerId ?? current.speakerId,
-                speakerName: speakerName ?? current.speakerName,
-              }
-              speakerMetaBySessionClient.set(getSpeakerMetaKey(sessionId, clientId), next)
-              speakerNameBySessionSpeakerId.set(
-                getSpeakerDirectoryKey(sessionId, next.speakerId),
-                next.speakerName
-              )
-
-              ws.send(
-                JSON.stringify({
-                  type: 'status',
-                  data: { status: 'speaker_set', ...next },
                 })
               )
             }
@@ -339,44 +272,6 @@ async function bootstrap() {
             )
             break
 
-          case 'end_turn':
-            {
-              const clientId = getClientId(ws)
-              const sessionId =
-                clientSessions.get(ws) ??
-                (typeof message.sessionId === 'string' && message.sessionId.trim().length > 0
-                  ? message.sessionId.trim()
-                  : undefined)
-              if (!clientId || !sessionId) {
-                break
-              }
-
-              const flushed = smartAudioBufferService.flush(clientId, { force: true })
-              if (flushed.buffer) {
-                await enqueueGlmTranscription(
-                  sessionId,
-                  clientId,
-                  flushed.buffer,
-                  flushed.durationMs
-                )
-              } else {
-                const pending = glmQueueByClientId.get(clientId)
-                if (pending) {
-                  await pending
-                }
-                await finalizeActiveSpeechForClient(clientId)
-              }
-              if (shouldTriggerEventSegmentationOnEndTurn()) {
-                triggerTranscriptEventSegmentationNow(sessionId, 'end_turn')
-              }
-              ws.send(
-                JSON.stringify({
-                  type: 'status',
-                  data: { status: 'turn_finalized' },
-                })
-              )
-            }
-            break
         }
       } catch {
         // 不是 JSON，处理为二进制音频数据
@@ -554,21 +449,16 @@ async function bootstrap() {
         continue
       }
 
-      const speakerMeta = ensureSpeakerMeta(sessionId, clientId)
       await persistAndBroadcastTranscript(sessionId, clientId, {
         content: chunk.text,
         confidence: 0,
         isFinal: chunk.isFinal,
-        speakerId: speakerMeta.speakerId,
-        speakerName: speakerMeta.speakerName,
         segmentKey,
       })
 
       await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
         content: chunk.text,
         isFinal: chunk.isFinal,
-        speakerId: speakerMeta.speakerId,
-        speakerName: speakerMeta.speakerName,
         segmentKey,
         asrTimestampMs: Date.now(),
         audioDurationMs: chunk.isFinal ? audioDurationMs : undefined,
@@ -662,14 +552,6 @@ async function bootstrap() {
     }
   }
 
-  function getSpeakerMetaKey(sessionId: string, clientId: string): string {
-    return `${sessionId}:${clientId}`
-  }
-
-  function getSpeakerDirectoryKey(sessionId: string, speakerId: string): string {
-    return `${sessionId}:${speakerId}`
-  }
-
   function getSegmentKeyMapKey(sessionId: string, clientId: string): string {
     return `${sessionId}:${clientId}`
   }
@@ -702,80 +584,6 @@ async function bootstrap() {
     const created = new Map<string, number>()
     segmentKeyAudioDurationMsBySessionClient.set(key, created)
     return created
-  }
-
-  function ensureSpeakerMeta(
-    sessionId: string,
-    clientId: string
-  ): { speakerId: string; speakerName: string } {
-    const key = getSpeakerMetaKey(sessionId, clientId)
-    const existing = speakerMetaBySessionClient.get(key)
-    if (existing) {
-      return existing
-    }
-
-    const index = speakerIndexBySession.get(sessionId) ?? 0
-    speakerIndexBySession.set(sessionId, index + 1)
-    const label = toSpeakerLabel(index)
-
-    const meta = {
-      speakerId: `client_${clientId}`,
-      speakerName: `发言者 ${label}`,
-    }
-
-    speakerMetaBySessionClient.set(key, meta)
-    speakerNameBySessionSpeakerId.set(
-      getSpeakerDirectoryKey(sessionId, meta.speakerId),
-      meta.speakerName
-    )
-    return meta
-  }
-
-  function toSpeakerLabel(index: number): string {
-    // A, B, ..., Z, AA, AB, ...
-    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    if (index < 0) return 'A'
-
-    let n = index
-    let label = ''
-    do {
-      label = alphabet[n % 26] + label
-      n = Math.floor(n / 26) - 1
-    } while (n >= 0)
-
-    return label
-  }
-
-  function resolveSpeaker(
-    sessionId: string,
-    clientId: string,
-    asrSpeakerId: string,
-    asrSpeakerName: string
-  ): { speakerId: string; speakerName: string } {
-    const meta = ensureSpeakerMeta(sessionId, clientId)
-
-    const rawSpeakerId = asrSpeakerId?.trim?.() ? asrSpeakerId.trim() : ''
-    const rawSpeakerName = asrSpeakerName?.trim?.() ? asrSpeakerName.trim() : ''
-
-    const speakerId =
-      rawSpeakerId && rawSpeakerId !== `client_${clientId}` ? rawSpeakerId : meta.speakerId
-    const dirKey = getSpeakerDirectoryKey(sessionId, speakerId)
-
-    const speakerName =
-      rawSpeakerName ||
-      speakerNameBySessionSpeakerId.get(dirKey) ||
-      (speakerId === meta.speakerId ? meta.speakerName : '') ||
-      `发言者 ${toSpeakerLabel(nextSpeakerIndex(sessionId))}`
-
-    speakerNameBySessionSpeakerId.set(dirKey, speakerName)
-
-    return { speakerId, speakerName }
-  }
-
-  function nextSpeakerIndex(sessionId: string): number {
-    const index = speakerIndexBySession.get(sessionId) ?? 0
-    speakerIndexBySession.set(sessionId, index + 1)
-    return index
   }
 
   function readNumberFromEnv(
@@ -820,16 +628,11 @@ async function bootstrap() {
       content: string
       confidence: number
       isFinal: boolean
-      speakerId: string
-      speakerName: string
       segmentKey?: string
     }
   ): Promise<void> {
     const content = normalizeTranscriptContent(input.content)
     if (!content) return
-
-    const resolved = resolveSpeaker(sessionId, clientId, input.speakerId, input.speakerName)
-    const assigned = speakerService.assignSpeaker(resolved.speakerId, resolved.speakerName)
     const now = new Date()
     const nowMs = Date.now()
     const active = activeSpeechByClientId.get(clientId)
@@ -843,7 +646,6 @@ async function bootstrap() {
     if (
       active &&
       (active.sessionId !== sessionId ||
-        active.speakerId !== assigned.id ||
         (input.segmentKey &&
           active.segmentKey &&
           input.segmentKey !== active.segmentKey &&
@@ -855,26 +657,22 @@ async function bootstrap() {
           input.segmentKey == null &&
           shouldSplitByContent(active.lastContent, content)))
     ) {
-      // speaker 或 utterance 边界变化：先结束上一段，避免全部拼成一条
+      // 边界变化：先结束上一段，避免全部拼成一条
       await finalizeActiveSpeechForClient(clientId)
     }
 
     const refreshed = activeSpeechByClientId.get(clientId)
 
     let speech
-    if (!refreshed || refreshed.sessionId !== sessionId || refreshed.speakerId !== assigned.id) {
+    if (!refreshed || refreshed.sessionId !== sessionId) {
       speech = await speechService.create({
         sessionId,
-        speakerId: assigned.id,
-        speakerName: assigned.name,
-        speakerColor: assigned.color,
         content,
         confidence: input.confidence,
       })
       activeSpeechByClientId.set(clientId, {
         sessionId,
         speechId: speech.id,
-        speakerId: assigned.id,
         segmentKey: input.segmentKey,
         lastContent: content,
         lastUpdateAtMs: nowMs,
@@ -883,9 +681,6 @@ async function bootstrap() {
       speech = await speechService.updateRealtime(refreshed.speechId, {
         content,
         confidence: input.confidence,
-        speakerId: assigned.id,
-        speakerName: assigned.name,
-        speakerColor: assigned.color,
         endTime: now,
       })
       refreshed.segmentKey = input.segmentKey ?? refreshed.segmentKey
@@ -913,8 +708,6 @@ async function bootstrap() {
     input: {
       content: string
       isFinal: boolean
-      speakerId: string
-      speakerName: string
       segmentKey?: string
       asrTimestampMs?: number
       audioDurationMs?: number
@@ -924,8 +717,6 @@ async function bootstrap() {
     if (!rawEventStreamEnabled) return
     const content = normalizeTranscriptContent(input.content)
     if (!content) return
-
-    const resolved = resolveSpeaker(sessionId, clientId, input.speakerId, input.speakerName)
 
     // 原文流：优先按 segmentKey 更新同一句话；无 segmentKey 时追加新事件
     try {
@@ -969,8 +760,6 @@ async function bootstrap() {
             const previousResult = await transcriptStreamService.upsertEvent({
               sessionId,
               eventIndex: previousEventIndex,
-              speakerId: resolved.speakerId,
-              speakerName: resolved.speakerName,
               content: previousContent,
               isFinal: true, // 标记为最终
               segmentKey: activeSegmentKey,
@@ -1005,8 +794,6 @@ async function bootstrap() {
       const result = await transcriptStreamService.upsertEvent({
         sessionId,
         eventIndex: input.eventIndex ?? existingEventIndex,
-        speakerId: resolved.speakerId,
-        speakerName: resolved.speakerName,
         content,
         isFinal: input.isFinal,
         segmentKey: input.segmentKey, // 保留用于调试和追溯
@@ -1045,6 +832,27 @@ async function bootstrap() {
     }
   }
 
+  function scheduleTranscriptEventSegmentationAfter(
+    sessionId: string,
+    delayMs: number,
+    reason: string
+  ): void {
+    if (!rawEventStreamEnabled) return
+    if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) return
+
+    const existing = transcriptEventSegmentationTimerBySession.get(sessionId)
+    if (existing) {
+      clearTimeout(existing)
+    }
+
+    const timer = setTimeout(() => {
+      transcriptEventSegmentationTimerBySession.delete(sessionId)
+      void runTranscriptEventSegmentation(sessionId, { force: false, reason })
+    }, Math.max(0, delayMs))
+
+    transcriptEventSegmentationTimerBySession.set(sessionId, timer)
+  }
+
   function scheduleTranscriptEventSegmentation(sessionId: string): void {
     if (!rawEventStreamEnabled) return
     if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) return
@@ -1054,22 +862,27 @@ async function bootstrap() {
       return
     }
 
-    const existing = transcriptEventSegmentationTimerBySession.get(sessionId)
-    if (existing) {
-      clearTimeout(existing)
-    }
-
-    const timer = setTimeout(() => {
-      transcriptEventSegmentationTimerBySession.delete(sessionId)
-      void runTranscriptEventSegmentation(sessionId, { force: false, reason: 'debounce' })
-    }, intervalMs)
-
-    transcriptEventSegmentationTimerBySession.set(sessionId, timer)
+    scheduleTranscriptEventSegmentationAfter(sessionId, intervalMs, 'debounce')
   }
 
   function triggerTranscriptEventSegmentationNow(sessionId: string, reason: string): void {
     if (!rawEventStreamEnabled) return
     if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) return
+
+    const intervalMs = getSegmentationIntervalMs()
+    if (intervalMs > 0) {
+      const lastRunAt = transcriptEventSegmentationLastRunAtBySession.get(sessionId) ?? 0
+      const nextAllowedAt = lastRunAt + intervalMs
+      const now = Date.now()
+      if (now < nextAllowedAt) {
+        scheduleTranscriptEventSegmentationAfter(
+          sessionId,
+          nextAllowedAt - now,
+          `merged_${reason}`
+        )
+        return
+      }
+    }
 
     const existing = transcriptEventSegmentationTimerBySession.get(sessionId)
     if (existing) {
@@ -1099,6 +912,7 @@ async function bootstrap() {
     }
 
     transcriptEventSegmentationInFlight.add(sessionId)
+    transcriptEventSegmentationLastRunAtBySession.set(sessionId, Date.now())
     try {
       const maxSegmentsPerRun = readNumberFromEnv(
         'TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN',

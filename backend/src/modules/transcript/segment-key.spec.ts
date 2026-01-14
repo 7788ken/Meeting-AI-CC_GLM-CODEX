@@ -13,22 +13,22 @@ describe('segment-key', () => {
       expect(parseSegmentKeyOrder('100.5')).toBe(100.5)
     })
 
-    it('should parse speaker-prefixed keys', () => {
-      expect(parseSegmentKeyOrder('speaker-a:u3')).toBe(3)
-      expect(parseSegmentKeyOrder('speaker-a:123')).toBe(123)
+    it('should parse prefixed keys', () => {
+      expect(parseSegmentKeyOrder('seg-a:u3')).toBe(3)
+      expect(parseSegmentKeyOrder('seg-a:123')).toBe(123)
     })
 
     it('should return null for unparseable keys', () => {
       expect(parseSegmentKeyOrder('')).toBeNull()
       expect(parseSegmentKeyOrder('foo')).toBeNull()
-      expect(parseSegmentKeyOrder('speaker-a:utt_1')).toBeNull()
+      expect(parseSegmentKeyOrder('seg-a:utt_1')).toBeNull()
     })
   })
 
   describe('isSegmentKeyRollback', () => {
     it('should detect rollback when both keys are comparable', () => {
       expect(isSegmentKeyRollback('u3', 'u2')).toBe(true)
-      expect(isSegmentKeyRollback('speaker:u3', 'speaker:u2')).toBe(true)
+      expect(isSegmentKeyRollback('seg:u3', 'seg:u2')).toBe(true)
       expect(isSegmentKeyRollback('10', '9')).toBe(true)
     })
 

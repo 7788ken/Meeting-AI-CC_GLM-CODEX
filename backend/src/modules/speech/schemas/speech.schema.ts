@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
-import { Document, Types } from 'mongoose'
+import { Document } from 'mongoose'
 
 /**
  * 发言记录 Mongoose 模型 (B1010)
@@ -15,15 +15,6 @@ export type SpeechDocument = Speech & Document
 export class Speech {
   @Prop({ required: true, index: true })
   sessionId: string
-
-  @Prop({ required: true })
-  speakerId: string
-
-  @Prop({ required: true })
-  speakerName: string
-
-  @Prop()
-  speakerColor?: string
 
   @Prop({ required: true })
   content: string
@@ -58,12 +49,9 @@ export class Speech {
   @Prop()
   duration?: number // 发言时长（毫秒）
 
-  @Prop({ type: Types.ObjectId, ref: 'Analysis' })
-  analysisRef?: Types.ObjectId
 }
 
 export const SpeechSchema = SchemaFactory.createForClass(Speech)
 
 // 索引优化
 SpeechSchema.index({ sessionId: 1, startTime: 1 })
-SpeechSchema.index({ speakerId: 1, startTime: -1 })

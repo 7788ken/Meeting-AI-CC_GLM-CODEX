@@ -34,9 +34,6 @@ export type LegacyTranscriptData = {
   id?: string
   sessionId?: string
   content?: string
-  speakerId?: string
-  speakerName?: string
-  speakerColor?: string
   confidence?: number
   isFinal?: boolean
   startTime?: string
@@ -53,8 +50,6 @@ export type TranscriptEventData = {
   revision: number
   event: {
     eventIndex: number
-    speakerId: string
-    speakerName: string
     content: string
     isFinal: boolean
     segmentKey?: string
@@ -104,7 +99,7 @@ export type TranscriptEventSegmentationProgressData = {
 
 export type TranscriptMessage =
   | { type: 'transcript'; data: LegacyTranscriptData }
-  | { type: 'status'; data: { status?: string; sessionId?: string; speakerId?: string; speakerName?: string } }
+  | { type: 'status'; data: { status?: string; sessionId?: string } }
   | { type: 'error'; data: { error?: string } }
   | { type: 'transcript_event_upsert'; data: TranscriptEventData }
   | { type: 'transcript_event_segment_upsert'; data: TranscriptEventSegmentUpsertData }
@@ -126,7 +121,6 @@ export class WebSocketService {
 
   private lastSessionId: string | null = null
   private lastTranscribeConfig: StartTranscribePayload | null = null
-  private lastSpeaker: { speakerId?: string; speakerName?: string } | null = null
   private isTranscribing = false
 
   private audioSendCount = 0
@@ -323,17 +317,6 @@ export class WebSocketService {
   }
 
   /**
-   * 设置当前连接的发言者信息（用于区分不同参会者）
-   */
-  setSpeaker(input: { speakerId?: string; speakerName?: string }): void {
-    this.lastSpeaker = input
-    this.sendMessage({
-      type: 'set_speaker',
-      ...input,
-    })
-  }
-
-  /**
    * 开始转写
    */
   startTranscribe(config?: StartTranscribePayload): void {
@@ -353,23 +336,6 @@ export class WebSocketService {
     this.sendMessage({
       type: 'stop_transcribe',
     })
-  }
-
-  /**
-   * 结束当前发言段落
-   */
-  endTurn(sessionId?: string): void {
-    const trimmedSessionId = typeof sessionId === 'string' ? sessionId.trim() : ''
-    const resolvedSessionId = trimmedSessionId || this.lastSessionId
-    const payload: Record<string, unknown> = {
-      type: 'end_turn',
-    }
-
-    if (resolvedSessionId) {
-      payload.sessionId = resolvedSessionId
-    }
-
-    this.sendMessage(payload)
   }
 
   /**
@@ -419,13 +385,6 @@ export class WebSocketService {
       this.sendMessage({
         type: 'set_session',
         sessionId: this.lastSessionId,
-      })
-    }
-
-    if (this.lastSpeaker) {
-      this.sendMessage({
-        type: 'set_speaker',
-        ...this.lastSpeaker,
       })
     }
 

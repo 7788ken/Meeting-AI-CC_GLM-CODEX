@@ -54,7 +54,6 @@
 | ID | 任务名称 | 状态 | 优先级 | 文件位置 | 依赖 |
 |----|----------|------|--------|----------|------|
 | F1016 | 实现实时转写展示组件 | ✅ | P0 | frontend/src/components/TranscriptDisplay.vue | F1013 |
-| F1017 | 实现发言者色彩区分 | ✅ | P1 | frontend/src/components/TranscriptDisplay.vue | F1016 |
 | F1018 | 实现自动滚动控制 | ✅ | P0 | frontend/src/components/TranscriptDisplay.vue | F1016 |
 | F1019 | 实现转写置信度显示 | ✅ | P2 | frontend/src/components/TranscriptDisplay.vue | F1016 |
 | F1020 | 实现实时编辑功能 | ✅ | P1 | frontend/src/components/TranscriptDisplay.vue | F1016 |
@@ -66,7 +65,6 @@
 | F1021 | 实现发言列表组件 | ✅ | P1 | frontend/src/components/SpeechList.vue | F1016 |
 | F1022 | 实现发言搜索功能 | ✅ | P2 | frontend/src/components/SpeechList.vue | F1021 |
 | F1023 | 实现发言标记功能 | ✅ | P2 | frontend/src/components/SpeechList.vue | F1021 |
-| F1024 | 实现发言者管理组件 | ✅ | P1 | frontend/src/components/SpeakerManager.vue | F1017 |
 
 ### 1.6 AI 分析模块
 
@@ -118,7 +116,6 @@
 |----|----------|------|--------|----------|------|
 | B1006 | 配置 Prisma + PostgreSQL | ✅ | P0 | backend/prisma/schema.prisma | B1001 |
 | B1007 | 定义会话数据模型 | ✅ | P0 | backend/prisma/schema.prisma | B1006 |
-| B1008 | 定义发言者数据模型 | ✅ | P0 | backend/prisma/schema.prisma | B1006 |
 | B1009 | 配置 MongoDB 连接 | ✅ | P0 | backend/src/database/mongodb.ts | B1001 |
 | B1010 | 定义发言记录 Mongoose 模型 | ✅ | P0 | backend/src/modules/speech/schemas/ | B1009 |
 | B1011 | 定义 AI 分析 Mongoose 模型 | ✅ | P0 | backend/src/modules/analysis/schemas/ | B1009 |
@@ -139,8 +136,6 @@
 | B1016 | 实现 WebSocket 网关 | ✅ | P0 | backend/src/modules/transcript/transcript.gateway.ts | B1001 |
 | B1017 | 实现音频数据处理 | ✅ | P0 | backend/src/modules/transcript/transcript.service.ts | B1016 |
 | B1018 | 集成 GLM-ASR 语音识别 | ✅ | P0 | backend/src/modules/transcript/glm-asr.client.ts | B1017 |
-| B1020 | 实现发言者识别基础功能 | ✅ | P1 | backend/src/modules/speech/speaker.service.ts | B1017 |
-| B1021 | 优化发言者识别算法 | ✅ | P2 | backend/src/modules/speech/speaker.service.ts | B1020 |
 
 ### 2.5 AI 服务模块
 
@@ -218,7 +213,6 @@
 阶段三：完善功能
 ├── F1021 → F1022, F1023 (发言管理)
 ├── F1030 → F1031 → F1032, F1033 (UI 组件)
-├── B1020 → B1021 (发言者识别)
 └── T1001-T1008, D1001-D1004 (测试与部署)
 ```
 
@@ -290,7 +284,6 @@
 |----------|----------|--------|
 | 2026-01-09 | 初始创建 MVP 任务清单 | AI 助手 |
 | 2026-01-10 | 回填已完成任务：前端音频/录音/UI组件，后端数据库/会话/AI/发言记录模块 | AI 助手 |
-| 2026-01-10 | 完成 F1024：实现发言者管理组件 | AI 助手 |
 | 2026-01-10 | 完成 D1001/D1002/D1003：Docker 部署配置 | AI 助手 |
 | 2026-01-10 | 完成 F1029：实现分析结果导出 | AI 助手 |
 | 2026-01-10 | 完成 B1025：实现多模型管理器 | AI 助手 |
@@ -300,13 +293,11 @@
 | 2026-01-10 | 启动 F1022：实现发言搜索功能 | AI 助手 |
 | 2026-01-10 | 启动 F1023：实现发言标记功能 | AI 助手 |
 | 2026-01-10 | 启动 F1039：实现字符串处理工具 | AI 助手 |
-| 2026-01-10 | 启动 B1021：优化发言者识别算法 | AI 助手 |
 | 2026-01-10 | 启动 B1031：实现 JWT 认证 | AI 助手 |
 | 2026-01-10 | 完成 F1022/F1023：发言搜索和标记功能 | AI 助手 |
 | 2026-01-10 | 完成 F1019：转写置信度显示 | AI 助手 |
 | 2026-01-10 | 完成 B1031/B1032：JWT 认证模块和守卫 | AI 助手 |
 | 2026-01-10 | 完成 F1039：字符串处理工具 | AI 助手 |
-| 2026-01-10 | 完成 B1021：发言者识别算法优化 | AI 助手 |
 | 2026-01-10 | 启动 T1004：编写 E2E 测试 | AI 助手 |
 | 2026-01-10 | 完成 T1004/T1008：扩展 API 接口 E2E 测试覆盖 (23 个测试全部通过) | AI 助手 |
 | 2026-01-10 | 验证 Codex 审阅的 P0 级别问题均已修复 | AI 助手 |

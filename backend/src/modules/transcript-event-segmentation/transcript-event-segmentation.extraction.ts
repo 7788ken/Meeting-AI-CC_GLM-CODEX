@@ -148,31 +148,36 @@ export function extractRawNextSegment(input: {
 
   const leadInIndex = findQuestionLeadInIndex(tail)
   const sentenceEndIndex = findFirstSentenceEndIndex(tail)
-  const softBoundaryIndex =
-    leadInIndex < 0 && sentenceEndIndex < 0 ? findSoftBoundaryIndex(tail) : -1
+  const softBoundaryIndex = findSoftBoundaryIndex(tail)
 
-  const endCandidates = [
-    leadInIndex,
-    sentenceEndIndex >= 0 ? sentenceEndIndex + 1 : -1,
-    softBoundaryIndex,
-  ].filter(value => value > 0)
-  const relativeEnd = endCandidates.length ? Math.min(...endCandidates) : tail.length
+  const candidates: Array<{
+    reason: 'sentence_end' | 'lead_in' | 'soft_boundary'
+    index: number
+  }> = []
+
+  if (leadInIndex > 0) {
+    candidates.push({ reason: 'lead_in', index: leadInIndex })
+  }
+  if (sentenceEndIndex >= 0) {
+    candidates.push({ reason: 'sentence_end', index: sentenceEndIndex + 1 })
+  }
+  if (softBoundaryIndex > 0) {
+    candidates.push({ reason: 'soft_boundary', index: softBoundaryIndex })
+  }
+
+  let selected: { reason: 'sentence_end' | 'lead_in' | 'soft_boundary'; index: number } | null = null
+  for (const candidate of candidates) {
+    if (!selected || candidate.index < selected.index) {
+      selected = candidate
+    }
+  }
+
+  const relativeEnd = selected ? selected.index : tail.length
   const endOffset = startOffset + relativeEnd
 
   const rawSegment = windowText.slice(startOffset, endOffset).trim()
-  const endedBySentenceEnd =
-    sentenceEndIndex >= 0 && (leadInIndex < 0 || sentenceEndIndex + 1 <= leadInIndex)
-  const endedByLeadIn =
-    leadInIndex > 0 && (sentenceEndIndex < 0 || leadInIndex < sentenceEndIndex + 1)
-  const endedBySoftBoundary =
-    softBoundaryIndex > 0 && leadInIndex < 0 && sentenceEndIndex < 0
-  const endReason: 'sentence_end' | 'lead_in' | 'soft_boundary' | 'window_end' = endedBySentenceEnd
-    ? 'sentence_end'
-    : endedByLeadIn
-      ? 'lead_in'
-      : endedBySoftBoundary
-        ? 'soft_boundary'
-        : 'window_end'
+  const endReason: 'sentence_end' | 'lead_in' | 'soft_boundary' | 'window_end' =
+    selected?.reason ?? 'window_end'
 
   return {
     windowText,

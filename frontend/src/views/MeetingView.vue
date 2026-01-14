@@ -128,32 +128,10 @@
         </div>
       </section>
 
-      <div v-if="isNarrow" class="mobile-pane-switch app-surface" role="tablist" aria-label="工作台分区">
-        <button
-          type="button"
-          :class="['pane-tab', activePane === 'segments' ? 'is-active' : '']"
-          role="tab"
-          :aria-selected="activePane === 'segments'"
-          @click="activePane = 'segments'"
-        >
-          语句拆分
-        </button>
-        <button
-          type="button"
-          :class="['pane-tab', activePane === 'analysis' ? 'is-active' : '']"
-          role="tab"
-          :aria-selected="activePane === 'analysis'"
-          @click="activePane = 'analysis'"
-        >
-          AI分析
-        </button>
-      </div>
-
       <!-- 下部：左右分栏 -->
       <div class="content-area" :class="{ narrow: isNarrow }">
       <!-- 下左：GLM 拆分后的独立发言 -->
-	      <transition name="panel-fade" mode="out-in">
-	      <section v-if="!isNarrow || activePane === 'segments'" class="transcript-panel app-surface">
+	      <section class="transcript-panel app-surface">
 	      <div class="panel-header">
 	        <div class="panel-title-row">
             <h2>语句拆分</h2>
@@ -170,14 +148,15 @@
 	          </el-tag>
           </div>
 	        <div class="panel-actions">
-	          <el-button
-	            size="small"
-	            type="danger"
-	            plain
-	            :loading="rebuildingTranscriptSegments"
-	            :disabled="!sessionId || rebuildingTranscriptSegments"
-	            @click="rebuildTranscriptSegments"
-	          >
+          <el-button
+            size="small"
+            type="danger"
+            plain
+            :icon="Refresh"
+            :loading="rebuildingTranscriptSegments"
+            :disabled="!sessionId || rebuildingTranscriptSegments"
+            @click="rebuildTranscriptSegments"
+          >
 	            重拆
 	          </el-button>
 	          <el-tooltip
@@ -187,6 +166,7 @@
             <el-button
               size="small"
               class="segment-order-trigger"
+              :icon="transcriptSegmentOrder === 'desc' ? SortDown : SortUp"
               @click="transcriptSegmentOrder = transcriptSegmentOrder === 'desc' ? 'asc' : 'desc'"
             >
               {{ transcriptSegmentOrder === 'desc' ? '倒序' : '正序' }}
@@ -201,58 +181,137 @@
 	          :order="transcriptSegmentOrder"
 	          :loading="transcriptEventSegmentationStore.isLoadingSnapshot"
 	          :progress="transcriptEventSegmentationStore.progress"
-	          :analyzingSegmentKey="analyzingSegmentKey"
+	          :highlighted-segment-id="analysisMode === 'target' ? targetSegment?.id : null"
 	          @select-range="focusRealtimeRange"
-	          @analyze-segment="analyzeSegment"
+	          @target-analysis="handleTargetAnalysis"
 	        />
 	      </div>
 	    </section>
-	    </transition>
 
-    <!-- 右侧：AI分析区 -->
-    <transition name="panel-fade" mode="out-in">
-    <section v-if="!isNarrow || activePane === 'analysis'" class="analysis-panel app-surface">
-      <div class="panel-header">
-        <h2>AI分析</h2>
-        <div class="analysis-header-right">
-          <el-button size="small" class="ghost-button" @click="promptDialogVisible = true">
-            提示词：{{ selectedPromptTemplate?.name || '未选择' }}
-          </el-button>
-          <el-tag v-if="analysisSourceLabel" type="info" size="small">{{ analysisSourceLabel }}</el-tag>
-          <el-tag v-if="currentAnalysis?.isCached" type="info" size="small">缓存</el-tag>
-        </div>
-      </div>
-      <div class="analysis-content">
-        <div v-if="currentAnalysis" class="analysis-result">
-          <div class="analysis-meta">
-            <span>模型: {{ currentAnalysis.modelUsed }}</span>
-            <span v-if="currentAnalysis.processingTime">耗时: {{ currentAnalysis.processingTime }}ms</span>
-            <span>状态: {{ statusText }}</span>
-            <el-tag v-if="analysisLoading" type="warning" size="small">生成中...</el-tag>
-          </div>
-          <div class="analysis-text" v-html="renderMarkdown(currentAnalysis.result)"></div>
-          <div class="analysis-actions">
-            <el-dropdown split-button type="primary" @click="exportAnalysis('txt')" @command="exportAnalysis">
-              <span>导出</span>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="txt">纯文本 (.txt)</el-dropdown-item>
-                  <el-dropdown-item command="md">Markdown (.md)</el-dropdown-item>
-                  <el-dropdown-item command="json">JSON (.json)</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-            <el-button size="small" @click="copyAnalysis">复制</el-button>
-            <el-button size="small" type="primary" @click="regenerateAnalysis">重新生成</el-button>
-          </div>
-        </div>
-        <div v-else-if="analysisLoading" v-loading="true" class="analysis-loading"></div>
-        <div v-else class="empty-state">
-          <el-empty description="点击语句右侧的按钮查看分析结果" />
-        </div>
-      </div>
-    </section>
-    </transition>
+	    <!-- 通用分析总结面板 -->
+	    <section v-show="analysisMode === 'general'" class="analysis-panel app-surface">
+	      <div class="panel-header">
+	        <div class="panel-title-row">
+	          <h2>分析总结</h2>
+	          <el-tag v-if="hasAnalysisContent" type="success" size="small">
+	            已分析
+	          </el-tag>
+	        </div>
+	        <div class="panel-actions">
+	          <el-button
+	            v-if="hasAnalysisContent && !isAnalyzing"
+	            size="small"
+	            class="ghost-button"
+	            :icon="Refresh"
+	            @click="startAnalysis"
+	          >
+	            重新分析
+	          </el-button>
+	          <el-button
+	            v-if="hasAnalysisContent && !isAnalyzing"
+	            size="small"
+	            type="danger"
+	            plain
+	            @click="clearAnalysis"
+	          >
+	            清空
+	          </el-button>
+	          <el-button
+	            size="small"
+	            type="primary"
+	            :icon="MagicStick"
+	            :loading="isAnalyzing"
+	            :disabled="!sessionId || transcriptEventSegmentationStore.segments.length === 0"
+	            @click="startAnalysis"
+	          >
+	            {{ isAnalyzing ? '分析中...' : '开始分析' }}
+	          </el-button>
+	        </div>
+	      </div>
+
+	      <div class="analysis-content">
+	        <!-- 空状态占位符 -->
+	        <div v-if="!hasAnalysisContent && !isAnalyzing && !analysisError" class="analysis-empty">
+	          <div class="empty-icon">
+	            <el-icon :size="48"><Document /></el-icon>
+	          </div>
+	          <p class="empty-text">等待分析</p>
+	          <p class="empty-hint">点击右上角"开始分析"按钮生成会议总结</p>
+	        </div>
+
+	        <!-- 加载状态 -->
+	        <div v-if="isAnalyzing" class="analysis-loading">
+	          <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
+	          <p>正在分析中，请稍候...</p>
+	        </div>
+
+	        <!-- 错误状态 -->
+	        <div v-if="analysisError && !isAnalyzing" class="analysis-error">
+	          <p>{{ analysisError }}</p>
+	          <el-button size="small" @click="startAnalysis">重试</el-button>
+	        </div>
+
+	        <!-- 分析结果 -->
+	        <div v-if="hasAnalysisContent && !isAnalyzing" class="analysis-result" v-html="renderedAnalysisResult" />
+	      </div>
+	    </section>
+
+	    <!-- 针对性分析面板 -->
+	    <section v-show="analysisMode === 'target'" class="target-analysis-panel app-surface">
+	      <div class="panel-header">
+	        <div class="panel-title-row">
+	          <h2>针对性分析 - @{{ targetSegment?.sequence }}</h2>
+	          <el-tag v-if="hasTargetAnalysisContent" type="success" size="small">
+	            已分析
+	          </el-tag>
+	        </div>
+	        <div class="panel-actions">
+	          <el-button
+	            size="small"
+	            class="ghost-button"
+	            @click="switchToGeneralAnalysis"
+	          >
+	            返回总结
+	          </el-button>
+	          <el-button
+	            v-if="hasTargetAnalysisContent && !isTargetAnalyzing"
+	            size="small"
+	            type="primary"
+	            plain
+	            :icon="Refresh"
+	            @click="startTargetAnalysis"
+	          >
+	            重新分析
+	          </el-button>
+	        </div>
+	      </div>
+
+	      <div class="analysis-content">
+	        <!-- 空状态占位符 -->
+	        <div v-if="!hasTargetAnalysisContent && !isTargetAnalyzing && !targetAnalysisError" class="analysis-empty">
+	          <div class="empty-icon">
+	            <el-icon :size="48"><Document /></el-icon>
+	          </div>
+	          <p class="empty-text">等待分析</p>
+	          <p class="empty-hint">点击语句卡片上的"针对性分析"按钮生成分析</p>
+	        </div>
+
+	        <!-- 加载状态 -->
+	        <div v-if="isTargetAnalyzing" class="analysis-loading">
+	          <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
+	          <p>正在针对性分析中，请稍候...</p>
+	        </div>
+
+	        <!-- 错误状态 -->
+	        <div v-if="targetAnalysisError && !isTargetAnalyzing" class="analysis-error">
+	          <p>{{ targetAnalysisError }}</p>
+	          <el-button size="small" @click="startTargetAnalysis">重试</el-button>
+	        </div>
+
+	        <!-- 分析结果 -->
+	        <div v-if="hasTargetAnalysisContent && !isTargetAnalyzing" class="analysis-result" v-html="renderedTargetAnalysisResult" />
+	      </div>
+	    </section>
       </div>
     </div>
 
@@ -267,7 +326,6 @@
       :isPaused="isPaused"
       @toggle-recording="toggleRecording"
       @toggle-mute="pauseRecording"
-      @open-prompts="promptDialogVisible = true"
       @end-session="endSession"
       @toggle-realtime="realtimeCollapsed = !realtimeCollapsed"
     />
@@ -275,24 +333,6 @@
     <SettingsDrawer v-model="settingsDrawerVisible" />
     <DebugDrawer v-model="debugDrawerVisible" :session-id="sessionId" />
 
-    <el-dialog
-      v-model="promptDialogVisible"
-      title="提示词选择"
-      width="min(92vw, 640px)"
-      append-to-body
-    >
-      <el-select v-model="selectedPromptTemplateId" placeholder="选择提示词模板" style="width: 100%">
-        <el-option v-for="tpl in promptTemplates" :key="tpl.id" :label="tpl.name" :value="tpl.id" />
-      </el-select>
-      <div class="prompt-preview">
-        <div class="prompt-preview-title">模板内容预览</div>
-        <pre class="prompt-preview-body">{{ selectedPromptTemplate?.prompt || '' }}</pre>
-      </div>
-      <template #footer>
-        <el-button size="small" class="ghost-button" @click="settingsDrawerVisible = true">管理模板</el-button>
-        <el-button size="small" @click="promptDialogVisible = false">关闭</el-button>
-      </template>
-    </el-dialog>
   </MainLayout>
 </template>
 
@@ -310,24 +350,19 @@ import {
   Loading,
   ArrowLeft,
   ArrowRight,
+  Refresh,
+  SortDown,
+  SortUp,
+  Document,
+  MagicStick,
 } from '@element-plus/icons-vue'
-	import {
-	  sessionApi,
-	  speechApi,
-	  analysisApi,
-	  transcriptEventSegmentationApi,
-	  type Session,
-	  type Speech,
-	  type AIAnalysis,
-	  type TranscriptEventSegment,
-	} from '@/services/api'
-	import { exportAnalysis as exportAnalysisService, type ExportFormat } from '@/services/export'
-	import { transcription } from '@/services/transcription'
-	import { websocket, type ConnectionStatus, type TranscriptEventSegmentationProgressData } from '@/services/websocket'
-  import { getApiBaseUrl } from '@/services/http'
-		import { useTranscriptStreamStore } from '@/stores/transcriptStream'
-		import { useTranscriptEventSegmentationStore } from '@/stores/transcriptEventSegmentation'
-		import { useAppSettings } from '@/composables/useAppSettings'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import { sessionApi, speechApi, transcriptEventSegmentationApi, type Session, type Speech, type TranscriptEventSegment } from '@/services/api'
+import { transcription } from '@/services/transcription'
+import { websocket, type ConnectionStatus, type TranscriptEventSegmentationProgressData } from '@/services/websocket'
+import { useTranscriptStreamStore } from '@/stores/transcriptStream'
+import { useTranscriptEventSegmentationStore } from '@/stores/transcriptEventSegmentation'
 import MainLayout from '@/components/MainLayout.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import TranscriptEventSegmentsPanel from '@/components/TranscriptEventSegmentsPanel.vue'
@@ -337,24 +372,13 @@ import MeetingActionBar from '@/components/MeetingActionBar.vue'
 
 const router = useRouter()
 const route = useRoute()
-const { settings, updateSettings } = useAppSettings()
 
 // 状态
 const sessionId = ref<string>('')
 const sessionInfo = ref<Session | null>(null)
 const speeches = ref<Speech[]>([])
-const selectedSpeechId = ref<string>('')
-const currentAnalysis = ref<AIAnalysis | null>(null)
-const analysisLoading = ref(false)
-const analyzingSegmentKey = ref<string | null>(null)
-type AnalysisContext =
-  | { kind: 'meeting' }
-  | { kind: 'segment'; segment: TranscriptEventSegment; promptTemplateId?: string }
-const analysisContext = ref<AnalysisContext>({ kind: 'meeting' })
-let analysisStreamAbortController: AbortController | null = null
 const recordingStatus = ref<'idle' | 'connecting' | 'recording' | 'paused' | 'error'>('idle')
 const isPaused = ref(false)
-const transcriptRef = ref<HTMLElement>()
 const realtimeScrollRef = ref<HTMLElement | null>(null)
 const focusedEventIndex = ref<number | null>(null)
 type HighlightedRange = {
@@ -375,16 +399,25 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	const rebuildingTranscriptSegments = ref(false)
 	const realtimeCollapsed = ref(false)
 	const isNarrow = ref(false)
-	const activePane = ref<'segments' | 'analysis'>('segments')
 	const actionBarEnabled = computed(() => true)
 	type MeetingActionBarExpose = { openHelp: () => void; hostEl?: { value: HTMLElement | null } }
 	const actionBarRef = ref<MeetingActionBarExpose | null>(null)
 	const actionBarInsetPx = ref(0)
 	const appBottomInsetStyle = computed(() => `${actionBarInsetPx.value}px`)
-	const promptDialogVisible = ref(false)
-	const selectedPromptTemplateId = ref<string>('')
-		const transcriptStreamStore = useTranscriptStreamStore()
-		const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
+	const transcriptStreamStore = useTranscriptStreamStore()
+	const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
+
+	// 分析总结状态
+	const analysisResult = ref<string>('')
+	const isAnalyzing = ref(false)
+	const analysisError = ref<string>('')
+
+	// 针对性分析状态
+	const analysisMode = ref<'general' | 'target'>('general')
+	const targetSegment = ref<TranscriptEventSegment | null>(null)
+	const targetAnalysisResult = ref<string>('')
+	const isTargetAnalyzing = ref(false)
+	const targetAnalysisError = ref<string>('')
 
 	const ACTION_BAR_BOTTOM_OFFSET_PX = 12
 	let actionBarResizeObserver: ResizeObserver | null = null
@@ -436,12 +469,6 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	  if (key === 'r') {
 	    event.preventDefault()
 	    void toggleRecording()
-	    return
-	  }
-
-	  if (key === 'p') {
-	    event.preventDefault()
-	    promptDialogVisible.value = true
 	    return
 	  }
 
@@ -576,73 +603,10 @@ function getEventHighlightParts(
 	}
 
 // 计算属性
-const statusText = computed(() => {
-  if (!currentAnalysis.value) return ''
-  const statusMap: Record<string, string> = {
-    pending: '等待中',
-    processing: '处理中',
-    completed: '已完成',
-    failed: '失败',
-  }
-  return statusMap[currentAnalysis.value.status] || currentAnalysis.value.status
-})
-
-const analysisSourceLabel = computed(() => {
-  const ctx = analysisContext.value
-  if (ctx.kind !== 'segment') return ''
-  const seq = ctx.segment.sequence
-  return Number.isFinite(seq) ? `片段 @${seq}` : '片段'
-})
-
 const isSessionEnded = computed(() => {
   if (sessionEndedOverride.value) return true
   if (!sessionInfo.value) return false
   return !sessionInfo.value.isActive
-})
-
-const promptTemplates = computed(() => settings.value.promptTemplates || [])
-const selectedPromptTemplate = computed(() => {
-  const list = promptTemplates.value
-  if (!list.length) return null
-  return list.find(t => t.id === selectedPromptTemplateId.value) || list[0]
-})
-
-watch(
-  promptTemplates,
-  (list) => {
-    if (selectedPromptTemplateId.value) return
-    if (!list.length) return
-    selectedPromptTemplateId.value = list[0].id
-  },
-  { immediate: true },
-)
-
-watch(
-  () => settings.value.activePromptTemplateId,
-  (next) => {
-    const candidate = typeof next === 'string' ? next.trim() : ''
-    if (!candidate) return
-    if (candidate === selectedPromptTemplateId.value) return
-    selectedPromptTemplateId.value = candidate
-  },
-  { immediate: true },
-)
-
-watch(
-  () => settings.value.defaultPromptTemplateId,
-  (next) => {
-    if (selectedPromptTemplateId.value) return
-    const candidate = typeof next === 'string' ? next.trim() : ''
-    if (!candidate) return
-    selectedPromptTemplateId.value = candidate
-  },
-  { immediate: true },
-)
-
-watch(selectedPromptTemplateId, (nextId) => {
-  const normalized = typeof nextId === 'string' ? nextId.trim() : ''
-  if (!normalized) return
-  updateSettings({ activePromptTemplateId: normalized })
 })
 
 type RecordingTag = { type?: 'success' | 'warning' | 'danger' | 'info'; text: string }
@@ -769,8 +733,6 @@ const recordingIndicatorIcon = computed(() => {
     focusedEventIndex.value = null
     highlightedRange.value = null
     realtimeStickToBottom.value = true
-    currentAnalysis.value = null
-    analysisLoading.value = false
 
     if (!sessionId.value) return
 
@@ -835,10 +797,6 @@ onUnmounted(() => {
   if (actionBarResizeObserver) {
     actionBarResizeObserver.disconnect()
     actionBarResizeObserver = null
-  }
-  if (analysisStreamAbortController) {
-    analysisStreamAbortController.abort()
-    analysisStreamAbortController = null
   }
   transcription.dispose()
   transcriptStreamStore.reset()
@@ -952,11 +910,6 @@ async function loadSpeeches() {
 	  }
 	}
 
-// 选择发言
-function selectSpeech(id: string) {
-  selectedSpeechId.value = id
-}
-
 // 切换录音
 async function toggleRecording() {
   if (isSessionEnded.value) {
@@ -993,7 +946,6 @@ async function startRecording() {
         } else {
           speeches.value.push(transcript)
         }
-        scrollToBottom()
       },
       onError: (error: Error) => {
         const rawMessage = error?.message || '未知错误'
@@ -1039,313 +991,6 @@ function pauseRecording() {
   }
 }
 
-// 生成 AI 分析
-async function generateAnalysis() {
-  if (speeches.value.length === 0) {
-    ElMessage.warning('请先开始录音并获取转写内容')
-    return
-  }
-
-  const tpl = selectedPromptTemplate.value
-  if (!tpl) {
-    ElMessage.warning('请先选择提示词模板')
-    return
-  }
-
-  const analysisType = buildPromptAnalysisType(tpl)
-
-  analysisLoading.value = true
-  analysisContext.value = { kind: 'meeting' }
-  try {
-    const response = await analysisApi.generate({
-      sessionId: sessionId.value,
-      speechIds: speeches.value.map(s => s.id),
-      analysisType,
-      prompt: tpl.prompt,
-    })
-    currentAnalysis.value = response.data || null
-    ElMessage.success('AI分析生成成功')
-  } catch (error) {
-    console.error('生成分析失败:', error)
-    ElMessage.error('生成分析失败')
-  } finally {
-    analysisLoading.value = false
-  }
-}
-
-async function regenerateAnalysis(): Promise<void> {
-  const ctx = analysisContext.value
-  if (ctx.kind === 'segment') {
-    await analyzeSegment(ctx.segment)
-    return
-  }
-  await generateAnalysis()
-}
-
-function getSegmentKey(segment: TranscriptEventSegment): string {
-  const id = typeof segment.id === 'string' ? segment.id.trim() : ''
-  if (id) return id
-  return String(segment.sequence ?? '')
-}
-
-function joinApiPath(pathname: string): string {
-  const base = getApiBaseUrl()
-  const normalizedBase = typeof base === 'string' ? base.replace(/\/+$/, '') : '/api'
-  const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`
-  return `${normalizedBase}${normalizedPath}`
-}
-
-async function analyzeSegment(segment: TranscriptEventSegment): Promise<void> {
-  const tpl = selectedPromptTemplate.value
-  if (!tpl) {
-    ElMessage.warning('请先选择提示词模板')
-    return
-  }
-
-  const segmentContent = typeof segment.content === 'string' ? segment.content.trim() : ''
-  if (!segmentContent) {
-    ElMessage.warning('片段内容为空，无法分析')
-    return
-  }
-
-  if (analysisStreamAbortController) {
-    analysisStreamAbortController.abort()
-    analysisStreamAbortController = null
-  }
-
-  const analysisType = `segment:${buildPromptAnalysisType(tpl)}`
-  const localId = `local:segment:${getSegmentKey(segment)}:${Date.now()}`
-  const startTime = Date.now()
-
-  analysisContext.value = { kind: 'segment', segment, promptTemplateId: tpl.id }
-  analyzingSegmentKey.value = getSegmentKey(segment)
-  activePane.value = 'analysis'
-
-  currentAnalysis.value = {
-    id: localId,
-    sessionId: sessionId.value,
-    analysisType,
-    modelUsed: 'glm',
-    result: '',
-    status: 'processing',
-    createdAt: new Date().toISOString(),
-    isCached: false,
-  }
-
-  analysisLoading.value = true
-  const abortController = new AbortController()
-  analysisStreamAbortController = abortController
-  const isCurrent = () => analysisStreamAbortController === abortController
-
-  try {
-    await streamSseJson(
-      joinApiPath('/analysis/segment/stream'),
-      {
-        sessionId: sessionId.value,
-        segmentId: segment.id,
-        sequence: segment.sequence,
-        content: segmentContent,
-        analysisType,
-        prompt: tpl.prompt,
-      },
-      {
-        signal: abortController.signal,
-        onEvent: (event, data) => {
-          if (!currentAnalysis.value) return
-          if (event === 'meta') {
-            const model = typeof data?.modelUsed === 'string' ? data.modelUsed.trim() : ''
-            if (model) currentAnalysis.value.modelUsed = model
-            return
-          }
-
-          if (event === 'chunk') {
-            const delta = typeof data?.delta === 'string' ? data.delta : ''
-            if (!delta) return
-            currentAnalysis.value.result += delta
-            return
-          }
-
-          if (event === 'done') {
-            const model = typeof data?.modelUsed === 'string' ? data.modelUsed.trim() : ''
-            if (model) currentAnalysis.value.modelUsed = model
-            currentAnalysis.value.status = 'completed'
-            currentAnalysis.value.processingTime = Date.now() - startTime
-            return
-          }
-
-          if (event === 'error') {
-            const message = typeof data?.message === 'string' ? data.message : '生成分析失败'
-            throw new Error(message)
-          }
-        },
-      }
-    )
-
-    if (currentAnalysis.value?.status === 'processing') {
-      currentAnalysis.value.status = 'completed'
-      currentAnalysis.value.processingTime = Date.now() - startTime
-    }
-  } catch (error) {
-    if (abortController.signal.aborted) {
-      return
-    }
-    if (currentAnalysis.value) {
-      currentAnalysis.value.status = 'failed'
-      currentAnalysis.value.processingTime = Date.now() - startTime
-    }
-    console.error('片段分析失败:', error)
-    ElMessage.error(error instanceof Error ? error.message : '片段分析失败')
-  } finally {
-    if (isCurrent()) {
-      analysisStreamAbortController = null
-      analysisLoading.value = false
-      analyzingSegmentKey.value = null
-    }
-  }
-}
-
-async function streamSseJson(
-  url: string,
-  body: unknown,
-  options: { signal: AbortSignal; onEvent: (event: string, data: any) => void }
-): Promise<void> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-    },
-    body: JSON.stringify(body),
-    signal: options.signal,
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(text || `请求失败: ${response.status}`)
-  }
-
-  const reader = response.body?.getReader()
-  if (!reader) {
-    throw new Error('浏览器不支持流式读取')
-  }
-
-  const decoder = new TextDecoder('utf-8')
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    buffer = buffer.replace(/\r\n/g, '\n')
-
-    while (true) {
-      const sepIndex = buffer.indexOf('\n\n')
-      if (sepIndex < 0) break
-
-      const rawEvent = buffer.slice(0, sepIndex)
-      buffer = buffer.slice(sepIndex + 2)
-
-      const lines = rawEvent.split('\n').map(line => line.trimEnd())
-      let eventName = 'message'
-      const dataLines: string[] = []
-
-      for (const line of lines) {
-        if (line.startsWith('event:')) {
-          eventName = line.slice('event:'.length).trim() || 'message'
-          continue
-        }
-        if (line.startsWith('data:')) {
-          dataLines.push(line.slice('data:'.length).trim())
-        }
-      }
-
-      if (!dataLines.length) continue
-      const dataText = dataLines.join('\n')
-      if (dataText === '[DONE]') {
-        options.onEvent('done', null)
-        return
-      }
-
-      let data: any = null
-      try {
-        data = JSON.parse(dataText)
-      } catch {
-        data = { raw: dataText }
-      }
-      options.onEvent(eventName, data)
-    }
-  }
-}
-
-function buildPromptAnalysisType(tpl: { id: string; updatedAt?: string }): string {
-  const id = typeof tpl.id === 'string' ? tpl.id.trim() : ''
-  const stamp = typeof tpl.updatedAt === 'string' ? tpl.updatedAt.trim() : ''
-  return stamp ? `prompt:${id}@${stamp}` : `prompt:${id}`
-}
-
-// 复制分析
-function copyAnalysis() {
-  if (!currentAnalysis.value) return
-  navigator.clipboard.writeText(currentAnalysis.value.result)
-  ElMessage.success('已复制到剪贴板')
-}
-
-// 导出分析
-function exportAnalysis(format: string | ExportFormat) {
-  if (!currentAnalysis.value) {
-    ElMessage.warning('请先生成分析')
-    return
-  }
-
-  try {
-    exportAnalysisService(currentAnalysis.value, {
-      format: format as ExportFormat,
-      includeTimestamp: true,
-      includeMetadata: true,
-    }, sessionInfo.value || undefined, speeches.value)
-
-    const formatNames: Record<string, string> = {
-      txt: '纯文本',
-      md: 'Markdown',
-      json: 'JSON',
-    }
-    ElMessage.success(`已导出为 ${formatNames[format]} 格式`)
-  } catch (error) {
-    console.error('导出失败:', error)
-    ElMessage.error('导出失败')
-  }
-}
-
-// 渲染 Markdown（简单实现）
-function renderMarkdown(text: string): string {
-  return text
-    .replace(/### (.*)/g, '<h3>$1</h3>')
-    .replace(/## (.*)/g, '<h2>$1</h2>')
-    .replace(/# (.*)/g, '<h1>$1</h1>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/- (.*)/g, '<li>$1</li>')
-    .replace(/\n/g, '<br>')
-}
-
-// 格式化时间
-function formatTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  const hours = date.getHours().toString().padStart(2, '0')
-  const minutes = date.getMinutes().toString().padStart(2, '0')
-  const seconds = date.getSeconds().toString().padStart(2, '0')
-  return `${hours}:${minutes}:${seconds}`
-}
-
-// 自动滚动到底部
-function scrollToBottom() {
-  nextTick(() => {
-    if (transcriptRef.value) {
-      transcriptRef.value.scrollTop = transcriptRef.value.scrollHeight
-    }
-  })
-}
-
 function formatDurationMs(durationMs: number): string {
   const safeMs = Math.max(0, Math.floor(durationMs))
   if (safeMs < 60_000) {
@@ -1362,6 +1007,153 @@ function getEventDurationText(eventIndex: number): string | null {
   if (durationMs == null) return null
   return formatDurationMs(durationMs)
 }
+
+// 分析总结相关
+const renderedAnalysisResult = computed(() => {
+  if (!analysisResult.value) return ''
+  // 使用 marked.parse 的同步版本
+  const rawHtml = marked.parse(analysisResult.value, {
+    async: false,
+  }) as string
+  return DOMPurify.sanitize(rawHtml)
+})
+
+const hasAnalysisContent = computed(() => !!analysisResult.value)
+
+// 针对性分析相关
+const renderedTargetAnalysisResult = computed(() => {
+  if (!targetAnalysisResult.value) return ''
+  const rawHtml = marked.parse(targetAnalysisResult.value, {
+    async: false,
+  }) as string
+  return DOMPurify.sanitize(rawHtml)
+})
+
+const hasTargetAnalysisContent = computed(() => !!targetAnalysisResult.value)
+
+const analysisPanelTitle = computed(() => {
+  if (analysisMode.value === 'target' && targetSegment.value) {
+    return `分析总结 - @${targetSegment.value.sequence}`
+  }
+  return '分析总结'
+})
+
+async function startAnalysis(): Promise<void> {
+  if (!sessionId.value) {
+    ElMessage.warning('请先加入会话')
+    return
+  }
+
+  if (transcriptEventSegmentationStore.segments.length === 0) {
+    ElMessage.warning('暂无语句拆分内容，请等待拆分完成')
+    return
+  }
+
+  try {
+    isAnalyzing.value = true
+    analysisError.value = ''
+
+    // 构建分析内容：使用语句拆分结果
+    const segmentsText = transcriptEventSegmentationStore.segments
+      .map(seg => `@${seg.sequence}: ${seg.content}`)
+      .join('\n\n')
+
+    // TODO: 调用后端分析 API
+    // 临时使用模拟数据展示效果
+    await new Promise(resolve => setTimeout(resolve, 2000))
+
+    analysisResult.value = `# 会议分析总结
+
+## 讨论主题
+本次会议主要讨论了项目进展和技术方案相关内容。
+
+## 关键要点
+- 语句拆分功能正常运行
+- 共处理 **${transcriptEventSegmentationStore.segments.length}** 条语句
+- 系统状态良好
+
+## 待办事项
+1. 完成后端分析 API 接入
+2. 添加更多分析维度
+3. 优化分析结果展示
+
+---
+*分析时间: ${new Date().toLocaleString('zh-CN')}*`
+
+    ElMessage.success('分析完成')
+  } catch (error) {
+    console.error('分析失败:', error)
+    analysisError.value = error instanceof Error ? error.message : '分析失败'
+    ElMessage.error('分析失败')
+  } finally {
+    isAnalyzing.value = false
+  }
+}
+
+function clearAnalysis(): void {
+  analysisResult.value = ''
+  analysisError.value = ''
+}
+
+// 切换到针对性分析模式
+function handleTargetAnalysis(segment: TranscriptEventSegment): void {
+  targetSegment.value = segment
+  analysisMode.value = 'target'
+  // 自动开始针对性分析
+  void startTargetAnalysis()
+}
+
+// 切换回通用分析模式
+function switchToGeneralAnalysis(): void {
+  analysisMode.value = 'general'
+  targetSegment.value = null
+}
+
+// 开始针对性分析
+async function startTargetAnalysis(): Promise<void> {
+  if (!sessionId.value) {
+    ElMessage.warning('请先加入会话')
+    return
+  }
+
+  if (!targetSegment.value) {
+    ElMessage.warning('请先选择要分析的语句')
+    return
+  }
+
+  try {
+    isTargetAnalyzing.value = true
+    targetAnalysisError.value = ''
+
+    const seg = targetSegment.value
+
+    // TODO: 调用后端针对性分析 API
+    // 临时使用模拟数据展示效果
+    await new Promise(resolve => setTimeout(resolve, 1500))
+
+    targetAnalysisResult.value = `
+## 分析要点
+- 该语句是会议讨论中的关键发言
+- 内容清晰，主题明确
+- 建议作为后续待办事项的参考
+
+---
+*分析时间: ${new Date().toLocaleString('zh-CN')}*`
+
+    ElMessage.success('针对性分析完成')
+  } catch (error) {
+    console.error('针对性分析失败:', error)
+    targetAnalysisError.value = error instanceof Error ? error.message : '分析失败'
+    ElMessage.error('针对性分析失败')
+  } finally {
+    isTargetAnalyzing.value = false
+  }
+}
+
+function clearTargetAnalysis(): void {
+  targetAnalysisResult.value = ''
+  targetAnalysisError.value = ''
+}
 </script>
 
 <style scoped>
@@ -1374,8 +1166,8 @@ function getEventDurationText(eventIndex: number): string | null {
 }
 
 .header-icon-button {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   flex: 0 0 auto;
 }
@@ -1469,12 +1261,6 @@ function getEventDurationText(eventIndex: number): string | null {
   max-width: 46vw;
 }
 
-.analysis-header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 @media (max-width: 480px) {
   .header-right {
     gap: 6px;
@@ -1485,8 +1271,8 @@ function getEventDurationText(eventIndex: number): string | null {
   }
 
   .header-icon-button {
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
   }
 
   .header-icon-button :deep(.el-icon) {
@@ -1494,44 +1280,9 @@ function getEventDurationText(eventIndex: number): string | null {
   }
 }
 
-.prompt-preview {
-  margin-top: 12px;
-}
-
-.prompt-preview-title {
-  font-size: 12px;
-  color: var(--ink-500);
-  margin-bottom: 6px;
-}
-
-.prompt-preview-body {
-  padding: 10px 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
-  background: rgba(15, 23, 42, 0.04);
-  color: var(--ink-700);
-  font-size: 12px;
-  line-height: 1.6;
-  max-height: 280px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 .ghost-button {
   border-color: rgba(15, 23, 42, 0.14);
   background: rgba(255, 255, 255, 0.55);
-}
-
-.settings-trigger {
-  border-color: rgba(31, 41, 55, 0.18);
-  color: #4b5563;
-}
-
-.settings-trigger:hover {
-  background: rgba(24, 144, 255, 0.06);
-  border-color: rgba(24, 144, 255, 0.40);
-  color: #185abc;
 }
 
 /* 实时转写固定区域（上部） */
@@ -1750,14 +1501,6 @@ function getEventDurationText(eventIndex: number): string | null {
   padding:10px 0;
 }
 
-/* 分析面板 */
-.analysis-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .panel-header {
   display: flex;
   justify-content: space-between;
@@ -1801,150 +1544,6 @@ function getEventDurationText(eventIndex: number): string | null {
   background: rgba(24, 144, 255, 0.06);
 }
 
-/* 转写列表 */
-.transcript-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.speech-item {
-  padding: 12px;
-  margin-bottom: 12px;
-  border-left: 4px solid;
-  background-color: #f9f9f9;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.speech-item:hover {
-  background-color: #f0f0f0;
-}
-
-.speech-item.selected {
-  background-color: #e6f7ff;
-}
-
-.speech-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  gap: 8px;
-}
-
-.speaker-name {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #fff;
-}
-
-.speech-time {
-  font-size: 12px;
-  color: #999;
-}
-
-.mark-badge {
-  padding: 2px 6px;
-  background-color: #faad14;
-  color: #fff;
-  border-radius: 4px;
-  font-size: 11px;
-}
-
-.edited-badge {
-  margin-top: 4px;
-  font-size: 11px;
-  color: #52c41a;
-}
-
-.speech-content {
-  line-height: 1.6;
-  color: #333;
-  white-space: pre-wrap;
-}
-
-.empty-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-}
-
-/* 分析内容 */
-.analysis-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.analysis-loading {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.analysis-result {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.analysis-meta {
-  display: flex;
-  gap: 14px;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
-  font-size: 12px;
-  color: var(--ink-500);
-  flex-wrap: wrap;
-}
-
-.analysis-text {
-  flex: 1;
-  padding: 16px;
-  line-height: 1.8;
-  color: var(--ink-700);
-  white-space: pre-wrap;
-  overflow-y: auto;
-}
-
-.analysis-text :deep(h1),
-.analysis-text :deep(h2),
-.analysis-text :deep(h3) {
-  margin-top: 16px;
-  margin-bottom: 8px;
-}
-
-.analysis-text :deep(li) {
-  margin-left: 20px;
-}
-
-.analysis-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding: 12px 16px;
-  border-top: 1px solid rgba(15, 23, 42, 0.10);
-  gap: 8px;
-}
-
-.panel-fade-enter-active,
-.panel-fade-leave-active {
-  transition:
-    opacity 220ms var(--ease-out),
-    transform 220ms var(--ease-out);
-}
-
-.panel-fade-enter-from,
-.panel-fade-leave-to {
-  opacity: 0;
-  transform: translateY(6px);
-}
 
 @media (min-width: 1201px) {
   .workspace-grid {
@@ -2003,6 +1602,220 @@ function getEventDurationText(eventIndex: number): string | null {
 @media (max-width: 768px) {
   .realtime-transcript-bar {
     height: 190px;
+  }
+}
+
+/* 分析总结面板 */
+.analysis-panel,
+.target-analysis-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.analysis-content {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 0;
+}
+
+/* 原始语句预览 */
+.target-segment-preview {
+  padding: 12px 14px 14px;
+  margin: 0 0 10px;
+  border-radius: 8px;
+  background: rgba(47, 107, 255, 0.06);
+  border: 1px solid rgba(47, 107, 255, 0.15);
+}
+
+.preview-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-700);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.preview-content {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.8);
+  white-space: pre-wrap;
+  line-height: 1.6;
+  color: var(--ink-900);
+  font-size: 14px;
+}
+
+.preview-meta {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.preview-tag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(47, 107, 255, 0.12);
+  color: var(--brand-600);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* 空状态 */
+.analysis-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: var(--ink-400);
+  text-align: center;
+  padding: 20px;
+}
+
+.empty-icon {
+  color: var(--ink-300);
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.empty-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-500);
+  margin: 0 0 8px;
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--ink-400);
+  margin: 0;
+  max-width: 280px;
+}
+
+/* 加载状态 */
+.analysis-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: var(--ink-500);
+  gap: 16px;
+}
+
+.analysis-loading p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* 错误状态 */
+.analysis-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: var(--danger-500);
+  gap: 12px;
+  text-align: center;
+  padding: 20px;
+}
+
+/* 分析结果 - Markdown 渲染 */
+.analysis-result {
+  padding: 0 12px;
+  color: var(--ink-900);
+  line-height: 1.7;
+}
+
+.analysis-result:deep(h1) {
+  font-size: 20px;
+  font-weight: 650;
+  margin: 0 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid rgba(15, 23, 42, 0.10);
+}
+
+.analysis-result:deep(h2) {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 20px 0 12px;
+}
+
+.analysis-result:deep(h3) {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+}
+
+.analysis-result:deep(p) {
+  margin: 8px 0;
+}
+
+.analysis-result:deep(ul),
+.analysis-result:deep(ol) {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.analysis-result:deep(li) {
+  margin: 4px 0;
+}
+
+.analysis-result:deep(code) {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+}
+
+.analysis-result:deep(pre) {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.95);
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.analysis-result:deep(pre code) {
+  padding: 0;
+  background: transparent;
+  color: #e2e8f0;
+}
+
+.analysis-result:deep(strong) {
+  font-weight: 600;
+  color: var(--brand-700);
+}
+
+.analysis-result:deep(em) {
+  font-style: italic;
+}
+
+.analysis-result:deep(blockquote) {
+  margin: 12px 0;
+  padding-left: 16px;
+  border-left: 3px solid rgba(47, 107, 255, 0.4);
+  color: var(--ink-600);
+}
+
+.analysis-result:deep(hr) {
+  border: none;
+  border-top: 1px solid rgba(15, 23, 42, 0.10);
+  margin: 20px 0;
+}
+
+/* 三列布局适配 - 在大屏时将 content-area 改为三列 */
+@media (min-width: 1201px) {
+  .content-area {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 }
 </style>

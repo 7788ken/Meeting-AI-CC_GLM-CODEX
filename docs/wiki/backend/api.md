@@ -119,25 +119,6 @@ Content-Type: application/json
 }
 ```
 
-### 添加发言者
-
-```http
-POST /sessions/:id/speakers
-Content-Type: application/json
-
-{
-  "name": "张三",
-  "color": "#1890ff",
-  "avatarUrl": "https://example.com/avatar.jpg"
-}
-```
-
-### 获取发言者列表
-
-```http
-GET /sessions/:id/speakers
-```
-
 ---
 
 ## 发言记录 API
@@ -150,7 +131,6 @@ Content-Type: application/json
 
 {
   "sessionId": "session-1",
-  "speakerId": "speaker-1",
   "content": "大家好，今天我们讨论项目进度。",
   "confidence": 0.95,
   "startTime": "2025-01-10T10:00:00.000Z",
@@ -177,12 +157,6 @@ Content-Type: application/json
 
 ```http
 GET /speeches/session/:sessionId
-```
-
-### 获取发言者的所有发言
-
-```http
-GET /speeches/session/:sessionId/speaker/:speakerId
 ```
 
 ### 搜索发言记录
@@ -356,8 +330,6 @@ Binary: ArrayBuffer (PCM16, 16kHz, mono)
   "data": {
     "sessionId": "session-1",
     "content": "大家好",
-    "speakerId": "speaker-1",
-    "speakerName": "张三",
     "isFinal": true,
     "confidence": 0.95,
     "timestamp": 1641800000000

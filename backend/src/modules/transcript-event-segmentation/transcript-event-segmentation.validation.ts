@@ -19,6 +19,10 @@ export function parseTranscriptEventSegmentJson(text: string): { nextSentence: s
   }
 
   if (trimmed) {
+    const parsed = safeParseJson(trimmed)
+    if (isRecord(parsed)) {
+      return { nextSentence: '' }
+    }
     return { nextSentence: trimmed }
   }
 

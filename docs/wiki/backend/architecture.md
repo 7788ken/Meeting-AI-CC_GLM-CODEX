@@ -35,12 +35,11 @@ backend/src/
 │   │   ├── session.service.ts       # 会话服务 (B1015)
 │   │   └── session.module.ts
 │   │
-│   ├── speech/          # 发言记录模块 (B1020, B1027-B1030)
+│   ├── speech/          # 发言记录模块 (B1027-B1030)
 │   │   ├── dto/
 │   │   │   └── speech.dto.ts
 │   │   ├── schemas/
 │   │   │   └── speech.schema.ts     # Mongoose Schema (B1010)
-│   │   ├── speaker.service.ts       # 发言者服务 (B1020)
 │   │   ├── speech.controller.ts     # 发言控制器 (B1027-B1030)
 │   │   ├── speech.service.ts
 │   │   └── speech.module.ts
@@ -134,7 +133,7 @@ export class TranscriptGateway {
 
 ### PostgreSQL (Prisma)
 
-存储结构化数据：会话、发言者等
+存储结构化数据：会话等
 
 ```prisma
 // prisma/schema.prisma
@@ -146,15 +145,6 @@ model Session {
   endedAt     DateTime?
   duration    Int?
   isActive    Boolean  @default(true)
-  speakers    Speaker[]
-}
-
-model Speaker {
-  id        String   @id @default(uuid())
-  sessionId String
-  name      String
-  color     String
-  session   Session  @relation(fields: [sessionId], references: [id])
 }
 ```
 
@@ -169,7 +159,6 @@ export const SpeechSchema = SchemaFactory.createForClass(Speech)
 export class Speech {
   @Prop() id: string
   @Prop() sessionId: string
-  @Prop() speakerId: string
   @Prop() content: string
   @Prop() confidence: number
   @Prop() isMarked: boolean
@@ -204,7 +193,7 @@ GET    /analysis/session/:id        # 获取会话的所有分析
   audio:end      {}
 
 服务器 → 客户端:
-  transcript:data { content, speakerId, isFinal, confidence }
+  transcript:data { content, isFinal, confidence }
   error          { message }
 ```
 

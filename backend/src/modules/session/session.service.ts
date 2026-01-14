@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
-import { Session, SessionStatus, Speaker } from '@prisma/client'
+import { Session, SessionStatus } from '@prisma/client'
 import { PrismaService } from '../../database/prisma.service'
 import { SessionDto } from './dto/session.dto'
 
@@ -22,7 +22,6 @@ export class SessionService {
   async findOne(id: string): Promise<SessionDto> {
     const session = await this.prisma.session.findUnique({
       where: { id },
-      include: { speakers: true },
     })
     if (!session) {
       throw new NotFoundException(`Session ${id} not found`)
@@ -53,26 +52,6 @@ export class SessionService {
       data: { status },
     })
     return this.toSessionDto(session)
-  }
-
-  async addSpeaker(
-    sessionId: string,
-    input: { name: string; avatarUrl?: string; color?: string }
-  ): Promise<Speaker> {
-    await this.ensureSessionExists(sessionId)
-    return this.prisma.speaker.create({
-      data: {
-        sessionId,
-        name: input.name,
-        avatarUrl: input.avatarUrl,
-        color: input.color,
-      },
-    })
-  }
-
-  async getSpeakers(sessionId: string): Promise<Speaker[]> {
-    await this.ensureSessionExists(sessionId)
-    return this.prisma.speaker.findMany({ where: { sessionId } })
   }
 
   /**

@@ -158,7 +158,6 @@
   "duration": 3600,
   "recording_quality": "medium",
   "transcription_language": "zh-CN",
-  "speakers_count": 5,
   "speeches_count": 20
 }
 ```
@@ -186,124 +185,9 @@
 }
 ```
 
-## 4. 发言者管理API
+## 4. 发言记录管理API
 
-### 4.1 创建发言者
-
-**功能描述**：创建一个新的发言者
-
-**请求信息**：
-- **URL**：`/sessions/{session_id}/speakers`
-- **方法**：`POST`
-- **认证**：需要
-- **路径参数**：
-  - `session_id`：会话ID（UUID）
-- **请求体**：
-```json
-{
-  "name": "发言者名称",
-  "color": "#1890ff"
-}
-```
-
-**响应信息**：
-- **状态码**：`201 Created`
-- **响应体**：
-```json
-{
-  "id": "uuid",
-  "session_id": "uuid",
-  "name": "发言者名称",
-  "color": "#1890ff",
-  "is_default": false,
-  "created_at": "2026-01-09T00:00:00Z"
-}
-```
-
-### 4.2 获取发言者列表
-
-**功能描述**：获取会议的发言者列表
-
-**请求信息**：
-- **URL**：`/sessions/{session_id}/speakers`
-- **方法**：`GET`
-- **认证**：需要
-- **路径参数**：
-  - `session_id`：会话ID（UUID）
-
-**响应信息**：
-- **状态码**：`200 OK`
-- **响应体**：
-```json
-[
-  {
-    "id": "uuid",
-    "session_id": "uuid",
-    "name": "发言者1",
-    "color": "#1890ff",
-    "is_default": false,
-    "created_at": "2026-01-09T00:00:00Z"
-  },
-  {
-    "id": "uuid",
-    "session_id": "uuid",
-    "name": "发言者2",
-    "color": "#52c41a",
-    "is_default": true,
-    "created_at": "2026-01-09T00:00:00Z"
-  }
-]
-```
-
-### 4.3 更新发言者
-
-**功能描述**：更新发言者信息
-
-**请求信息**：
-- **URL**：`/speakers/{id}`
-- **方法**：`PUT`
-- **认证**：需要
-- **路径参数**：
-  - `id`：发言者ID（UUID）
-- **请求体**：
-```json
-{
-  "name": "新发言者名称",
-  "color": "#ff4d4f"
-}
-```
-
-**响应信息**：
-- **状态码**：`200 OK`
-- **响应体**：
-```json
-{
-  "id": "uuid",
-  "session_id": "uuid",
-  "name": "新发言者名称",
-  "color": "#ff4d4f",
-  "is_default": false,
-  "created_at": "2026-01-09T00:00:00Z"
-}
-```
-
-### 4.4 删除发言者
-
-**功能描述**：删除发言者
-
-**请求信息**：
-- **URL**：`/speakers/{id}`
-- **方法**：`DELETE`
-- **认证**：需要
-- **路径参数**：
-  - `id`：发言者ID（UUID）
-
-**响应信息**：
-- **状态码**：`204 No Content`
-
-## 5. 发言记录管理API
-
-### 5.1 创建发言记录
+### 4.1 创建发言记录
 
 **功能描述**：创建一个新的发言记录
 
@@ -316,7 +200,6 @@
 - **请求体**：
 ```json
 {
-  "speaker_id": "uuid",
   "content": "发言内容",
   "start_time": "2026-01-09T09:00:00Z",
   "end_time": "2026-01-09T09:05:00Z",
@@ -337,8 +220,6 @@
 {
   "_id": "objectid",
   "session_id": "uuid",
-  "speaker_id": "uuid",
-  "speaker_name": "发言者名称",
   "content": "发言内容",
   "start_time": "2026-01-09T09:00:00Z",
   "end_time": "2026-01-09T09:05:00Z",
@@ -355,7 +236,7 @@
 }
 ```
 
-### 5.2 获取发言记录列表
+### 4.2 获取发言记录列表
 
 **功能描述**：获取会议的发言记录列表
 
@@ -368,7 +249,6 @@
 - **查询参数**：
   - `page`：页码，默认1
   - `page_size`：每页条数，默认20
-  - `speaker_id`：发言者ID，用于筛选
   - `keyword`：搜索关键词
   - `sort_by`：排序字段，默认start_time
   - `sort_order`：排序顺序，asc或desc，默认asc
@@ -385,8 +265,6 @@
     {
       "_id": "objectid",
       "session_id": "uuid",
-      "speaker_id": "uuid",
-      "speaker_name": "发言者名称",
       "content": "发言内容预览...",
       "start_time": "2026-01-09T09:00:00Z",
       "end_time": "2026-01-09T09:05:00Z",
@@ -398,7 +276,7 @@
 }
 ```
 
-### 5.3 获取发言记录详情
+### 4.3 获取发言记录详情
 
 **功能描述**：获取单个发言记录的详细信息
 
@@ -416,8 +294,6 @@
 {
   "_id": "objectid",
   "session_id": "uuid",
-  "speaker_id": "uuid",
-  "speaker_name": "发言者名称",
   "content": "完整的发言内容",
   "start_time": "2026-01-09T09:00:00Z",
   "end_time": "2026-01-09T09:05:00Z",
@@ -434,7 +310,7 @@
 }
 ```
 
-### 5.4 更新发言记录
+### 4.4 更新发言记录
 
 **功能描述**：更新发言记录
 
@@ -447,7 +323,6 @@
 - **请求体**：
 ```json
 {
-  "speaker_id": "uuid",
   "content": "修改后的发言内容"
 }
 ```
@@ -459,8 +334,6 @@
 {
   "_id": "objectid",
   "session_id": "uuid",
-  "speaker_id": "uuid",
-  "speaker_name": "发言者名称",
   "content": "修改后的发言内容",
   "start_time": "2026-01-09T09:00:00Z",
   "end_time": "2026-01-09T09:05:00Z",
@@ -478,7 +351,7 @@
 }
 ```
 
-### 5.5 删除发言记录
+### 4.5 删除发言记录
 
 **功能描述**：删除发言记录
 
@@ -492,7 +365,7 @@
 **响应信息**：
 - **状态码**：`204 No Content`
 
-### 5.6 搜索发言记录
+### 4.6 搜索发言记录
 
 **功能描述**：按关键词搜索发言记录
 
@@ -519,8 +392,6 @@
     {
       "_id": "objectid",
       "session_id": "uuid",
-      "speaker_id": "uuid",
-      "speaker_name": "发言者名称",
       "content": "包含关键词的发言内容...",
       "start_time": "2026-01-09T09:00:00Z",
       "end_time": "2026-01-09T09:05:00Z",

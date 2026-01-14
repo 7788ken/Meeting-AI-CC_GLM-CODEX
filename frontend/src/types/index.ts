@@ -5,13 +5,6 @@ export interface SelectOption {
   disabled?: boolean
 }
 
-// 发言者类型
-export interface Speaker {
-  id: string
-  name: string
-  color: string
-}
-
 // AI模型类型
 export type AIModel = 'glm'
 
@@ -32,15 +25,6 @@ export interface AsrConfig {
   hotwords?: string[]
   prompt?: string
 }
-
-// 分析类型
-export type AnalysisType = 'core' | 'brief' | 'deep'
-
-export const ANALYSIS_TYPES: SelectOption[] = [
-  { label: '核心要点', value: 'core' },
-  { label: '简要回答', value: 'brief' },
-  { label: '深度分析', value: 'deep' },
-]
 
 // WebSocket消息类型
 export enum WSMessageType {
@@ -67,8 +51,6 @@ export interface WSMessage {
 export interface WSTranscriptData {
   speechId: string
   sessionId: string
-  speakerId: string
-  speakerName: string
   content: string
   isFinal: boolean
   confidence: number

@@ -21,28 +21,7 @@ model Session {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // 关联发言者
-  speakers    Speaker[]
-
   @@map("sessions")
-}
-
-// 发言者模型 (B1008) - 用于管理会议中的发言者信息
-model Speaker {
-  id        String   @id @default(uuid())
-  sessionId String
-  name      String
-  avatarUrl String?
-  color     String   @default("#3B82F6")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // 关联会话
-  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, name])
-  @@index([sessionId])
-  @@map("speakers")
 }
 
 // 会话状态枚举

@@ -47,8 +47,6 @@ describe('TranscriptStreamService', () => {
         expect(update?.$set?.audioDurationMs).toBe(1234)
         return {
           eventIndex: 0,
-          speakerId: 'speaker-1',
-          speakerName: 'Speaker 1',
           content: 'hello',
           isFinal: false,
           segmentKey: 'seg-1',
@@ -60,8 +58,6 @@ describe('TranscriptStreamService', () => {
         expect(update?.$set).not.toHaveProperty('audioDurationMs')
         return {
           eventIndex: 0,
-          speakerId: 'speaker-1',
-          speakerName: 'Speaker 1',
           content: 'hello world',
           isFinal: true,
           segmentKey: 'seg-1',
@@ -72,8 +68,6 @@ describe('TranscriptStreamService', () => {
 
     await service.upsertEvent({
       sessionId: 'session-1',
-      speakerId: 'speaker-1',
-      speakerName: 'Speaker 1',
       content: 'hello',
       isFinal: false,
       segmentKey: 'seg-1',
@@ -84,8 +78,6 @@ describe('TranscriptStreamService', () => {
     const result = await service.upsertEvent({
       sessionId: 'session-1',
       eventIndex: 0,
-      speakerId: 'speaker-1',
-      speakerName: 'Speaker 1',
       content: 'hello world',
       isFinal: true,
       segmentKey: 'seg-1',
@@ -103,8 +95,6 @@ describe('TranscriptStreamService', () => {
       expect(update?.$set).not.toHaveProperty('audioDurationMs')
       return {
         eventIndex: 0,
-        speakerId: 'speaker-1',
-        speakerName: 'Speaker 1',
         content: 'hello',
         isFinal: true,
         segmentKey: 'seg-1',
@@ -115,8 +105,6 @@ describe('TranscriptStreamService', () => {
 
     const result = await service.upsertEvent({
       sessionId: 'session-1',
-      speakerId: 'speaker-1',
-      speakerName: 'Speaker 1',
       content: 'hello',
       isFinal: true,
       segmentKey: 'seg-1',
@@ -127,4 +115,3 @@ describe('TranscriptStreamService', () => {
     expect(result.event.audioDurationMs).toBe(999)
   })
 })
-

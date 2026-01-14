@@ -24,7 +24,6 @@ const mockWebsocket = {
   setSession: vi.fn(),
   startTranscribe: vi.fn(),
   stopTranscribe: vi.fn(),
-  endTurn: vi.fn(),
   sendAudioData: vi.fn(),
   sendMessage: vi.fn(),
   onMessage: vi.fn(),
@@ -59,7 +58,6 @@ describe('TranscriptionService', () => {
     mockWebsocket.setSession.mockReset()
     mockWebsocket.startTranscribe.mockReset()
     mockWebsocket.stopTranscribe.mockReset()
-    mockWebsocket.endTurn.mockReset()
     mockWebsocket.sendAudioData.mockReset()
     mockWebsocket.sendMessage.mockReset()
     mockWebsocket.onMessage.mockReset()
@@ -363,48 +361,6 @@ describe('TranscriptionService', () => {
       expect(sentData[1]).toBeGreaterThanOrEqual(-32768)
     })
 
-    it('应该在静音达到阈值后发送 end_turn 并停止发包', async () => {
-      let audioDataCallback: ((data: any) => void) | null = null
-
-      vi.mocked(audioCaptureModule.audioCapture).startCapture = vi.fn().mockImplementation(
-        (onData, onError) => {
-          audioDataCallback = onData
-          return Promise.resolve()
-        }
-      )
-
-      await service.start({
-        ...mockConfig,
-        onTranscript: mockCallbacks.onTranscript,
-        onError: mockCallbacks.onError,
-        onStatusChange: mockCallbacks.onStatusChange,
-        onConnectionStatusChange: mockCallbacks.onConnectionStatusChange,
-      })
-
-      const sampleRate = 16000
-      const voicedFrame = {
-        data: new Float32Array(1600).fill(0.2), // ~100ms voiced
-        sampleRate,
-      }
-      const silentFrame = {
-        data: new Float32Array(1600).fill(0), // ~100ms silence
-        sampleRate,
-      }
-
-      if (audioDataCallback) {
-        audioDataCallback(voicedFrame)
-        for (let i = 0; i < 9; i += 1) {
-          audioDataCallback(silentFrame)
-        }
-        // 静音后仍持续回调，不应重复发送 end_turn
-        for (let i = 0; i < 5; i += 1) {
-          audioDataCallback(silentFrame)
-        }
-      }
-
-      expect(mockWebsocket.sendAudioData).toHaveBeenCalledTimes(1)
-      expect(mockWebsocket.endTurn).toHaveBeenCalled()
-    })
   })
 
   describe('转写结果处理', () => {
@@ -433,8 +389,6 @@ describe('TranscriptionService', () => {
         data: {
           isFinal: true,
           content: '大家好',
-          speakerId: 'speaker-1',
-          speakerName: '张三',
           confidence: 0.95,
           timestamp: Date.now(),
         },
@@ -447,7 +401,6 @@ describe('TranscriptionService', () => {
       expect(mockCallbacks.onTranscript).toHaveBeenCalled()
       const transcript = mockCallbacks.onTranscript.mock.calls[0][0] as Speech
       expect(transcript.content).toBe('大家好')
-      expect(transcript.speakerName).toBe('张三')
       expect(transcript.sessionId).toBe(mockConfig.sessionId)
     })
 

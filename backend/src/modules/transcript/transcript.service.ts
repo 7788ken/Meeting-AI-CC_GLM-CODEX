@@ -229,8 +229,6 @@ export class TranscriptService {
       id: this.generateId(),
       sessionId,
       segmentKey,
-      speakerId: `client_${clientId}`,
-      speakerName: '发言者',
       content: lastText,
       isFinal: lastIsFinal,
       confidence: 0,

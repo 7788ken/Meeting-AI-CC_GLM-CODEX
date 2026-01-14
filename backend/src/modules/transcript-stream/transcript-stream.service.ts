@@ -6,8 +6,6 @@ import { TranscriptState, TranscriptStateDocument } from './schemas/transcript-s
 
 export type TranscriptEventDTO = {
   eventIndex: number
-  speakerId: string
-  speakerName: string
   content: string
   isFinal: boolean
   segmentKey?: string
@@ -46,8 +44,6 @@ export class TranscriptStreamService {
   async upsertEvent(input: {
     sessionId: string
     eventIndex?: number
-    speakerId: string
-    speakerName: string
     content: string
     isFinal: boolean
     segmentKey?: string
@@ -70,8 +66,6 @@ export class TranscriptStreamService {
       : input.eventIndex!
 
     const setUpdate: Record<string, unknown> = {
-      speakerId: input.speakerId,
-      speakerName: input.speakerName,
       content: input.content,
       isFinal: input.isFinal,
       segmentKey: input.segmentKey,
@@ -175,8 +169,6 @@ export class TranscriptStreamService {
   private toEventDTO(doc: TranscriptEventDocument): TranscriptEventDTO {
     return {
       eventIndex: doc.eventIndex,
-      speakerId: doc.speakerId,
-      speakerName: doc.speakerName,
       content: doc.content,
       isFinal: Boolean(doc.isFinal),
       segmentKey: doc.segmentKey ?? undefined,

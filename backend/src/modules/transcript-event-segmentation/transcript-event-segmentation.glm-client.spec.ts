@@ -11,6 +11,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
   let configService: jest.Mocked<ConfigService>
   let httpService: jest.Mocked<HttpService>
   let segmentationConfigService: { getConfig: jest.Mock }
+  let glmRateLimiter: { schedule: jest.Mock; onRateLimit: jest.Mock; isInCooldown: jest.Mock }
 
   const getRequestBody = (callIndex = 0) => (httpService.post.mock.calls[callIndex] as any)[1]
 
@@ -40,12 +41,17 @@ describe('TranscriptEventSegmentationGlmClient', () => {
         strictSystemPrompt: 'strict',
         windowEvents: 120,
         intervalMs: 3000,
-        triggerOnEndTurn: true,
         triggerOnStopTranscribe: true,
         model: testModel,
         maxTokens: 2000,
         jsonMode: true,
       })),
+    }
+
+    glmRateLimiter = {
+      schedule: jest.fn((run: () => Promise<unknown>) => run()),
+      onRateLimit: jest.fn(),
+      isInCooldown: jest.fn(() => false),
     }
   })
 
@@ -72,7 +78,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     const client = new TranscriptEventSegmentationGlmClient(
       configService,
       httpService,
-      segmentationConfigService as any
+      segmentationConfigService as any,
+      glmRateLimiter as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -104,7 +111,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     const client = new TranscriptEventSegmentationGlmClient(
       configService,
       httpService,
-      segmentationConfigService as any
+      segmentationConfigService as any,
+      glmRateLimiter as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -113,13 +121,98 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     expect(getRequestBody(0).model).toBe(testModel)
   })
 
+  it('JSON mode 返回空对象时，回退为非 JSON mode 重试', async () => {
+    httpService.post
+      .mockReturnValueOnce(
+        of({
+          status: 200,
+          data: {
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{}' },
+              },
+            ],
+          },
+        } as any)
+      )
+      .mockReturnValueOnce(
+        of({
+          status: 200,
+          data: {
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{ "nextSentence": "你好" }' },
+              },
+            ],
+          },
+        } as any)
+      )
+
+    const client = new TranscriptEventSegmentationGlmClient(
+      configService,
+      httpService,
+      segmentationConfigService as any,
+      glmRateLimiter as any
+    )
+    const result = await client.generateStructuredJson({ system: 's', user: 'u' })
+
+    expect(result).toBe('{ "nextSentence": "你好" }')
+    expect(httpService.post).toHaveBeenCalledTimes(2)
+    expect(getRequestBody(0).response_format).toEqual({ type: 'json_object' })
+    expect(getRequestBody(1).response_format).toBeUndefined()
+  })
+
+  it('JSON mode 返回空 nextSentence 时，回退为非 JSON mode 重试', async () => {
+    httpService.post
+      .mockReturnValueOnce(
+        of({
+          status: 200,
+          data: {
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{ "nextSentence": "" }' },
+              },
+            ],
+          },
+        } as any)
+      )
+      .mockReturnValueOnce(
+        of({
+          status: 200,
+          data: {
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{ "nextSentence": "你好" }' },
+              },
+            ],
+          },
+        } as any)
+      )
+
+    const client = new TranscriptEventSegmentationGlmClient(
+      configService,
+      httpService,
+      segmentationConfigService as any,
+      glmRateLimiter as any
+    )
+    const result = await client.generateStructuredJson({ system: 's', user: 'u' })
+
+    expect(result).toBe('{ "nextSentence": "你好" }')
+    expect(httpService.post).toHaveBeenCalledTimes(2)
+    expect(getRequestBody(0).response_format).toEqual({ type: 'json_object' })
+    expect(getRequestBody(1).response_format).toBeUndefined()
+  })
+
   it('finish_reason=length 且 max_tokens 太小时，自动提升 max_tokens 重试', async () => {
     segmentationConfigService.getConfig.mockReturnValue({
       systemPrompt: 'system',
       strictSystemPrompt: 'strict',
       windowEvents: 120,
       intervalMs: 3000,
-      triggerOnEndTurn: true,
       triggerOnStopTranscribe: true,
       model: testModel,
       maxTokens: 512,
@@ -157,7 +250,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     const client = new TranscriptEventSegmentationGlmClient(
       configService,
       httpService,
-      segmentationConfigService as any
+      segmentationConfigService as any,
+      glmRateLimiter as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -188,7 +282,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     const client = new TranscriptEventSegmentationGlmClient(
       configService,
       httpService,
-      segmentationConfigService as any
+      segmentationConfigService as any,
+      glmRateLimiter as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -229,7 +324,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     const client = new TranscriptEventSegmentationGlmClient(
       configService,
       httpService,
-      segmentationConfigService as any
+      segmentationConfigService as any,
+      glmRateLimiter as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -273,7 +369,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     const client = new TranscriptEventSegmentationGlmClient(
       configService,
       httpService,
-      segmentationConfigService as any
+      segmentationConfigService as any,
+      glmRateLimiter as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 

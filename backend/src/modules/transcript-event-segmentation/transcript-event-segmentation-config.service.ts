@@ -10,7 +10,6 @@ export interface TranscriptEventSegmentationConfig {
   strictSystemPrompt: string
   windowEvents: number
   intervalMs: number
-  triggerOnEndTurn: boolean
   triggerOnStopTranscribe: boolean
   model: string
   maxTokens: number
@@ -69,10 +68,6 @@ export class TranscriptEventSegmentationConfigService {
       strictSystemPrompt: DEFAULT_SEGMENTATION_STRICT_SYSTEM_PROMPT,
       windowEvents: this.normalizeInt(windowEvents, 120, WINDOW_EVENTS_MIN, WINDOW_EVENTS_MAX),
       intervalMs: this.normalizeInt(intervalMs, 3000, 0, INTERVAL_MS_MAX),
-      triggerOnEndTurn: this.readBooleanFromEnv(
-        'TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_END_TURN',
-        true
-      ),
       triggerOnStopTranscribe: this.readBooleanFromEnv(
         'TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE',
         true
@@ -97,7 +92,6 @@ export class TranscriptEventSegmentationConfigService {
         WINDOW_EVENTS_MAX
       ),
       intervalMs: this.normalizeInt(input.intervalMs, base.intervalMs, 0, INTERVAL_MS_MAX),
-      triggerOnEndTurn: this.normalizeBoolean(input.triggerOnEndTurn, base.triggerOnEndTurn),
       triggerOnStopTranscribe: this.normalizeBoolean(
         input.triggerOnStopTranscribe,
         base.triggerOnStopTranscribe

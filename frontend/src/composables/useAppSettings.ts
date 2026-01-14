@@ -6,27 +6,14 @@ import { transcriptEventSegmentationConfigApi } from '@/services/api'
 
 export type AsrModel = 'glm'
 
-export type PromptTemplate = {
-  id: string
-  name: string
-  prompt: string
-  createdAt: string
-  updatedAt: string
-}
-
 export interface AppSettings {
   asrModel: AsrModel
   vadStartTh: number
   vadStopTh: number
   vadGapMs: number
-  vadConfirmMs: number
-  promptTemplates: PromptTemplate[]
-  defaultPromptTemplateId: string
-  activePromptTemplateId: string
   segmentationSystemPrompt: string
   segmentationWindowEvents: number
   segmentationIntervalMs: number
-  segmentationTriggerOnEndTurn: boolean
   segmentationTriggerOnStopTranscribe: boolean
   segmentationModel: string
   segmentationMaxTokens: number
@@ -36,35 +23,6 @@ export interface AppSettings {
 }
 
 const STORAGE_KEY = 'meeting-ai.app-settings'
-
-function buildDefaultPromptTemplates(now: string): PromptTemplate[] {
-  return [
-    {
-      id: 'tpl_summary',
-      name: '会议摘要',
-      prompt:
-        '请根据以下会议发言内容，生成一份简洁的会议摘要（Markdown）：\n\n{{speeches}}\n\n要求：\n1. 提取核心讨论内容\n2. 总结主要结论\n3. 用要点输出',
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: 'tpl_action_items',
-      name: '行动项',
-      prompt:
-        '请从以下会议发言中提取行动项（Markdown 列表）：\n\n{{speeches}}\n\n要求：\n1. 列出所有需要执行的任务\n2. 标注负责人（如果有）\n3. 标注截止时间（如果有）',
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: 'tpl_full_report',
-      name: '完整报告',
-      prompt:
-        '请根据以下会议发言生成完整会议报告（Markdown）：\n\n{{speeches}}\n\n结构：\n- 摘要\n- 主要议题\n- 结论\n- 行动项\n- 风险与待决问题',
-      createdAt: now,
-      updatedAt: now,
-    },
-  ]
-}
 
 const DEFAULT_SEGMENTATION_SYSTEM_PROMPT = [
   '你是“会议语句拆分器”。你的任务是：从 extractedText 的开头截取出“下一句/下一段”（尽量短且语义完整），并可做最小化断句与标点补全。',
@@ -90,21 +48,14 @@ const resolveEnv = <T>(value: T | undefined, fallback: T): T =>
 
 const buildDefaultSettings = (): AppSettings => {
   const vad = getVadConfig()
-  const now = new Date().toISOString()
-  const templates = buildDefaultPromptTemplates(now)
   return {
     asrModel: 'glm',
     vadStartTh: vad.startThreshold,
     vadStopTh: vad.stopThreshold,
     vadGapMs: vad.gapMs,
-    vadConfirmMs: vad.confirmMs,
-    promptTemplates: templates,
-    defaultPromptTemplateId: templates[0]?.id || '',
-    activePromptTemplateId: templates[0]?.id || '',
     segmentationSystemPrompt: DEFAULT_SEGMENTATION_SYSTEM_PROMPT,
     segmentationWindowEvents: 120,
     segmentationIntervalMs: 3000,
-    segmentationTriggerOnEndTurn: true,
     segmentationTriggerOnStopTranscribe: true,
     segmentationModel: resolveEnv(
       import.meta.env.VITE_GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL as string,
@@ -177,19 +128,11 @@ function normalizeText(value: unknown, fallback: string): string {
 }
 
 function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppSettings {
-  const templates = normalizePromptTemplates((input as any).promptTemplates, base.promptTemplates)
-  const defaultTemplateId = normalizeTemplateId((input as any).defaultPromptTemplateId, templates, base.defaultPromptTemplateId)
-  const activeTemplateId = normalizeTemplateId((input as any).activePromptTemplateId, templates, defaultTemplateId)
-
   const next: AppSettings = {
     asrModel: 'glm',
     vadStartTh: normalizeNumber(input.vadStartTh, base.vadStartTh, 0),
     vadStopTh: normalizeNumber(input.vadStopTh, base.vadStopTh, 0),
     vadGapMs: normalizeNumber(input.vadGapMs, base.vadGapMs, 0),
-    vadConfirmMs: normalizeNumber(input.vadConfirmMs, base.vadConfirmMs, 0),
-    promptTemplates: templates,
-    defaultPromptTemplateId: defaultTemplateId,
-    activePromptTemplateId: activeTemplateId,
     segmentationSystemPrompt: normalizeText(
       (input as any).segmentationSystemPrompt,
       base.segmentationSystemPrompt
@@ -205,10 +148,6 @@ function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppS
       base.segmentationIntervalMs,
       0,
       10 * 60 * 1000
-    ),
-    segmentationTriggerOnEndTurn: normalizeBoolean(
-      (input as any).segmentationTriggerOnEndTurn,
-      base.segmentationTriggerOnEndTurn
     ),
     segmentationTriggerOnStopTranscribe: normalizeBoolean(
       (input as any).segmentationTriggerOnStopTranscribe,
@@ -231,41 +170,6 @@ function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppS
   return next
 }
 
-function normalizePromptTemplates(value: unknown, fallback: PromptTemplate[]): PromptTemplate[] {
-  if (!Array.isArray(value)) return fallback
-  const now = new Date().toISOString()
-  const templates: PromptTemplate[] = []
-
-  for (const raw of value) {
-    if (!raw || typeof raw !== 'object') continue
-    const input = raw as Partial<PromptTemplate>
-    const id = typeof input.id === 'string' ? input.id.trim() : ''
-    const name = typeof input.name === 'string' ? input.name.trim() : ''
-    const prompt = typeof input.prompt === 'string' ? input.prompt : ''
-    if (!id || !name) continue
-    templates.push({
-      id,
-      name,
-      prompt,
-      createdAt: typeof input.createdAt === 'string' && input.createdAt ? input.createdAt : now,
-      updatedAt: typeof input.updatedAt === 'string' && input.updatedAt ? input.updatedAt : now,
-    })
-  }
-
-  return templates.length > 0 ? templates : fallback
-}
-
-function normalizeTemplateId(
-  value: unknown,
-  templates: PromptTemplate[],
-  fallback: string
-): string {
-  const candidate = typeof value === 'string' ? value.trim() : ''
-  if (candidate && templates.some((t) => t.id === candidate)) return candidate
-  if (fallback && templates.some((t) => t.id === fallback)) return fallback
-  return templates[0]?.id || ''
-}
-
 function applySettings(next?: AppSettings) {
   const target = next ?? settings.value
   ;(globalThis as any).__VITE_API_BASE_URL__ = target.apiBaseUrl
@@ -278,7 +182,6 @@ function applySettings(next?: AppSettings) {
     startThreshold: target.vadStartTh,
     stopThreshold: target.vadStopTh,
     gapMs: target.vadGapMs,
-    confirmMs: target.vadConfirmMs,
   })
 }
 
@@ -289,9 +192,6 @@ function validateSettings(input: Partial<AppSettings> | AppSettings): string[] {
   if (merged.vadStartTh <= 0) errors.push('起始能量阈值必须大于 0')
   if (merged.vadStopTh < 0) errors.push('停止阈值不能为负数')
   if (merged.vadGapMs < 0) errors.push('静音间隔必须为非负数')
-  if (merged.vadConfirmMs < 0) errors.push('确认延迟必须为非负数')
-  if (!merged.promptTemplates || merged.promptTemplates.length === 0) errors.push('至少需要一个 AI 分析提示词模板')
-  if (!merged.defaultPromptTemplateId) errors.push('默认 AI 分析提示词模板不能为空')
   if (!merged.segmentationSystemPrompt) errors.push('语句拆分提示词不能为空')
   if (merged.segmentationWindowEvents < 5) errors.push('语句拆分上下文窗口事件数至少为 5')
   if (merged.segmentationIntervalMs < 0) errors.push('语句拆分触发间隔不能为负数')
@@ -330,7 +230,6 @@ async function refreshSegmentationConfigFromServer(): Promise<boolean> {
       segmentationSystemPrompt: serverConfig.systemPrompt,
       segmentationWindowEvents: serverConfig.windowEvents,
       segmentationIntervalMs: serverConfig.intervalMs,
-      segmentationTriggerOnEndTurn: serverConfig.triggerOnEndTurn,
       segmentationTriggerOnStopTranscribe: serverConfig.triggerOnStopTranscribe,
       segmentationModel: serverConfig.model,
       segmentationMaxTokens: serverConfig.maxTokens,

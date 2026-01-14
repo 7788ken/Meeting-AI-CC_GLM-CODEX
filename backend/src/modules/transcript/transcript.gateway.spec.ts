@@ -126,8 +126,6 @@ describe('TranscriptGateway', () => {
       const mockResult = {
         id: 'transcript-1',
         sessionId: 'session-123',
-        speakerId: 'speaker-1',
-        speakerName: 'Speaker 1',
         content: 'Hello world',
         isFinal: false,
         confidence: 0.95,
@@ -152,8 +150,6 @@ describe('TranscriptGateway', () => {
       const mockResult = {
         id: 'transcript-2',
         sessionId: 'session-123',
-        speakerId: 'speaker-1',
-        speakerName: 'Speaker 1',
         content: 'Final result',
         isFinal: true,
         confidence: 0.98,
@@ -271,8 +267,6 @@ describe('TranscriptGateway', () => {
       const mockResult = {
         id: 'transcript-1',
         sessionId: 'session-1',
-        speakerId: 'speaker-1',
-        speakerName: 'Speaker 1',
         content: 'Test transcript',
         isFinal: false,
         confidence: 0.9,
@@ -322,8 +316,6 @@ describe('TranscriptGateway', () => {
       const mockResult = {
         id: 'transcript-1',
         sessionId: 'shared-session',
-        speakerId: 'speaker-1',
-        speakerName: 'Speaker 1',
         content: 'Broadcast to all',
         isFinal: false,
         confidence: 0.9,

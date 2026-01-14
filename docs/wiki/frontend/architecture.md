@@ -24,7 +24,6 @@ frontend/src/
 │   ├── MicPermission.vue         # 麦克风权限请求 (F1010)
 │   ├── ModelSelector.vue         # AI 模型选择器 (F1028)
 │   ├── RecordButton.vue          # 录音控制按钮 (F1033)
-│   ├── SpeakerManager.vue        # 发言者管理 (F1024)
 │   ├── SpeechList.vue            # 发言列表 (F1021)
 │   └── TranscriptDisplay.vue     # 转写内容展示 (F1016-F1020)
 │
@@ -204,8 +203,6 @@ export type AIModel = 'glm'
 export interface Speech {
   id: string
   sessionId: string
-  speakerId: string
-  speakerName: string
   content: string
   confidence: number
   // ...

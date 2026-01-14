@@ -12,8 +12,6 @@ export interface TranscriptionConfig {
   sessionId: string
   language?: string
   asrConfig?: Partial<AsrConfig>
-  speakerId?: string
-  speakerName?: string
   onTranscript?: (transcript: Speech) => void
   onError?: (error: Error) => void
   onStatusChange?: (status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error') => void
@@ -30,14 +28,12 @@ export interface VadConfig {
   startThreshold: number
   stopThreshold: number
   gapMs: number
-  confirmMs: number
 }
 
 const DEFAULT_VAD_CONFIG: VadConfig = {
   startThreshold: Number(import.meta.env.VITE_TRANSCRIPT_VAD_START_TH ?? 0.015),
   stopThreshold: Number(import.meta.env.VITE_TRANSCRIPT_VAD_STOP_TH ?? 0.01),
   gapMs: Number(import.meta.env.VITE_TRANSCRIPT_VAD_GAP_MS ?? 900),
-  confirmMs: Number(import.meta.env.VITE_TRANSCRIPT_VAD_CONFIRM_MS ?? 500),
 }
 
 const vadConfig: VadConfig = { ...DEFAULT_VAD_CONFIG }
@@ -58,7 +54,6 @@ export const applyVadConfig = (partial?: Partial<VadConfig>): VadConfig => {
   vadConfig.startThreshold = normalize(partial.startThreshold, vadConfig.startThreshold, 0)
   vadConfig.stopThreshold = normalize(partial.stopThreshold, vadConfig.stopThreshold, 0)
   vadConfig.gapMs = normalize(partial.gapMs, vadConfig.gapMs, 0)
-  vadConfig.confirmMs = normalize(partial.confirmMs, vadConfig.confirmMs, 0)
   return getVadConfig()
 }
 
@@ -98,8 +93,8 @@ export class TranscriptionService {
   private currentSessionId = ''
   private status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error' = 'idle'
 
-  private segmentCounterBySpeaker = new Map<string, number>()
-  private activeSegmentBySpeaker = new Map<string, { id: string; startTime: string }>()
+  private segmentCounter = 0
+  private activeSegment: { id: string; startTime: string } | null = null
 
   private onTranscriptCallback?: (transcript: Speech) => void
   private onErrorCallback?: (error: Error) => void
@@ -119,8 +114,8 @@ export class TranscriptionService {
     }
 
     if (this.currentSessionId && this.currentSessionId !== config.sessionId) {
-      this.segmentCounterBySpeaker.clear()
-      this.activeSegmentBySpeaker.clear()
+      this.segmentCounter = 0
+      this.activeSegment = null
     }
 
     this.currentSessionId = config.sessionId
@@ -139,14 +134,6 @@ export class TranscriptionService {
 
       // 设置会话
       websocket.setSession(config.sessionId)
-
-      // 设置当前发言者（可选：用于多人会议区分）
-      if (config.speakerId || config.speakerName) {
-        websocket.setSpeaker({
-          speakerId: config.speakerId,
-          speakerName: config.speakerName,
-        })
-      }
 
       // 开始转写
       websocket.startTranscribe({
@@ -210,7 +197,7 @@ export class TranscriptionService {
 
   /**
    * 开始音频捕获
-   * 使用两阶段 VAD：静音检测 + 确认延迟，避免短暂停顿导致句子断裂
+   * 使用 VAD：静音检测后停止发送音频，避免短暂停顿导致句子断裂
    */
   private async startAudioCapture(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -218,43 +205,10 @@ export class TranscriptionService {
       const vadStartThreshold = currentVad.startThreshold
       const vadStopThreshold = currentVad.stopThreshold
       const vadGapMs = currentVad.gapMs
-      // 确认延迟：检测到静音后再等待一段时间，确认是否真的结束了
-      const vadConfirmMs = currentVad.confirmMs
-
       // VAD 状态机
-      type VADState = 'idle' | 'speaking' | 'confirming'
+      type VADState = 'idle' | 'speaking'
       let state: VADState = 'idle'
       let silentMs = 0
-      let confirmTimer: ReturnType<typeof setTimeout> | null = null
-
-      /**
-       * 进入确认状态：启动定时器，如果在确认期间没有新声音则真正结束
-       */
-      const startConfirming = () => {
-        state = 'confirming'
-        if (confirmTimer) {
-          clearTimeout(confirmTimer)
-        }
-        confirmTimer = setTimeout(() => {
-          // 确认期结束，真的没有新声音，发送 end_turn
-          websocket.endTurn()
-          state = 'idle'
-          silentMs = 0
-          confirmTimer = null
-        }, vadConfirmMs)
-      }
-
-      /**
-       * 取消确认：在确认期间检测到新声音，回到 speaking 状态
-       */
-      const cancelConfirming = () => {
-        if (confirmTimer) {
-          clearTimeout(confirmTimer)
-          confirmTimer = null
-        }
-        state = 'speaking'
-        silentMs = 0
-      }
 
       const onAudioData: AudioDataCallback = (audioData) => {
         const sampleRate = Number(audioData.sampleRate) || 16000
@@ -270,8 +224,8 @@ export class TranscriptionService {
           } else if (state === 'speaking' && energy < vadStopThreshold) {
             silentMs += frameMs
             if (silentMs >= vadGapMs) {
-              // 进入确认状态但立即取消（因为不发送音频）
-              silentMs = vadGapMs // 保持在边界
+              state = 'idle'
+              silentMs = 0
             }
           } else if (state === 'speaking' && energy >= vadStopThreshold) {
             silentMs = 0
@@ -296,13 +250,13 @@ export class TranscriptionService {
           // 说话状态：检测静音累积
           if (energy < vadStopThreshold) {
             silentMs += frameMs
-            // 静音持续足够久，进入确认期（此时继续发送音频，但准备结束）
-            if (silentMs >= vadGapMs) {
-              startConfirming()
-            }
             // 仍然发送静音帧（让 ASR 知道有短暂停顿）
             const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
             websocket.sendAudioData(pcm16)
+            if (silentMs >= vadGapMs) {
+              state = 'idle'
+              silentMs = 0
+            }
             return
           }
 
@@ -313,21 +267,6 @@ export class TranscriptionService {
           return
         }
 
-        if (state === 'confirming') {
-          // 确认状态：检测是否有新声音
-          if (energy >= vadStopThreshold) {
-            // 检测到新声音，取消结束，继续说话
-            cancelConfirming()
-            const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
-            websocket.sendAudioData(pcm16)
-            return
-          }
-
-          // 仍在静音中，继续发送音频帧（ASR 可能会返回最终结果）
-          const pcm16 = AudioCaptureService.floatToPCM16(audioData.data)
-          websocket.sendAudioData(pcm16)
-          return
-        }
       }
 
       audioCapture
@@ -384,19 +323,17 @@ export class TranscriptionService {
   private handleTranscript(data: LegacyTranscriptData): void {
     if (!this.onTranscriptCallback) return
 
-    const speakerId = data.speakerId || 'unknown'
     const isFinal = Boolean(data.isFinal)
 
-    let active = this.activeSegmentBySpeaker.get(speakerId)
+    let active = this.activeSegment
     if (!active) {
-      const nextIndex = (this.segmentCounterBySpeaker.get(speakerId) ?? 0) + 1
-      this.segmentCounterBySpeaker.set(speakerId, nextIndex)
+      this.segmentCounter += 1
 
       active = {
-        id: data.id || `${this.currentSessionId}:${speakerId}:${nextIndex}`,
+        id: data.id || `${this.currentSessionId}:${this.segmentCounter}`,
         startTime: data.startTime || new Date().toISOString(),
       }
-      this.activeSegmentBySpeaker.set(speakerId, active)
+      this.activeSegment = active
     } else if (data.id && active.id !== data.id) {
       // 后端落库后会返回稳定的 speechId，优先使用，确保后续分析/查询可用
       active.id = data.id
@@ -405,9 +342,6 @@ export class TranscriptionService {
     const transcript: Speech = {
       id: active.id,
       sessionId: this.currentSessionId,
-      speakerId: data.speakerId || 'unknown',
-      speakerName: data.speakerName || '未知发言者',
-      speakerColor: data.speakerColor,
       content: data.content || '',
       confidence: data.confidence || 0,
       startTime: data.startTime || active.startTime,
@@ -421,7 +355,7 @@ export class TranscriptionService {
     this.onTranscriptCallback(transcript)
 
     if (isFinal) {
-      this.activeSegmentBySpeaker.delete(speakerId)
+      this.activeSegment = null
     }
   }
 
@@ -461,8 +395,6 @@ export class TranscriptionService {
     this.stop()
     websocket.removeAllListeners()
     websocket.disconnect()
-    this.segmentCounterBySpeaker.clear()
-    this.activeSegmentBySpeaker.clear()
     this.onTranscriptCallback = undefined
     this.onErrorCallback = undefined
     this.onStatusChangeCallback = undefined

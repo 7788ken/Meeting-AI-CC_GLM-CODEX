@@ -6,6 +6,7 @@ import type { TranscriptEventDTO } from '../transcript-stream/transcript-stream.
 import { DebugErrorService } from '../debug-error/debug-error.service'
 import { TranscriptEventSegmentationGlmClient } from './transcript-event-segmentation.glm-client'
 import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
+import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
 import { buildTranscriptEventSegmentationPrompt } from './transcript-event-segmentation.prompt'
 import { parseTranscriptEventSegmentJson } from './transcript-event-segmentation.validation'
 import {
@@ -82,7 +83,8 @@ export class TranscriptEventSegmentationService {
     private readonly transcriptStreamService: TranscriptStreamService,
     private readonly glmClient: TranscriptEventSegmentationGlmClient,
     private readonly debugErrorService: DebugErrorService,
-    private readonly configService: TranscriptEventSegmentationConfigService
+    private readonly configService: TranscriptEventSegmentationConfigService,
+    private readonly glmRateLimiter: GlmRateLimiter
   ) {}
 
   setOnSegmentUpdate(handler?: TranscriptEventSegmentUpdateHandler | null): void {
@@ -332,6 +334,7 @@ export class TranscriptEventSegmentationService {
       )
       return null
     }
+    const extractedTrimmed = extractedText.trim()
 
     const isRebuildFinalFlush = input.mode === 'rebuild' && input.forceFlush
     const shouldSkipDanglingTail =
@@ -356,78 +359,178 @@ export class TranscriptEventSegmentationService {
     })
     const promptLength = prompt.system.length + prompt.user.length
 
-    try {
-      emitProgress('queued')
-      emitProgress('calling_llm')
-      const raw = await this.glmClient.generateStructuredJson(prompt)
-      emitProgress('parsing')
-      const parsed = parseTranscriptEventSegmentJson(raw)
+    emitProgress('queued')
+    emitProgress('calling_llm')
 
-      const candidate = typeof parsed.nextSentence === 'string' ? parsed.nextSentence.trim() : ''
-      const normalizedCandidate = normalizeForPunctuationOnlyCompare(candidate)
-      const normalizedExtracted = normalizeForPunctuationOnlyCompare(extractedText)
+    let nextSentence = extractedTrimmed
+    let persistStatus: TranscriptEventSegmentDTO['status'] = 'completed'
+    let persistError: string | undefined
+    let llmRaw: string | undefined
+    let llmRetryRaw: string | undefined
 
-      let nextSentence = ''
-      let persistStatus: TranscriptEventSegmentDTO['status'] = 'completed'
-      let persistError: string | undefined
+    const shouldRejectShortPrefix = (value: string): boolean => {
+      if (!value) return false
+      if (value.length >= extractedText.length) return false
+      const tail = extractedText.slice(value.length)
+      const endsWithTemporalSuffix = /([0-9一二三四五六七八九十]+(年|月|日|号)|[年月日号])$/u.test(value)
+      const continuesWithVerb =
+        /^(刚刚|刚才|刚|已经|才|就)?(创建|成立|建立|完成|生成|发布|上线|写成|制作)/u.test(tail)
+      return endsWithTemporalSuffix && continuesWithVerb
+    }
 
-      const shouldRejectShortPrefix = (value: string): boolean => {
-        if (!value) return false
-        if (value.length >= extractedText.length) return false
-        const tail = extractedText.slice(value.length)
-        const endsWithTemporalSuffix = /([0-9一二三四五六七八九十]+(年|月|日|号)|[年月日号])$/u.test(
-          value
-        )
-        const continuesWithVerb =
-          /^(刚刚|刚才|刚|已经|才|就)?(创建|成立|建立|完成|生成|发布|上线|写成|制作)/u.test(tail)
-        return endsWithTemporalSuffix && continuesWithVerb
-      }
+    const truncateForLog = (value: string | undefined): string | undefined => {
+      if (typeof value !== 'string') return undefined
+      const trimmed = value.trim()
+      if (!trimmed) return undefined
+      const limit = 2000
+      return trimmed.length > limit ? `${trimmed.slice(0, limit)}…(truncated)` : trimmed
+    }
 
-      if (
-        candidate &&
-        normalizedCandidate &&
-        normalizedExtracted.startsWith(normalizedCandidate) &&
-        !shouldRejectShortPrefix(candidate)
-      ) {
-        nextSentence = candidate
-      } else {
-        const retryPrompt = buildTranscriptEventSegmentationPrompt({
-          sessionId: input.sessionId,
-          previousSentence: input.previousSentence,
+    const degradeFromRateLimit = (reason: string, error?: unknown, glm?: Record<string, unknown>) => {
+      nextSentence = extractedTrimmed
+      persistStatus = 'failed'
+      persistError = reason
+
+      void this.debugErrorService.recordError({
+        sessionId: input.sessionId,
+        level: 'warn',
+        message: `Transcript event segmentation degraded: ${reason}`,
+        source: 'glm-api',
+        category: 'transcript-event-segmentation',
+        error: error instanceof Error ? error : new Error(String(error ?? reason)),
+        context: {
+          model: input.modelName,
+          promptLength,
+          revision: input.sourceRevision,
           startEventIndex: input.sourceStartEventIndex,
           endEventIndex: input.sourceEndEventIndex,
-          events: input.events,
-          extractedText,
-          strictEcho: true,
-          systemPrompt: this.configService.getConfig().systemPrompt,
-          strictSystemPrompt: this.configService.getConfig().strictSystemPrompt,
-        })
-        const retryRaw = await this.glmClient.generateStructuredJson(retryPrompt)
-        const retryParsed = parseTranscriptEventSegmentJson(retryRaw)
-        const retryCandidate =
-          typeof retryParsed.nextSentence === 'string' ? retryParsed.nextSentence.trim() : ''
+          extractedText: extractedTrimmed,
+          ...(glm ? { glm } : {}),
+        },
+        occurredAt: new Date(),
+      })
+    }
 
-        const extractedTrimmed = extractedText.trim()
-        const normalizedRetryCandidate = normalizeForPunctuationOnlyCompare(retryCandidate)
+    if (this.glmRateLimiter.isInCooldown()) {
+      degradeFromRateLimit('GLM 限流冷却中，跳过调用')
+    } else {
+      try {
+        const raw = await this.glmClient.generateStructuredJson(prompt)
+        llmRaw = raw
+        emitProgress('parsing')
+        const parsed = parseTranscriptEventSegmentJson(raw)
+
+        const candidate = typeof parsed.nextSentence === 'string' ? parsed.nextSentence.trim() : ''
+        const normalizedCandidate = normalizeForPunctuationOnlyCompare(candidate)
+        const normalizedExtracted = normalizeForPunctuationOnlyCompare(extractedText)
+
         if (
-          retryCandidate &&
-          normalizedRetryCandidate &&
-          normalizeForPunctuationOnlyCompare(extractedTrimmed).startsWith(normalizedRetryCandidate) &&
-          !shouldRejectShortPrefix(retryCandidate)
+          candidate &&
+          normalizedCandidate &&
+          normalizedExtracted.startsWith(normalizedCandidate) &&
+          !shouldRejectShortPrefix(candidate)
         ) {
-          nextSentence = retryCandidate
+          nextSentence = candidate
         } else {
-          nextSentence = extractedTrimmed
-          persistStatus = 'failed'
-          persistError = 'LLM 输出未能满足约束，已降级为 extractor 输出前缀'
+          const retryPrompt = buildTranscriptEventSegmentationPrompt({
+            sessionId: input.sessionId,
+            previousSentence: input.previousSentence,
+            startEventIndex: input.sourceStartEventIndex,
+            endEventIndex: input.sourceEndEventIndex,
+            events: input.events,
+            extractedText,
+            strictEcho: true,
+            systemPrompt: this.configService.getConfig().systemPrompt,
+            strictSystemPrompt: this.configService.getConfig().strictSystemPrompt,
+          })
+          if (this.glmRateLimiter.isInCooldown()) {
+            persistStatus = 'failed'
+            persistError = 'GLM 限流冷却中，跳过严格重试'
 
+            void this.debugErrorService.recordError({
+              sessionId: input.sessionId,
+              level: 'warn',
+              message: 'Transcript event segmentation degraded: rate limited cooldown',
+              source: 'glm-api',
+              category: 'transcript-event-segmentation',
+              error: new Error('GLM 限流冷却中，严格重试已跳过'),
+              context: {
+                model: input.modelName,
+                promptLength,
+                revision: input.sourceRevision,
+                startEventIndex: input.sourceStartEventIndex,
+                endEventIndex: input.sourceEndEventIndex,
+                extractedText: extractedTrimmed,
+                llmCandidate: candidate,
+              },
+              occurredAt: new Date(),
+            })
+          } else {
+            const retryRaw = await this.glmClient.generateStructuredJson(retryPrompt)
+            llmRetryRaw = retryRaw
+            const retryParsed = parseTranscriptEventSegmentJson(retryRaw)
+            const retryCandidate =
+              typeof retryParsed.nextSentence === 'string'
+                ? retryParsed.nextSentence.trim()
+                : ''
+
+            const normalizedRetryCandidate = normalizeForPunctuationOnlyCompare(retryCandidate)
+            if (
+              retryCandidate &&
+              normalizedRetryCandidate &&
+              normalizeForPunctuationOnlyCompare(extractedTrimmed).startsWith(
+                normalizedRetryCandidate
+              ) &&
+              !shouldRejectShortPrefix(retryCandidate)
+            ) {
+              nextSentence = retryCandidate
+            } else {
+              nextSentence = extractedTrimmed
+              persistStatus = 'failed'
+              persistError = 'LLM 输出未能满足约束，已降级为 extractor 输出前缀'
+
+              void this.debugErrorService.recordError({
+                sessionId: input.sessionId,
+                level: 'warn',
+                message: 'Transcript event segmentation degraded: LLM output mismatch',
+                source: 'glm-api',
+                category: 'transcript-event-segmentation',
+                error: new Error('LLM 输出未能满足“只加标点不改字/逐字一致”的约束'),
+                context: {
+                  model: input.modelName,
+                  promptLength,
+                  revision: input.sourceRevision,
+                  startEventIndex: input.sourceStartEventIndex,
+                  endEventIndex: input.sourceEndEventIndex,
+                  extractedText: extractedTrimmed,
+                  llmCandidate: candidate,
+                  llmRaw: truncateForLog(llmRaw),
+                  llmRetryCandidate: retryCandidate,
+                  llmRetryRaw: truncateForLog(llmRetryRaw),
+                },
+                occurredAt: new Date(),
+              })
+            }
+          }
+        }
+      } catch (error) {
+        const glmErrorContext = this.buildGlmErrorContext(error)
+        const status = glmErrorContext?.status
+        if (status === 429) {
+          degradeFromRateLimit('GLM 请求过多(429)，降级为 extractor 输出', error, glmErrorContext)
+        } else {
+          const message = error instanceof Error ? error.message : String(error)
+          this.logger.warn(
+            `Transcript event segmentation failed, sessionId=${input.sessionId}: ${message}`
+          )
+          emitProgress('failed', message)
           void this.debugErrorService.recordError({
             sessionId: input.sessionId,
-            level: 'warn',
-            message: 'Transcript event segmentation degraded: LLM output mismatch',
+            level: 'error',
+            message: `Transcript event segmentation failed: ${message}`,
             source: 'glm-api',
             category: 'transcript-event-segmentation',
-            error: new Error('LLM 输出未能满足“只加标点不改字/逐字一致”的约束'),
+            error,
             context: {
               model: input.modelName,
               promptLength,
@@ -435,14 +538,16 @@ export class TranscriptEventSegmentationService {
               startEventIndex: input.sourceStartEventIndex,
               endEventIndex: input.sourceEndEventIndex,
               extractedText: extractedTrimmed,
-              llmCandidate: candidate,
-              llmRetryCandidate: retryCandidate,
+              ...(glmErrorContext ? { glm: glmErrorContext } : {}),
             },
             occurredAt: new Date(),
           })
+          return null
         }
       }
+    }
 
+    try {
       emitProgress('persisting')
       const created = await this.segmentModel.create({
         sessionId: input.sessionId,
@@ -467,7 +572,7 @@ export class TranscriptEventSegmentationService {
 
       const dto = this.toDTO(created)
       this.emitSegmentUpdate(dto)
-      emitProgress('completed')
+      emitProgress('completed', persistError ? `已降级：${persistError}` : undefined)
       return { dto, createdId: created._id }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -475,7 +580,6 @@ export class TranscriptEventSegmentationService {
         `Transcript event segmentation failed, sessionId=${input.sessionId}: ${message}`
       )
       emitProgress('failed', message)
-      const glmErrorContext = this.buildGlmErrorContext(error)
       void this.debugErrorService.recordError({
         sessionId: input.sessionId,
         level: 'error',
@@ -489,7 +593,7 @@ export class TranscriptEventSegmentationService {
           revision: input.sourceRevision,
           startEventIndex: input.sourceStartEventIndex,
           endEventIndex: input.sourceEndEventIndex,
-          ...(glmErrorContext ? { glm: glmErrorContext } : {}),
+          extractedText: extractedTrimmed,
         },
         occurredAt: new Date(),
       })
@@ -532,21 +636,21 @@ export class TranscriptEventSegmentationService {
       }
 
       for (let segmentIndex = 0; segmentIndex < maxSegmentsPerEvent; segmentIndex += 1) {
-      const created = await this.generateAndPersistSegment({
-        sessionId,
-        taskId: this.createTaskId(),
-        mode: 'rebuild',
-        maxEventIndex: cappedEnd,
-        previousSentence,
-        prevSegmentId,
-        nextSequence,
-        sourceStartEventIndex: currentStart,
-        sourceEndEventIndex: currentEnd,
-        sourceRevision: state.revision,
-        events,
-        modelName,
-        forceFlush: currentEnd === cappedEnd,
-      })
+        const created = await this.generateAndPersistSegment({
+          sessionId,
+          taskId: this.createTaskId(),
+          mode: 'rebuild',
+          maxEventIndex: cappedEnd,
+          previousSentence,
+          prevSegmentId,
+          nextSequence,
+          sourceStartEventIndex: currentStart,
+          sourceEndEventIndex: currentEnd,
+          sourceRevision: state.revision,
+          events,
+          modelName,
+          forceFlush: currentEnd === cappedEnd,
+        })
 
         if (!created) {
           break

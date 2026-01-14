@@ -144,9 +144,6 @@ describe('API E2E Tests', () => {
     it('POST /api/speeches - should create a speech record', async () => {
       const speechData = {
         sessionId: testSessionId,
-        speakerId: 'speaker-test-1',
-        speakerName: '测试发言人',
-        speakerColor: '#1890ff',
         content: '这是一段测试的发言内容',
         confidence: 0.95,
       }
@@ -160,21 +157,16 @@ describe('API E2E Tests', () => {
       expect(response.body).toBeDefined()
       expect(response.body.id).toBeDefined()
       expect(response.body.content).toBe(speechData.content)
-      expect(response.body.speakerName).toBe(speechData.speakerName)
     })
 
     it('POST /api/speeches/batch - should batch create speech records', async () => {
       const speechesData = [
         {
           sessionId: testSessionId,
-          speakerId: 'speaker-1',
-          speakerName: '张三',
           content: '第一条发言',
         },
         {
           sessionId: testSessionId,
-          speakerId: 'speaker-2',
-          speakerName: '李四',
           content: '第二条发言',
         },
       ]
@@ -212,8 +204,6 @@ describe('API E2E Tests', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .send({
           sessionId: testSessionId,
-          speakerId: 'speaker-update',
-          speakerName: '更新测试',
           content: '原始内容',
         })
         .expect(201)
@@ -237,8 +227,6 @@ describe('API E2E Tests', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .send({
           sessionId: testSessionId,
-          speakerId: 'speaker-mark',
-          speakerName: '标记测试',
           content: '需要标记的内容',
         })
         .expect(201)
@@ -254,9 +242,6 @@ describe('API E2E Tests', () => {
       expect(markResponse.body.isMarked).toBe(true)
     })
   })
-
-  // Speaker Management routes not yet implemented - skipping tests
-  // TODO: Implement POST /api/sessions/:id/speakers and GET /api/sessions/:id/speakers
 
   describe('Configuration Validation', () => {
     it('should have valid timeout configuration', () => {

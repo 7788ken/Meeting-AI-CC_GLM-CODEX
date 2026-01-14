@@ -39,6 +39,7 @@
         v-for="segment in orderedSegments"
         :key="segment.id || segment.sequence"
         class="segment-item"
+        :class="{ 'has-target-analysis': true, 'is-highlighted': isSegmentHighlighted(segment) }"
         role="button"
         tabindex="0"
         @click="handleSelect(segment)"
@@ -51,21 +52,14 @@
               #{{ getDisplayStartIndex(segment) }}-#{{ getDisplayEndIndex(segment) }}
             </span>
           </div>
-          <div class="segment-header-right">
-            <el-tooltip content="AI 分析" placement="bottom">
-              <el-button
-                size="small"
-                circle
-                class="ai-analysis-trigger"
-                :loading="isSegmentAnalyzing(segment)"
-                :disabled="isSegmentAnalyzing(segment)"
-                @click.stop="emit('analyze-segment', segment)"
-                @keydown.stop
-              >
-                <el-icon><MagicStick /></el-icon>
-              </el-button>
-            </el-tooltip>
-          </div>
+          <el-button
+            size="small"
+            class="target-analysis-btn"
+            :icon="Search"
+            @click="handleTargetAnalysis($event, segment)"
+          >
+            针对性分析
+          </el-button>
         </div>
         <div class="segment-content">{{ segment.content }}</div>
       </div>
@@ -75,21 +69,21 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { Search } from '@element-plus/icons-vue'
 import type { TranscriptEventSegment } from '@/services/api'
 import type { TranscriptEventSegmentationProgressData } from '@/services/websocket'
-import { MagicStick } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   segments: TranscriptEventSegment[]
   order?: 'asc' | 'desc'
   loading?: boolean
   progress?: TranscriptEventSegmentationProgressData | null
-  analyzingSegmentKey?: string | null
+  highlightedSegmentId?: string | null
 }>()
 
 const emit = defineEmits<{
   (e: 'select-range', payload: { start: number; end: number; startOffset?: number; endOffset?: number }): void
-  (e: 'analyze-segment', segment: TranscriptEventSegment): void
+  (e: 'target-analysis', segment: TranscriptEventSegment): void
 }>()
 
 const panelRef = ref<HTMLElement | null>(null)
@@ -102,24 +96,16 @@ const orderedSegments = computed(() => {
   return normalizedOrder.value === 'asc' ? sorted.slice().reverse() : sorted
 })
 
+const isSegmentHighlighted = (segment: TranscriptEventSegment): boolean => {
+  return segment.id === props.highlightedSegmentId
+}
+
 function getDisplayStartIndex(segment: TranscriptEventSegment): number {
   return segment.sourceStartEventIndexExact ?? segment.sourceStartEventIndex
 }
 
 function getDisplayEndIndex(segment: TranscriptEventSegment): number {
   return segment.sourceEndEventIndexExact ?? segment.sourceEndEventIndex
-}
-
-function getSegmentKey(segment: TranscriptEventSegment): string {
-  const id = typeof segment.id === 'string' ? segment.id.trim() : ''
-  if (id) return id
-  return String(segment.sequence ?? '')
-}
-
-function isSegmentAnalyzing(segment: TranscriptEventSegment): boolean {
-  const currentKey = typeof props.analyzingSegmentKey === 'string' ? props.analyzingSegmentKey : null
-  if (!currentKey) return false
-  return currentKey === getSegmentKey(segment)
 }
 
 function handleSelect(segment: TranscriptEventSegment): void {
@@ -136,6 +122,11 @@ function handleItemKeydown(event: KeyboardEvent, segment: TranscriptEventSegment
     event.preventDefault()
     handleSelect(segment)
   }
+}
+
+function handleTargetAnalysis(event: Event, segment: TranscriptEventSegment): void {
+  event.stopPropagation()
+  emit('target-analysis', segment)
 }
 
 function isInFlightStage(stage: TranscriptEventSegmentationProgressData['stage']): boolean {
@@ -350,13 +341,31 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: 1;
 }
 
-.segment-header-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+/* 针对性分析按钮 */
+.target-analysis-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  height: auto;
+  border-radius: 6px;
+  background: rgba(47, 107, 255, 0.08);
+  border-color: rgba(47, 107, 255, 0.25);
+  color: var(--brand-600);
+  transition: all 0.2s var(--ease-out);
+  flex-shrink: 0;
+}
+
+.target-analysis-btn:hover {
+  background: rgba(47, 107, 255, 0.15);
+  border-color: rgba(47, 107, 255, 0.40);
+  color: var(--brand-700);
+  transform: translateY(-1px);
+}
+
+.target-analysis-btn :deep(.el-icon) {
+  font-size: 13px;
 }
 
 .segment-seq {
@@ -381,14 +390,11 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
   color: var(--ink-900);
 }
 
-.ai-analysis-trigger {
-  border: none;
-  color: #fff;
-  background: linear-gradient(135deg, #7c3aed, #2563eb);
-  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.20);
+/* 高亮当前正在分析的语句 */
+.segment-item.is-highlighted {
+  border-color: rgba(47, 107, 255, 0.5);
+  background: rgba(47, 107, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(47, 107, 255, 0.15);
 }
 
-.ai-analysis-trigger:hover {
-  filter: brightness(1.04);
-}
 </style>

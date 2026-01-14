@@ -4,6 +4,7 @@ import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
 import { randomUUID } from 'crypto'
 import { getGlmAuthorizationToken } from '../../common/llm/glm'
+import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
 
 export interface TranscriptChunk {
   text: string
@@ -26,7 +27,8 @@ export class GlmAsrClient {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly httpService: HttpService
+    private readonly httpService: HttpService,
+    private readonly glmRateLimiter: GlmRateLimiter
   ) {
     this.apiKey = (this.configService.get<string>('GLM_API_KEY') || '').trim()
     if (!this.apiKey) {
@@ -71,14 +73,16 @@ export class GlmAsrClient {
     let response: { data: NodeJS.ReadableStream; status: number; headers: Record<string, any> }
 
     try {
-      response = await firstValueFrom(
-        this.httpService.post(this.endpoint, requestBody.body, {
-          headers,
-          responseType: 'stream',
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-          validateStatus: () => true,
-        })
+      response = await this.glmRateLimiter.schedule(() =>
+        firstValueFrom(
+          this.httpService.post(this.endpoint, requestBody.body, {
+            headers,
+            responseType: 'stream',
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true,
+          })
+        )
       )
     } catch (error) {
       this.logger.error(
@@ -88,6 +92,10 @@ export class GlmAsrClient {
       throw new Error(
         `GLM ASR request failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       )
+    }
+
+    if (response.status === 429) {
+      this.glmRateLimiter.onRateLimit(this.readRetryAfterMs(response.headers))
     }
 
     if (response.status >= 400) {
@@ -245,6 +253,30 @@ export class GlmAsrClient {
       isFinal,
       requestId: resolvedRequestId,
     }
+  }
+
+  private readRetryAfterMs(headers?: Record<string, unknown>): number | null {
+    if (!headers) return null
+    const raw = headers['retry-after'] ?? headers['Retry-After']
+    if (raw == null) return null
+    const value = Array.isArray(raw) ? raw[0] : raw
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0, Math.floor(value * 1000))
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return null
+      const asNumber = Number(trimmed)
+      if (Number.isFinite(asNumber)) {
+        return Math.max(0, Math.floor(asNumber * 1000))
+      }
+      const asDate = Date.parse(trimmed)
+      if (!Number.isNaN(asDate)) {
+        const delta = asDate - Date.now()
+        return Math.max(0, Math.floor(delta))
+      }
+    }
+    return null
   }
 }
 

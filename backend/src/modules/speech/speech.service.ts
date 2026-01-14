@@ -7,9 +7,6 @@ import { CreateSpeechDto, UpdateSpeechDto, SpeechDto } from './dto/speech.dto'
 export type UpdateRealtimeSpeechInput = {
   content?: string
   confidence?: number
-  speakerId?: string
-  speakerName?: string
-  speakerColor?: string
   endTime?: Date
 }
 
@@ -28,9 +25,6 @@ export class SpeechService {
     const now = new Date()
     const speech = new this.speechModel({
       sessionId: dto.sessionId,
-      speakerId: dto.speakerId,
-      speakerName: dto.speakerName,
-      speakerColor: dto.speakerColor,
       content: dto.content,
       confidence: dto.confidence ?? 0,
       startTime: now,
@@ -61,18 +55,6 @@ export class SpeechService {
    */
   async findBySession(sessionId: string): Promise<SpeechDto[]> {
     const speeches = await this.speechModel.find({ sessionId }).sort({ startTime: 1 }).exec()
-
-    return speeches.map(s => this.toDto(s))
-  }
-
-  /**
-   * 查询发言者的所有发言记录
-   */
-  async findBySpeaker(sessionId: string, speakerId: string): Promise<SpeechDto[]> {
-    const speeches = await this.speechModel
-      .find({ sessionId, speakerId })
-      .sort({ startTime: 1 })
-      .exec()
 
     return speeches.map(s => this.toDto(s))
   }
@@ -114,18 +96,6 @@ export class SpeechService {
 
     if (input.confidence !== undefined) {
       speech.confidence = input.confidence
-    }
-
-    if (input.speakerId !== undefined) {
-      speech.speakerId = input.speakerId
-    }
-
-    if (input.speakerName !== undefined) {
-      speech.speakerName = input.speakerName
-    }
-
-    if (input.speakerColor !== undefined) {
-      speech.speakerColor = input.speakerColor
     }
 
     if (input.endTime) {
@@ -178,9 +148,6 @@ export class SpeechService {
     const now = new Date()
     const speeches = dtos.map(dto => ({
       sessionId: dto.sessionId,
-      speakerId: dto.speakerId,
-      speakerName: dto.speakerName,
-      speakerColor: dto.speakerColor,
       content: dto.content,
       confidence: dto.confidence ?? 0,
       startTime: now,
@@ -209,9 +176,6 @@ export class SpeechService {
     return {
       id: speech._id.toString(),
       sessionId: speech.sessionId,
-      speakerId: speech.speakerId,
-      speakerName: speech.speakerName,
-      speakerColor: speech.speakerColor,
       content: speech.content,
       confidence: speech.confidence,
       startTime: speech.startTime,

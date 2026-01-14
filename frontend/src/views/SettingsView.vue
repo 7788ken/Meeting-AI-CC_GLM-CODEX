@@ -77,13 +77,6 @@
             </el-select>
           </el-form-item>
 
-          <el-form-item label="分析类型">
-            <el-checkbox-group v-model="enabledAnalysisTypes">
-              <el-checkbox label="core">核心要点</el-checkbox>
-              <el-checkbox label="brief">简要回答</el-checkbox>
-              <el-checkbox label="deep">深度分析</el-checkbox>
-            </el-checkbox-group>
-          </el-form-item>
         </el-form>
       </el-card>
 
@@ -125,7 +118,6 @@ const language = ref<string>('zh')
 const autoPunctuation = ref<boolean>(true)
 const showConfidence = ref<boolean>(false)
 const defaultModel = ref<string>('glm')
-const enabledAnalysisTypes = ref<string[]>(['core', 'brief', 'deep'])
 const theme = ref<string>('light')
 const fontSize = ref<number>(14)
 

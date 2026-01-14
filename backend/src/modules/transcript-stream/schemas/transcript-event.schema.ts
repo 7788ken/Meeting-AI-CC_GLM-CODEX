@@ -18,12 +18,6 @@ export class TranscriptEvent {
   eventIndex: number
 
   @Prop({ required: true })
-  speakerId: string
-
-  @Prop({ required: true })
-  speakerName: string
-
-  @Prop({ required: true })
   content: string
 
   @Prop({ default: false })
