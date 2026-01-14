@@ -331,8 +331,7 @@ docker-compose exec mongodb mongosh -u meeting_user -p meeting_pass
 | `PORT` | `5181` | 服务端口 |
 | `DATABASE_URL` | - | PostgreSQL 连接字符串 |
 | `MONGODB_URI` | - | MongoDB 连接字符串 |
-| `GLM_API_KEY` | - | 千问 API 密钥 |
-| `DOUBAO_API_KEY` | - | 豆包 API 密钥 |
+| `GLM_API_KEY` | - | GLM API 密钥 |
 
 ### 前端环境变量
 
@@ -350,7 +349,6 @@ docker-compose exec mongodb mongosh -u meeting_user -p meeting_pass
 DATABASE_URL=postgresql://user:pass@prod-db:5432/meeting_ai
 MONGODB_URI=mongodb://user:pass@prod-mongo:27017/meeting_ai
 GLM_API_KEY=your_api_key
-DOUBAO_API_KEY=your_api_key
 ```
 
 ### 2. 配置反向代理

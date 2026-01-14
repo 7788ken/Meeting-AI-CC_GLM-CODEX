@@ -13,15 +13,10 @@ export interface Speaker {
 }
 
 // AI模型类型
-export type AIModel = 'qianwen' | 'doubao' | 'glm' | 'minimax' | 'kimi' | 'dc'
+export type AIModel = 'glm'
 
 export const AI_MODELS: SelectOption[] = [
-  { label: '千问', value: 'qianwen' },
-  { label: '豆包', value: 'doubao' },
   { label: 'GLM', value: 'glm' },
-  { label: 'MINIMAX', value: 'minimax' },
-  { label: 'KIMI', value: 'kimi' },
-  { label: 'DC', value: 'dc' },
 ]
 
 // ASR 配置

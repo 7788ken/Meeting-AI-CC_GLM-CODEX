@@ -245,8 +245,6 @@ AI 模型选择器组件。
 | `update:modelValue` | `model: AIModel` | 模型变化 |
 
 **可用模型**:
-- `qianwen` - 千问
-- `doubao` - 豆包
 - `glm` - 智谱 GLM（模型版本由 `GLM_ANALYSIS_MODEL` 配置）
 - `GLM_ANALYSIS_MODEL` 中配置的模型名 - 智谱 GLM（兼容别名）
 

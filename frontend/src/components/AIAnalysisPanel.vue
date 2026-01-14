@@ -188,7 +188,7 @@ const statusMessage = ref('')
 const currentAnalysis = ref<AIAnalysis | null>(null)
 
 // 选中的值
-const selectedModel = ref<AIModel>('qianwen')
+const selectedModel = ref<AIModel>('glm')
 const selectedAnalysisType = ref(props.defaultAnalysisType)
 
 // 是否正在分析
@@ -234,8 +234,6 @@ const statusClass = computed(() => {
 
 const MODEL_LABELS: Record<string, string> = {
   glm: '智谱 GLM',
-  doubao: '豆包',
-  qianwen: '千问',
 }
 
 function normalizeModelUsed(model: string): string {
@@ -244,11 +242,6 @@ function normalizeModelUsed(model: string): string {
   const lower = normalized.toLowerCase()
 
   if (lower === 'glm' || lower.startsWith('glm-')) return 'glm'
-  if (lower === 'doubao' || lower.startsWith('doubao')) return 'doubao'
-  if (lower === 'qianwen' || lower.startsWith('qwen') || lower.startsWith('qianwen')) {
-    return 'qianwen'
-  }
-
   return normalized
 }
 
@@ -323,7 +316,6 @@ async function handleAnalysis() {
       sessionId: props.sessionId,
       speechIds: props.speeches.map((s) => s.id),
       analysisType: selectedAnalysisType.value as any,
-      model: selectedModel.value,
     })
 
     const analysis = response.data

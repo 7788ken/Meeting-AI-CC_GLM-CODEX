@@ -11,7 +11,6 @@ import type { AsrConfig } from '../types'
 export interface TranscriptionConfig {
   sessionId: string
   language?: string
-  model?: string
   asrConfig?: Partial<AsrConfig>
   speakerId?: string
   speakerName?: string
@@ -151,7 +150,6 @@ export class TranscriptionService {
 
       // 开始转写
       websocket.startTranscribe({
-        model: config.model || 'doubao',
         asrConfig: resolveAsrConfig(config),
       })
 

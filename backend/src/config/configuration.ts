@@ -14,23 +14,9 @@ export default () => ({
 
   // AI模型配置
   ai: {
-    qianwen: {
-      apiKey: process.env.QIANWEN_API_KEY || '',
-      endpoint: process.env.QIANWEN_ENDPOINT || 'https://dashscope.aliyuncs.com/api/v1',
-    },
-    doubao: {
-      apiKey: process.env.DOUBAO_API_KEY || '',
-      endpoint: process.env.DOUBAO_ENDPOINT || '',
-    },
     glm: {
       apiKey: process.env.GLM_API_KEY || '',
       endpoint: process.env.GLM_ENDPOINT || '',
     },
-  },
-
-  // 语音识别配置
-  transcript: {
-    endpoint: process.env.TRANSCRIPT_ENDPOINT || '',
-    apiKey: process.env.TRANSCRIPT_API_KEY || '',
   },
 })

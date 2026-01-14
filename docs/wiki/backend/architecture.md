@@ -18,14 +18,12 @@ backend/src/
 ├── modules/             # 业务模块
 │   ├── analysis/        # AI 分析模块 (B1022-B1026)
 │   │   ├── clients/
-│   │   │   ├── glm.client.ts       # 千问 AI 客户端 (B1023)
-│   │   │   └── doubao.client.ts    # 豆包 AI 客户端 (B1024)
+│   │   │   └── glm.client.ts       # GLM AI 客户端 (B1023)
 │   │   ├── dto/
 │   │   │   ├── analysis.dto.ts
 │   │   │   └── analysis.enum.ts
 │   │   ├── schemas/
 │   │   │   └── analysis.schema.ts   # Mongoose Schema (B1011)
-│   │   ├── model-manager.service.ts # 多模型管理器 (B1025)
 │   │   ├── analysis.controller.ts   # 分析控制器 (B1022)
 │   │   ├── analysis.service.ts      # 分析服务 (B1026)
 │   │   └── analysis.module.ts
@@ -50,8 +48,8 @@ backend/src/
 │   └── transcript/      # 转写服务模块 (B1016-B1019)
 │       ├── dto/
 │       │   └── transcript.dto.ts
-│       ├── doubao.client.ts         # 豆包 ASR 客户端 (B1018)
-│       ├── doubao.codec.ts          # 豆包二进制协议编解码 (B1019)
+│       ├── glm-asr.client.ts        # GLM ASR 客户端
+│       ├── smart-audio-buffer.service.ts # 智能音频缓冲
 │       ├── transcript.gateway.ts    # WebSocket 网关 (B1016)
 │       ├── transcript.service.ts    # 转写服务 (B1017)
 │       └── transcript.module.ts
@@ -86,7 +84,7 @@ backend/src/
 @Module({
   imports: [MongooseModule.forFeature([{ name: 'Analysis', schema: AnalysisSchema }])],
   controllers: [AnalysisController],
-  providers: [AnalysisService, ModelManagerService, GLMClient, DoubaoClient],
+  providers: [AnalysisService, GLMClient],
   exports: [AnalysisService],
 })
 export class AnalysisModule {}
@@ -101,36 +99,16 @@ export class AnalysisModule {}
 export class AnalysisService {
   constructor(
     @InjectModel('Analysis') private analysisModel: Model<Analysis>,
-    private modelManager: ModelManagerService,
+    private glmClient: GlmClient,
   ) {}
 
   async generate(request: AnalysisRequest): Promise<AIAnalysis> {
-    const client = this.modelManager.getClient(request.model)
-    return client.analyze(request)
+    return this.glmClient.generateAnalysis(request)
   }
 }
 ```
 
-### 3. 策略模式 (Strategy Pattern)
-
-多 AI 模型支持使用策略模式：
-
-```typescript
-@Injectable()
-export class ModelManagerService {
-  private clients = new Map<string, AIModelClient>()
-
-  getClient(model: string): AIModelClient {
-    const client = this.clients.get(model)
-    if (!client) {
-      throw new BadRequestException(`Unknown model: ${model}`)
-    }
-    return client
-  }
-}
-```
-
-### 4. WebSocket 网关
+### 3. WebSocket 网关
 
 实时通信使用 WebSocket Gateway：
 
@@ -221,7 +199,7 @@ GET    /analysis/session/:id        # 获取会话的所有分析
 
 ```
 客户端 → 服务器:
-  audio:start    { sessionId, language, model }
+  audio:start    { sessionId, language }
   audio:data     ArrayBuffer (PCM16)
   audio:end      {}
 
@@ -232,22 +210,18 @@ GET    /analysis/session/:id        # 获取会话的所有分析
 
 ## 外部服务集成
 
-### 豆包 ASR (语音识别)
+### GLM ASR (语音识别)
 
 - 二进制协议通信
 - 流式音频处理
 - 实时转写返回
 
-### 千问 AI (文本分析)
+### GLM AI (文本分析)
 
 - HTTP API 调用
 - Prompt 模板管理
 - 结果缓存机制
 
-### 豆包 AI (备选分析)
-
-- HTTP API 调用
-- 与千问接口统一
 
 ## 错误处理
 
@@ -295,11 +269,10 @@ export class CreateSessionDto {
 
 ```typescript
 // 单元测试
-describe('DoubaoClient', () => {
-  it('should encode audio frame correctly', () => {
-    const codec = new DoubaoCodec()
-    const buffer = codec.encodeFrame({ seq: 1, audio: new Int16Array([...]) })
-    expect(buffer).toMatchSnapshot()
+describe('AnalysisService', () => {
+  it('should generate analysis result', async () => {
+    const result = await service.generate({ sessionId: '1', speechIds: [] })
+    expect(result).toBeDefined()
   })
 })
 ```

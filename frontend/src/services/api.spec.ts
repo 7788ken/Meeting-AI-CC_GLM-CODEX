@@ -292,7 +292,6 @@ describe('API Services', () => {
           sessionId: 'session-1',
           speechIds: ['speech-1', 'speech-2'],
           analysisType: 'summary' as const,
-          model: 'qianwen',
         }
         vi.mocked(post).mockResolvedValue({
           data: {
@@ -368,15 +367,14 @@ describe('API Services', () => {
     it('应该接受所有有效的分析类型', () => {
       const validTypes = ['summary', 'action-items', 'sentiment', 'keywords', 'topics', 'full-report'] as const
 
-      validTypes.forEach((type) => {
-        const request = {
-          sessionId: 'session-1',
-          speechIds: ['speech-1'],
-          analysisType: type,
-          model: 'qianwen',
-        }
-        expect(request.analysisType).toBe(type)
-      })
+        validTypes.forEach((type) => {
+          const request = {
+            sessionId: 'session-1',
+            speechIds: ['speech-1'],
+            analysisType: type,
+          }
+          expect(request.analysisType).toBe(type)
+        })
     })
   })
 })

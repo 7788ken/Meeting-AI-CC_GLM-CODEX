@@ -57,7 +57,7 @@
   gap: 14px;
   height: 100%;
   min-height: 0;
-  max-width: 1400px;
+  /* max-width: 1400px; */
   margin: 0 auto;
   width: 100%;
 }

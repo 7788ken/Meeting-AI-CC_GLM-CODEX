@@ -199,7 +199,7 @@ export const useMeetingStore = defineStore('meeting', () => {
 
 ```typescript
 // types/index.ts
-export type AIModel = 'qianwen' | 'doubao' | 'glm' | 'minimax' | 'kimi' | 'dc'
+export type AIModel = 'glm'
 
 export interface Speech {
   id: string

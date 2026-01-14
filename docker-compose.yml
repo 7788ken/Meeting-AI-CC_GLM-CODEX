@@ -65,12 +65,6 @@ services:
       DATABASE_URL: postgresql://quickchatbox:quickchatbox@postgres:5432/meeting_ai
       MONGODB_URI: mongodb://mongo:27017/meeting_ai
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
-      # 转写配置（豆包 ASR）
-      TRANSCRIPT_ENDPOINT: ${TRANSCRIPT_ENDPOINT}
-      TRANSCRIPT_APP_KEY: ${TRANSCRIPT_APP_KEY}
-      TRANSCRIPT_ACCESS_KEY: ${TRANSCRIPT_ACCESS_KEY}
-      TRANSCRIPT_RESOURCE_ID: ${TRANSCRIPT_RESOURCE_ID}
-      TRANSCRIPT_RESPONSE_TIMEOUT_MS: ${TRANSCRIPT_RESPONSE_TIMEOUT_MS:-5000}
       # GLM 配置
       GLM_API_KEY: ${GLM_API_KEY}
       GLM_ENDPOINT: ${GLM_ENDPOINT}

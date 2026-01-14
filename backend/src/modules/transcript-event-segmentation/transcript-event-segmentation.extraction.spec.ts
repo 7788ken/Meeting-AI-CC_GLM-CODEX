@@ -9,7 +9,7 @@ describe('transcript-event-segmentation.extraction', () => {
     const { rawSegment } = extractRawNextSegment({
       previousSentence: 'Hello, 大家好，欢迎收听我们的播客。',
       events: [
-        { eventIndex: 0, content: '欢迎收听豆包AI播客节目。' } as any,
+        { eventIndex: 0, content: '欢迎收听AI会议助手播客节目。' } as any,
         { eventIndex: 1, content: 'Hello, 大家好，欢迎收听我们的播客。' } as any,
         {
           eventIndex: 2,
@@ -29,7 +29,7 @@ describe('transcript-event-segmentation.extraction', () => {
       previousSentence:
         '啊今天咱们来聊一聊这个ai会议助手是怎么通过合理的模块设计能够让会议变得更高效？',
       events: [
-        { eventIndex: 0, content: '欢迎收听豆包AI播客节目。' } as any,
+        { eventIndex: 0, content: '欢迎收听AI会议助手播客节目。' } as any,
         { eventIndex: 1, content: 'Hello, 大家好，欢迎收听我们的播客。' } as any,
         {
           eventIndex: 2,

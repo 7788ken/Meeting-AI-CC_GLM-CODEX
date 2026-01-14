@@ -27,7 +27,6 @@ export interface ConnectionStatus {
 export type ConnectionStatusHandler = (status: ConnectionStatus) => void
 
 export type StartTranscribePayload = {
-  model?: string
   asrConfig?: AsrConfig
 }
 

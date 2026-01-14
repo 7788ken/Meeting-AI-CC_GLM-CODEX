@@ -9,123 +9,148 @@
       />
 
       <div class="header-right">
-        <el-tag :type="recordingTag.type" size="small" class="recording-tag">
-          <span class="recording-dot" />
-          {{ recordingTag.text }}
-        </el-tag>
+        <el-tooltip :content="recordingTag.text" placement="bottom">
+          <span
+            class="recording-indicator header-icon-button"
+            :class="`is-${recordingIndicatorStatus}`"
+            role="status"
+            :aria-label="recordingTag.text"
+          >
+            <el-icon :class="{ 'is-spinning': recordingIndicatorStatus === 'connecting' }">
+              <component :is="recordingIndicatorIcon" />
+            </el-icon>
+          </span>
+        </el-tooltip>
 
         <el-tag v-if="wsReconnectTag" :type="wsReconnectTag.type" size="small" class="ws-tag">
           {{ wsReconnectTag.text }}
         </el-tag>
 
-        <el-tooltip content="设置" placement="bottom">
-          <el-button size="small" circle class="ghost-icon" @click="settingsDrawerVisible = true">
-            <el-icon><Setting /></el-icon>
-            <span class="sr-only">设置</span>
-          </el-button>
-        </el-tooltip>
+        <div class="header-icon-group">
+          <el-tooltip content="设置" placement="bottom">
+            <el-button
+              size="small"
+              circle
+              class="header-icon-button ghost-icon"
+              @click="settingsDrawerVisible = true"
+            >
+              <el-icon><Setting /></el-icon>
+              <span class="sr-only">设置</span>
+            </el-button>
+          </el-tooltip>
 
-        <el-button
-          size="small"
-          type="warning"
-          plain
-          class="debug-trigger"
-          :disabled="!sessionId"
-          @click="debugDrawerVisible = true"
-        >
-          调试
-        </el-button>
+          <el-tooltip content="调试" placement="bottom">
+            <el-button
+              size="small"
+              circle
+              class="header-icon-button ghost-icon"
+              :disabled="!sessionId"
+              @click="debugDrawerVisible = true"
+            >
+              <el-icon><Monitor /></el-icon>
+              <span class="sr-only">调试</span>
+            </el-button>
+          </el-tooltip>
+        </div>
       </div>
     </template>
 
-    <!-- 上部：原文流（豆包语音识别） -->
-    <section :class="['realtime-transcript-bar', { collapsed: realtimeCollapsed }]" class="app-surface">
-      <div class="realtime-header">
-        <div class="realtime-title">
-          <h3>语音转写</h3>
-          <el-button size="small" class="ghost-button" @click="realtimeCollapsed = !realtimeCollapsed">
-            {{ realtimeCollapsed ? '展开' : '折叠' }}
+    <div :class="['workspace-grid', { 'realtime-collapsed': realtimeCollapsed }]">
+      <!-- 上部：原文流（GLM 语音识别） -->
+      <section :class="['realtime-transcript-bar', { collapsed: realtimeCollapsed }]" class="app-surface">
+        <div class="realtime-header">
+          <div class="realtime-title">
+            <h3>语音转写</h3>
+          <el-button
+            size="small"
+            class="ghost-button"
+            :aria-label="realtimeCollapsed ? '展开语音转写' : '折叠语音转写'"
+            @click="realtimeCollapsed = !realtimeCollapsed"
+          >
+            <el-icon>
+              <component :is="realtimeCollapsed ? ArrowRight : ArrowLeft" />
+            </el-icon>
           </el-button>
-        </div>
-	        <div class="realtime-status">
-	           
-	          <el-tag type="info" size="small">事件数: {{ transcriptStreamStore.events.length }}</el-tag>
-	          
-	          <el-tag v-if="segmentationStageText" :type="segmentationStageTagType" size="small">
-	            LLM: {{ segmentationStageText }}
-	          </el-tag>
-	        </div>
-	      </div>
-	      <div v-show="!realtimeCollapsed" class="realtime-content">
-        <div v-if="transcriptStreamStore.events.length === 0" class="realtime-placeholder">
-          暂无实时转写内容
-        </div>
-        <div v-else ref="realtimeScrollRef" class="realtime-stream-scroll" @scroll="handleRealtimeScroll">
-          <div class="realtime-stream" role="article" aria-label="原文流内容">
-            <span
-              v-for="(event, index) in transcriptStreamStore.events"
-              :key="event.eventIndex"
-              :data-event-index="event.eventIndex"
-              :class="[
-                'realtime-event-item',
-                event.isFinal ? 'is-final' : 'is-draft',
-                focusedEventIndex === event.eventIndex ? 'is-focused' : '',
-                isEventFullyHighlighted(event.eventIndex, event.content) ? 'is-highlighted' : '',
-              ]"
-              :style="{ '--stagger': index }"
-              :title="`事件#${event.eventIndex}`"
-            >
-              <span class="event-inline-meta">
-                <span class="event-index">#{{ event.eventIndex }}</span>
-                <span
-                  v-if="event.isFinal && getEventDurationText(event.eventIndex)"
-                  class="event-duration"
-                >
-                  {{ getEventDurationText(event.eventIndex) }}
-                </span>
-              </span>
-              <span class="event-text">
-                <template v-if="getEventHighlightParts(event.eventIndex, event.content)?.mode === 'partial'">
-                  <span>{{ getEventHighlightParts(event.eventIndex, event.content)?.before }}</span>
-                  <span class="event-text-highlight">
-                    {{ getEventHighlightParts(event.eventIndex, event.content)?.highlight }}
+          </div>
+  	        <div class="realtime-status">
+  	           
+  	          <el-tag type="info" size="small">事件数: {{ transcriptStreamStore.events.length }}</el-tag>
+  	          
+  	          <el-tag v-if="segmentationStageText" :type="segmentationStageTagType" size="small">
+  	            LLM: {{ segmentationStageText }}
+  	          </el-tag>
+  	        </div>
+  	      </div>
+  	      <div v-show="!realtimeCollapsed" class="realtime-content">
+          <div v-if="transcriptStreamStore.events.length === 0" class="realtime-placeholder">
+            暂无实时转写内容
+          </div>
+          <div v-else ref="realtimeScrollRef" class="realtime-stream-scroll" @scroll="handleRealtimeScroll">
+            <div class="realtime-stream" role="article" aria-label="原文流内容">
+              <span
+                v-for="(event, index) in transcriptStreamStore.events"
+                :key="event.eventIndex"
+                :data-event-index="event.eventIndex"
+                :class="[
+                  'realtime-event-item',
+                  event.isFinal ? 'is-final' : 'is-draft',
+                  focusedEventIndex === event.eventIndex ? 'is-focused' : '',
+                  isEventFullyHighlighted(event.eventIndex, event.content) ? 'is-highlighted' : '',
+                ]"
+                :style="{ '--stagger': index }"
+                :title="`事件#${event.eventIndex}`"
+              >
+                <span class="event-inline-meta">
+                  <span class="event-index">#{{ event.eventIndex }}</span>
+                  <span
+                    v-if="event.isFinal && getEventDurationText(event.eventIndex)"
+                    class="event-duration"
+                  >
+                    {{ getEventDurationText(event.eventIndex) }}
                   </span>
-                  <span>{{ getEventHighlightParts(event.eventIndex, event.content)?.after }}</span>
-                </template>
-                <template v-else>
-                  {{ event.content }}
-                </template>
+                </span>
+                <span class="event-text">
+                  <template v-if="getEventHighlightParts(event.eventIndex, event.content)?.mode === 'partial'">
+                    <span>{{ getEventHighlightParts(event.eventIndex, event.content)?.before }}</span>
+                    <span class="event-text-highlight">
+                      {{ getEventHighlightParts(event.eventIndex, event.content)?.highlight }}
+                    </span>
+                    <span>{{ getEventHighlightParts(event.eventIndex, event.content)?.after }}</span>
+                  </template>
+                  <template v-else>
+                    {{ event.content }}
+                  </template>
+                </span>
+                <span class="event-sep"> </span>
               </span>
-              <span class="event-sep"> </span>
-            </span>
+            </div>
           </div>
         </div>
+      </section>
+
+      <div v-if="isNarrow" class="mobile-pane-switch app-surface" role="tablist" aria-label="工作台分区">
+        <button
+          type="button"
+          :class="['pane-tab', activePane === 'segments' ? 'is-active' : '']"
+          role="tab"
+          :aria-selected="activePane === 'segments'"
+          @click="activePane = 'segments'"
+        >
+          语句拆分
+        </button>
+        <button
+          type="button"
+          :class="['pane-tab', activePane === 'analysis' ? 'is-active' : '']"
+          role="tab"
+          :aria-selected="activePane === 'analysis'"
+          @click="activePane = 'analysis'"
+        >
+          AI分析
+        </button>
       </div>
-    </section>
 
-    <div v-if="isNarrow" class="mobile-pane-switch app-surface" role="tablist" aria-label="工作台分区">
-      <button
-        type="button"
-        :class="['pane-tab', activePane === 'segments' ? 'is-active' : '']"
-        role="tab"
-        :aria-selected="activePane === 'segments'"
-        @click="activePane = 'segments'"
-      >
-        语句拆分
-      </button>
-      <button
-        type="button"
-        :class="['pane-tab', activePane === 'analysis' ? 'is-active' : '']"
-        role="tab"
-        :aria-selected="activePane === 'analysis'"
-        @click="activePane = 'analysis'"
-      >
-        AI分析
-      </button>
-    </div>
-
-    <!-- 下部：左右分栏 -->
-    <div class="content-area" :class="{ narrow: isNarrow }">
+      <!-- 下部：左右分栏 -->
+      <div class="content-area" :class="{ narrow: isNarrow }">
       <!-- 下左：GLM 拆分后的独立发言 -->
 	      <transition name="panel-fade" mode="out-in">
 	      <section v-if="!isNarrow || activePane === 'segments'" class="transcript-panel app-surface">
@@ -223,11 +248,12 @@
         </div>
         <div v-else-if="analysisLoading" v-loading="true" class="analysis-loading"></div>
         <div v-else class="empty-state">
-          <el-empty description="停止录音后将自动生成分析（可在此选择提示词模板）" />
+          <el-empty description="点击语句右侧的按钮查看分析结果" />
         </div>
       </div>
     </section>
     </transition>
+      </div>
     </div>
 
     <MeetingActionBar
@@ -274,7 +300,17 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-	import { Setting } from '@element-plus/icons-vue'
+import {
+  Setting,
+  Monitor,
+  VideoCamera,
+  VideoCameraFilled,
+  VideoPause,
+  WarningFilled,
+  Loading,
+  ArrowLeft,
+  ArrowRight,
+} from '@element-plus/icons-vue'
 	import {
 	  sessionApi,
 	  speechApi,
@@ -609,13 +645,35 @@ watch(selectedPromptTemplateId, (nextId) => {
   updateSettings({ activePromptTemplateId: normalized })
 })
 
-const recordingTag = computed(() => {
-  if (isSessionEnded.value) return { type: 'info' as const, text: '会话已结束' }
-  if (recordingStatus.value === 'recording') return { type: 'success' as const, text: '录制中' }
-  if (recordingStatus.value === 'paused') return { type: 'warning' as const, text: '已静音' }
-  if (recordingStatus.value === 'connecting') return { type: 'warning' as const, text: '连接中' }
-  if (recordingStatus.value === 'error') return { type: 'danger' as const, text: '录音出错' }
-  return { type: 'info' as const, text: '未录制' }
+type RecordingTag = { type?: 'success' | 'warning' | 'danger' | 'info'; text: string }
+
+const recordingTag = computed<RecordingTag>(() => {
+  if (isSessionEnded.value) return { type: 'info', text: '会话已结束' }
+  if (recordingStatus.value === 'recording') return { type: 'success', text: '录制中' }
+  if (recordingStatus.value === 'paused') return { type: 'warning', text: '已静音' }
+  if (recordingStatus.value === 'connecting') return { type: 'warning', text: '连接中' }
+  if (recordingStatus.value === 'error') return { type: 'danger', text: '录音出错' }
+  return { type: 'info', text: '未录制' }
+})
+
+type RecordingIndicatorStatus = 'recording' | 'idle' | 'paused' | 'connecting' | 'error' | 'ended'
+
+const recordingIndicatorStatus = computed<RecordingIndicatorStatus>(() => {
+  if (isSessionEnded.value) return 'ended'
+  if (recordingStatus.value === 'recording') return 'recording'
+  if (recordingStatus.value === 'paused') return 'paused'
+  if (recordingStatus.value === 'connecting') return 'connecting'
+  if (recordingStatus.value === 'error') return 'error'
+  return 'idle'
+})
+
+const recordingIndicatorIcon = computed(() => {
+  const status = recordingIndicatorStatus.value
+  if (status === 'recording') return VideoCameraFilled
+  if (status === 'paused') return VideoPause
+  if (status === 'connecting') return Loading
+  if (status === 'error') return WarningFilled
+  return VideoCamera
 })
 
 
@@ -925,15 +983,9 @@ async function startRecording() {
 
     recordingStatus.value = 'connecting'
 
-    // 读取 ASR 模型配置（优先使用设置面板值，回退到环境变量）
-    const asrModel = (settings.value.asrModel || import.meta.env.VITE_ASR_MODEL || 'doubao') as
-      | 'doubao'
-      | 'glm'
-
     // 设置转写服务回调
     await transcription.start({
       sessionId: sessionId.value,
-      model: asrModel,
       onTranscript: (transcript: Speech) => {
         const index = speeches.value.findIndex((item) => item.id === transcript.id)
         if (index >= 0) {
@@ -1321,33 +1373,90 @@ function getEventDurationText(eventIndex: number): string | null {
   flex-wrap: wrap;
 }
 
-.recording-tag {
+.header-icon-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.header-icon-button :deep(.el-icon) {
+  font-size: 15px;
+}
+
+.header-icon-group {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-color: rgba(15, 23, 42, 0.10);
-  background: rgba(255, 255, 255, 0.55);
+}
+
+.header-icon-group :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.recording-indicator {
+  --indicator-bg: rgba(255, 255, 255, 0.55);
+  --indicator-border: rgba(15, 23, 42, 0.14);
+  --indicator-color: var(--ink-700);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--indicator-border);
+  background: var(--indicator-bg);
+  color: var(--indicator-color);
+  border-radius: 10px;
   backdrop-filter: blur(10px);
+  transition: border-color 0.2s var(--ease-out), background 0.2s var(--ease-out),
+    color 0.2s var(--ease-out), border-radius 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
 }
 
-.recording-dot {
-  width: 6px;
-  height: 6px;
+.recording-indicator.is-recording {
+  --indicator-bg: rgba(239, 68, 68, 0.16);
+  --indicator-border: rgba(239, 68, 68, 0.5);
+  --indicator-color: var(--danger-500);
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.22);
+  animation: recording-pulse 1.2s var(--ease-out) infinite;
 }
 
-.recording-tag.el-tag--success .recording-dot {
-  background: var(--success-500);
-  animation: pulse-ring 1.3s var(--ease-out) infinite;
+.recording-indicator.is-paused,
+.recording-indicator.is-connecting {
+  --indicator-bg: rgba(245, 158, 11, 0.16);
+  --indicator-border: rgba(245, 158, 11, 0.5);
+  --indicator-color: var(--warning-500);
 }
 
-.recording-tag.el-tag--warning .recording-dot {
-  background: var(--warning-500);
+.recording-indicator.is-error {
+  --indicator-bg: rgba(239, 68, 68, 0.12);
+  --indicator-border: rgba(239, 68, 68, 0.5);
+  --indicator-color: var(--danger-500);
 }
 
-.recording-tag.el-tag--danger .recording-dot {
-  background: var(--danger-500);
+.recording-indicator.is-ended {
+  --indicator-bg: rgba(148, 163, 184, 0.18);
+  --indicator-border: rgba(148, 163, 184, 0.5);
+  --indicator-color: rgba(15, 23, 42, 0.55);
+}
+
+.recording-indicator :deep(.is-spinning) {
+  animation: indicator-spin 1s linear infinite;
+}
+
+@keyframes recording-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes indicator-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .ghost-icon {
@@ -1364,6 +1473,25 @@ function getEventDurationText(eventIndex: number): string | null {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .header-right {
+    gap: 6px;
+  }
+
+  .header-icon-group {
+    gap: 4px;
+  }
+
+  .header-icon-button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .header-icon-button :deep(.el-icon) {
+    font-size: 14px;
+  }
 }
 
 .prompt-preview {
@@ -1404,18 +1532,6 @@ function getEventDurationText(eventIndex: number): string | null {
   background: rgba(24, 144, 255, 0.06);
   border-color: rgba(24, 144, 255, 0.40);
   color: #185abc;
-}
-
-.debug-trigger {
-  border-color: #f2a661;
-  color: #b45a12;
-  background: #fff4e5;
-}
-
-.debug-trigger:hover {
-  border-color: #ef8e38;
-  color: #8a420d;
-  background: #ffe4c6;
 }
 
 /* 实时转写固定区域（上部） */
@@ -1564,6 +1680,14 @@ function getEventDurationText(eventIndex: number): string | null {
 
 .event-sep {
   display: inline;
+}
+
+.workspace-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
 }
 
 /* 下部内容区域（左右分栏） */
@@ -1820,6 +1944,59 @@ function getEventDurationText(eventIndex: number): string | null {
 .panel-fade-leave-to {
   opacity: 0;
   transform: translateY(6px);
+}
+
+@media (min-width: 1201px) {
+  .workspace-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .workspace-grid.realtime-collapsed {
+    grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .realtime-transcript-bar {
+    height: auto;
+    min-height: 0;
+  }
+
+  .realtime-transcript-bar.collapsed {
+    height: auto;
+  }
+
+  .realtime-transcript-bar.collapsed .realtime-content,
+  .realtime-transcript-bar.collapsed .realtime-status {
+    display: none;
+  }
+
+  .realtime-transcript-bar.collapsed .realtime-header {
+    height: 100%;
+    padding: 10px 8px;
+    justify-content: center;
+  }
+
+  .realtime-transcript-bar.collapsed .realtime-title {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+
+  .realtime-transcript-bar.collapsed .realtime-title h3 {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    line-height: 1.1;
+  }
+
+  .realtime-transcript-bar.collapsed .ghost-button {
+    padding: 6px 8px;
+  }
+
+  .content-area {
+    display: contents;
+  }
 }
 
 /* 响应式 */

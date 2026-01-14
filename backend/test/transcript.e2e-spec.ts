@@ -259,24 +259,6 @@ describe('API E2E Tests', () => {
   // TODO: Implement POST /api/sessions/:id/speakers and GET /api/sessions/:id/speakers
 
   describe('Configuration Validation', () => {
-    it('should have Doubao configuration', () => {
-      const endpoint = configService.get<string>('TRANSCRIPT_ENDPOINT')
-      const appKey = configService.get<string>('TRANSCRIPT_APP_KEY')
-      const accessKey = configService.get<string>('TRANSCRIPT_ACCESS_KEY')
-
-      console.log(`TRANSCRIPT_ENDPOINT: ${endpoint ? 'SET' : 'NOT SET'}`)
-      console.log(`TRANSCRIPT_APP_KEY: ${appKey ? 'SET' : 'NOT SET'}`)
-      console.log(`TRANSCRIPT_ACCESS_KEY: ${accessKey ? 'SET' : 'NOT SET'}`)
-    })
-
-    it('should have valid endpoint URL format', () => {
-      const endpoint = configService.get<string>('TRANSCRIPT_ENDPOINT')
-
-      if (endpoint) {
-        expect(endpoint).toMatch(/^wss?:\/\/.+/)
-      }
-    })
-
     it('should have valid timeout configuration', () => {
       const timeout = configService.get<string>('TRANSCRIPT_RESPONSE_TIMEOUT_MS')
       const parsed = Number(timeout)
@@ -303,36 +285,5 @@ describe('API E2E Tests', () => {
       expect(TranscriptGateway).toBeDefined()
     })
 
-    it('should load DoubaoClientManager', () => {
-      const { DoubaoClientManager } = require('../src/modules/transcript/doubao.client')
-      expect(DoubaoClientManager).toBeDefined()
-    })
-  })
-
-  describe('DoubaoBinaryCodec', () => {
-    it('should work correctly', () => {
-      const {
-        DoubaoBinaryCodec,
-        DoubaoMessageType,
-        DoubaoFlag,
-        DoubaoSerialization,
-        DoubaoCompression,
-      } = require('../src/modules/transcript/doubao.codec')
-
-      const codec = new DoubaoBinaryCodec()
-
-      const payload = { test: 'data', value: 123 }
-      const encoded = codec.encode({
-        messageType: DoubaoMessageType.Config,
-        flags: DoubaoFlag.NoSeq,
-        serialization: DoubaoSerialization.Json,
-        compression: DoubaoCompression.None,
-        payload,
-      })
-
-      const decoded = codec.decode(encoded)
-
-      expect(decoded.payload).toEqual(payload)
-    })
   })
 })

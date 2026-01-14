@@ -363,7 +363,6 @@ const form = reactive<AppSettings>({ ...settings.value })
 const activeSection = ref<'asr' | 'vad' | 'analysis' | 'segmentation' | 'service'>('asr')
 
 const asrModels: Array<{ value: AsrModel; label: string; desc: string }> = [
-  { value: 'doubao', label: '豆包 ASR', desc: '实时、低延迟，适合会议录制' },
   { value: 'glm', label: 'GLM ASR', desc: '高精度，适合高噪声场景' },
 ]
 
@@ -704,16 +703,21 @@ const onReset = async () => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 10px;
+  min-width: 0;
 }
 
 .choice-card {
   width: 100%;
   align-items: flex-start;
+  height: auto;
+  min-height: 56px;
+  margin: 0;
   padding: 12px 12px;
   border-radius: 12px;
   border-color: rgba(31, 41, 55, 0.16);
   background: rgba(255, 255, 255, 0.7);
   transition: all 0.15s ease;
+  white-space: normal;
 }
 
 .choice-card.is-checked {
@@ -753,6 +757,7 @@ const onReset = async () => {
   margin-top: 4px;
   font-size: 12px;
   color: var(--ink-500);
+  overflow-wrap: anywhere;
 }
 
 .mono-preview {

@@ -51,8 +51,6 @@ export class TranscriptEventSegmentationConfigService {
   private buildDefaultConfig(): TranscriptEventSegmentationConfig {
     const windowEvents =
       this.readNumberFromEnv('TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE') ??
-      this.readNumberFromEnv('TRANSCRIPT_ANALYSIS_CHUNK_SIZE') ??
-      this.readNumberFromEnv('TRANSCRIPT_ANALYSIS_WINDOW_SIZE') ??
       this.readNumberFromEnv('TRANSCRIPT_EVENTS_SEGMENT_WINDOW_EVENTS') ??
       120
 

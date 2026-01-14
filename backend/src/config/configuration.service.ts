@@ -27,25 +27,10 @@ export class ConfigurationService {
 
   get aiConfig() {
     return {
-      qianwen: {
-        apiKey: this.configService.get<string>('ai.qianwen.apiKey') || '',
-        endpoint: this.configService.get<string>('ai.qianwen.endpoint') || '',
-      },
-      doubao: {
-        apiKey: this.configService.get<string>('ai.doubao.apiKey') || '',
-        endpoint: this.configService.get<string>('ai.doubao.endpoint') || '',
-      },
       glm: {
         apiKey: this.configService.get<string>('ai.glm.apiKey') || '',
         endpoint: this.configService.get<string>('ai.glm.endpoint') || '',
       },
-    }
-  }
-
-  get transcriptConfig() {
-    return {
-      endpoint: this.configService.get<string>('transcript.endpoint') || '',
-      apiKey: this.configService.get<string>('transcript.apiKey') || '',
     }
   }
 }

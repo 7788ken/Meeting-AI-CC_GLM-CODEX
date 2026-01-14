@@ -22,14 +22,6 @@ export class GenerateAnalysisDto {
   @IsOptional()
   @IsString()
   prompt?: string
-
-  @ApiPropertyOptional({
-    description: 'AI 模型',
-    default: 'qianwen',
-  })
-  @IsOptional()
-  @IsString()
-  model?: string
 }
 
 export class AnalysisDto {

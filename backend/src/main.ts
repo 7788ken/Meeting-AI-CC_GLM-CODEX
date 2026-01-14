@@ -6,7 +6,6 @@ import { AppModule } from './app.module'
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter'
 import * as http from 'http'
 import * as WebSocket from 'ws'
-import { TranscriptService } from './modules/transcript/transcript.service'
 import { SmartAudioBufferService } from './modules/transcript/smart-audio-buffer.service'
 import { GlmAsrClient } from './modules/transcript/glm-asr.client'
 import type { AsrConfigDto } from './modules/transcript/dto/transcript.dto'
@@ -21,13 +20,6 @@ import { TranscriptEventSegmentationConfigService } from './modules/transcript-e
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { SpeakerService } from './modules/speech/speaker.service'
-import {
-  AnonymousSpeakerCluster,
-  SpeakerEmbedding,
-  TurnAudioSnapshot,
-  TurnDetector,
-  getDefaultTurnModeConfig,
-} from './modules/transcript/turn-mode'
 import { isSegmentKeyRollback } from './modules/transcript/segment-key'
 import {
   shouldSplitByContent,
@@ -102,7 +94,6 @@ async function bootstrap() {
   })
 
   // 获取 TranscriptService 用于处理音频数据
-  const transcriptService = app.get(TranscriptService)
   const smartAudioBufferService = app.get(SmartAudioBufferService)
   const glmAsrClient = app.get(GlmAsrClient)
   const speechService = app.get(SpeechService)
@@ -142,7 +133,6 @@ async function bootstrap() {
   // 使用 Map 代替 WeakMap，确保 clientId 在连接期间保持稳定
   const clientIds = new Map<WebSocket, string>()
   const audioStarted = new WeakSet<WebSocket>()
-  const modelByClientId = new Map<string, string>()
   const glmQueueByClientId = new Map<string, Promise<void>>()
 
   const sessionClients = new Map<string, Set<WebSocket>>()
@@ -172,12 +162,6 @@ async function bootstrap() {
   // 追踪每 session + client 的活跃 segmentKey（用于检测段落变化并标记 isFinal）
   const activeSegmentKeyBySessionClient = new Map<string, string>()
 
-  const turnModeEnabled = process.env.TRANSCRIPT_TURN_MODE === '1'
-  const turnModeConfig = getDefaultTurnModeConfig()
-  const turnDetectorByClientId = new Map<string, TurnDetector>()
-  const speakerClusterBySession = new Map<string, AnonymousSpeakerCluster>()
-  const lastSpeakerIdBySession = new Map<string, string>()
-
   const transcriptEventSegmentationTimerBySession = new Map<string, ReturnType<typeof setTimeout>>()
   const transcriptEventSegmentationInFlight = new Set<string>()
   const transcriptEventSegmentationPending = new Set<string>()
@@ -190,7 +174,6 @@ async function bootstrap() {
   wss.on('connection', (ws: WebSocket) => {
     const clientId = createClientId()
     clientIds.set(ws, clientId)
-    modelByClientId.set(clientId, 'doubao')
     smartAudioBufferService.updateConfig(clientId)
     wsLogger.log(`Client connected, clientId: ${clientId}`)
 
@@ -305,8 +288,6 @@ async function bootstrap() {
             {
               const clientId = getClientId(ws)
               if (clientId) {
-                const model = resolveAsrModel(message?.model)
-                modelByClientId.set(clientId, model)
                 const asrConfig = readAsrConfig(message)
                 smartAudioBufferService.updateConfig(clientId, asrConfig)
               }
@@ -324,71 +305,29 @@ async function bootstrap() {
               const clientId = getClientId(ws)
               if (clientId) {
                 const sessionId = clientSessions.get(ws)
-                const model = resolveClientModel(clientId)
-                if (!turnModeEnabled && model === 'glm') {
-                  if (sessionId) {
-                    const flushed = smartAudioBufferService.flush(clientId, { force: true })
-                    if (flushed.buffer) {
-                      await enqueueGlmTranscription(
-                        sessionId,
-                        clientId,
-                        flushed.buffer,
-                        flushed.durationMs
-                      )
-                    } else {
-                      const pending = glmQueueByClientId.get(clientId)
-                      if (pending) {
-                        await pending
-                      }
-                      await finalizeActiveSpeechForClient(clientId)
-                    }
-
-                    if (shouldTriggerEventSegmentationOnStopTranscribe()) {
-                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
-                    }
+                if (sessionId) {
+                  const flushed = smartAudioBufferService.flush(clientId, { force: true })
+                  if (flushed.buffer) {
+                    await enqueueGlmTranscription(
+                      sessionId,
+                      clientId,
+                      flushed.buffer,
+                      flushed.durationMs
+                    )
                   } else {
-                    smartAudioBufferService.flush(clientId)
+                    const pending = glmQueueByClientId.get(clientId)
+                    if (pending) {
+                      await pending
+                    }
                     await finalizeActiveSpeechForClient(clientId)
                   }
-                } else if (turnModeEnabled) {
-                  if (sessionId) {
-                    await finalizeTurnForClient(sessionId, clientId)
-                  } else {
-                    await transcriptService.endAudio(clientId)
-                  }
-                } else if (sessionId) {
-                  const result = await transcriptService.finalizeAudio(clientId, sessionId, {
-                    propagateError: true,
-                  })
-                  if (result) {
-                    await persistAndBroadcastTranscript(sessionId, clientId, {
-                      content: result.content,
-                      confidence: result.confidence,
-                      isFinal: true,
-                      speakerId: result.speakerId,
-                      speakerName: result.speakerName,
-                      segmentKey: result.segmentKey,
-                    })
 
-                    await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
-                      content: result.content,
-                      isFinal: true,
-                      speakerId: result.speakerId,
-                      speakerName: result.speakerName,
-                      segmentKey: result.segmentKey,
-                      asrTimestampMs: Date.now(),
-                      audioDurationMs: result.audioDurationMs,
-                    })
-
-                    if (shouldTriggerEventSegmentationOnStopTranscribe()) {
-                      triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
-                    }
-                  } else {
-                    // 没有返回转写结果，也要关闭当前活跃段落，避免前端一直认为该段落未结束
-                    await finalizeActiveSpeechForClient(clientId)
+                  if (shouldTriggerEventSegmentationOnStopTranscribe()) {
+                    triggerTranscriptEventSegmentationNow(sessionId, 'stop_transcribe')
                   }
                 } else {
-                  await transcriptService.endAudio(clientId)
+                  smartAudioBufferService.flush(clientId)
+                  await finalizeActiveSpeechForClient(clientId)
                 }
               }
             }
@@ -412,52 +351,20 @@ async function bootstrap() {
                 break
               }
 
-              const model = resolveClientModel(clientId)
-
-              if (!turnModeEnabled && model === 'glm') {
-                const flushed = smartAudioBufferService.flush(clientId, { force: true })
-                if (flushed.buffer) {
-                  await enqueueGlmTranscription(
-                    sessionId,
-                    clientId,
-                    flushed.buffer,
-                    flushed.durationMs
-                  )
-                } else {
-                  const pending = glmQueueByClientId.get(clientId)
-                  if (pending) {
-                    await pending
-                  }
-                  await finalizeActiveSpeechForClient(clientId)
-                }
-              } else if (turnModeEnabled) {
-                await finalizeTurnForClient(sessionId, clientId)
+              const flushed = smartAudioBufferService.flush(clientId, { force: true })
+              if (flushed.buffer) {
+                await enqueueGlmTranscription(
+                  sessionId,
+                  clientId,
+                  flushed.buffer,
+                  flushed.durationMs
+                )
               } else {
-                const result = await transcriptService.finalizeAudio(clientId, sessionId, {
-                  propagateError: true,
-                })
-                if (result) {
-                  await persistAndBroadcastTranscript(sessionId, clientId, {
-                    content: result.content,
-                    confidence: result.confidence,
-                    isFinal: true,
-                    speakerId: result.speakerId,
-                    speakerName: result.speakerName,
-                    segmentKey: result.segmentKey,
-                  })
-
-                  await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
-                    content: result.content,
-                    isFinal: true,
-                    speakerId: result.speakerId,
-                    speakerName: result.speakerName,
-                    segmentKey: result.segmentKey,
-                    asrTimestampMs: Date.now(),
-                    audioDurationMs: result.audioDurationMs,
-                  })
-                } else {
-                  await finalizeActiveSpeechForClient(clientId)
+                const pending = glmQueueByClientId.get(clientId)
+                if (pending) {
+                  await pending
                 }
+                await finalizeActiveSpeechForClient(clientId)
               }
               if (shouldTriggerEventSegmentationOnEndTurn()) {
                 triggerTranscriptEventSegmentationNow(sessionId, 'end_turn')
@@ -508,53 +415,9 @@ async function bootstrap() {
             )
           }
 
-          if (turnModeEnabled) {
-            await handleTurnModePcmChunk(sessionId, clientId, data as Buffer)
-            return
-          }
-
-          const model = resolveClientModel(clientId)
-          if (model === 'glm') {
-            const appended = smartAudioBufferService.appendAudio(clientId, data as Buffer)
-            if (appended.buffer) {
-              void enqueueGlmTranscription(
-                sessionId,
-                clientId,
-                appended.buffer,
-                appended.durationMs
-              )
-            }
-            return
-          }
-
-          const result = await transcriptService.processBinaryAudio(
-            clientId,
-            data as Buffer,
-            sessionId,
-            {
-              propagateError: true,
-            }
-          )
-
-          if (result) {
-            await persistAndBroadcastTranscript(sessionId, clientId, {
-              content: result.content,
-              confidence: result.confidence,
-              isFinal: result.isFinal,
-              speakerId: result.speakerId,
-              speakerName: result.speakerName,
-              segmentKey: result.segmentKey,
-            })
-
-            await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
-              content: result.content,
-              isFinal: result.isFinal,
-              speakerId: result.speakerId,
-              speakerName: result.speakerName,
-              segmentKey: result.segmentKey,
-              asrTimestampMs: Date.now(),
-              audioDurationMs: result.audioDurationMs,
-            })
+          const appended = smartAudioBufferService.appendAudio(clientId, data as Buffer)
+          if (appended.buffer) {
+            void enqueueGlmTranscription(sessionId, clientId, appended.buffer, appended.durationMs)
           }
         } catch (error) {
           wsLogger.error(`Error processing audio: ${error}`)
@@ -572,10 +435,7 @@ async function bootstrap() {
       const clientId = clientIds.get(ws)
       wsLogger.log(`Client disconnected, clientId: ${clientId}`)
       if (clientId) {
-        transcriptService.removeClient(clientId)
-        turnDetectorByClientId.delete(clientId)
         smartAudioBufferService.clear(clientId)
-        modelByClientId.delete(clientId)
         glmQueueByClientId.delete(clientId)
         void finalizeActiveSpeechForClient(clientId)
       }
@@ -600,16 +460,6 @@ async function bootstrap() {
   // 获取客户端 ID（不再动态创建，确保会话稳定性）
   function getClientId(ws: WebSocket): string | null {
     return clientIds.get(ws) || null
-  }
-
-  function resolveAsrModel(raw: unknown): string {
-    if (typeof raw !== 'string') return 'doubao'
-    const normalized = raw.trim().toLowerCase()
-    return normalized || 'doubao'
-  }
-
-  function resolveClientModel(clientId: string): string {
-    return resolveAsrModel(modelByClientId.get(clientId))
   }
 
   function readAsrConfig(message: Record<string, unknown>): Partial<AsrConfigDto> {
@@ -724,6 +574,41 @@ async function bootstrap() {
         audioDurationMs: chunk.isFinal ? audioDurationMs : undefined,
       })
     }
+  }
+
+  async function transcribePcmWithGlm(
+    audioBuffer: Buffer,
+    config?: AsrConfigDto
+  ): Promise<{ text: string; requestId?: string; isFinal: boolean } | null> {
+    if (!audioBuffer || audioBuffer.length === 0) {
+      return null
+    }
+
+    let text = ''
+    let isFinal = false
+    let requestId: string | undefined
+
+    for await (const chunk of glmAsrClient.transcribeStream(audioBuffer, {
+      language: config?.language,
+      hotwords: config?.hotwords,
+      prompt: config?.prompt,
+    })) {
+      if (!requestId && chunk.requestId) {
+        requestId = chunk.requestId
+      }
+      if (chunk.text) {
+        text = chunk.text
+      }
+      if (chunk.isFinal) {
+        isFinal = true
+      }
+    }
+
+    if (!text) {
+      return null
+    }
+
+    return { text, requestId, isFinal }
   }
 
   function sendErrorToClient(clientId: string, error: string): void {
@@ -891,168 +776,6 @@ async function bootstrap() {
     const index = speakerIndexBySession.get(sessionId) ?? 0
     speakerIndexBySession.set(sessionId, index + 1)
     return index
-  }
-
-  function getTurnDetector(clientId: string): TurnDetector {
-    const existing = turnDetectorByClientId.get(clientId)
-    if (existing) return existing
-    const created = new TurnDetector(turnModeConfig)
-    turnDetectorByClientId.set(clientId, created)
-    return created
-  }
-
-  function getSpeakerCluster(sessionId: string): AnonymousSpeakerCluster {
-    const existing = speakerClusterBySession.get(sessionId)
-    if (existing) return existing
-
-    const sameTh = readNumberFromEnv(
-      'TRANSCRIPT_TURN_SPK_SAME_TH',
-      0.75,
-      value => value > 0 && value <= 1
-    )
-    const newTh = readNumberFromEnv(
-      'TRANSCRIPT_TURN_SPK_NEW_TH',
-      0.6,
-      value => value >= 0 && value < 1
-    )
-
-    const created = new AnonymousSpeakerCluster(sessionId, { sameTh, newTh })
-    speakerClusterBySession.set(sessionId, created)
-    return created
-  }
-
-  async function handleTurnModePcmChunk(
-    sessionId: string,
-    clientId: string,
-    chunk: Buffer
-  ): Promise<void> {
-    const detector = getTurnDetector(clientId)
-    const nowMs = Date.now()
-    const { shouldFinalizeTurn } = detector.pushPcmChunk(chunk, nowMs)
-
-    if (detector.hasActiveTurn()) {
-      // turn 模式下仍使用豆包流式链路喂音频，但不广播中间结果
-      await transcriptService.processBinaryAudio(clientId, chunk, sessionId, {
-        propagateError: true,
-      })
-    }
-
-    if (!shouldFinalizeTurn) {
-      return
-    }
-
-    await finalizeTurn(sessionId, clientId, detector.snapshot())
-    detector.reset()
-  }
-
-  async function finalizeTurnForClient(sessionId: string, clientId: string): Promise<void> {
-    const detector = turnDetectorByClientId.get(clientId)
-    if (!detector?.hasActiveTurn()) {
-      await transcriptService.endAudio(clientId)
-      return
-    }
-
-    await finalizeTurn(sessionId, clientId, detector.snapshot())
-    detector.reset()
-  }
-
-  async function finalizeTurn(
-    sessionId: string,
-    clientId: string,
-    snapshot: TurnAudioSnapshot | null
-  ): Promise<void> {
-    const result = await transcriptService.finalizeAudio(clientId, sessionId, {
-      propagateError: true,
-    })
-    if (!result?.content) {
-      return
-    }
-
-    const speakerId = await resolveAnonymousSpeakerId(sessionId, clientId, snapshot)
-
-    await persistAndBroadcastTranscript(sessionId, clientId, {
-      content: result.content,
-      confidence: result.confidence,
-      isFinal: true,
-      speakerId,
-      speakerName: '',
-      segmentKey: undefined,
-    })
-
-    await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
-      content: result.content,
-      isFinal: true,
-      speakerId,
-      speakerName: '',
-      segmentKey: undefined,
-      asrTimestampMs: Date.now(),
-      audioDurationMs: result.audioDurationMs,
-    })
-  }
-
-  async function resolveAnonymousSpeakerId(
-    sessionId: string,
-    clientId: string,
-    snapshot: TurnAudioSnapshot | null
-  ): Promise<string> {
-    const fallback =
-      lastSpeakerIdBySession.get(sessionId) ?? ensureSpeakerMeta(sessionId, clientId).speakerId
-
-    const embedUrl = process.env.TRANSCRIPT_TURN_EMBEDDING_URL
-    if (!embedUrl) {
-      return fallback
-    }
-
-    if (!snapshot || snapshot.voicedMs < turnModeConfig.minEmbeddingVoicedMs) {
-      return fallback
-    }
-
-    const embedding = await fetchSpeakerEmbedding(embedUrl, snapshot.pcm)
-    if (!embedding || embedding.length === 0) {
-      return fallback
-    }
-
-    const cluster = getSpeakerCluster(sessionId)
-    const speakerId = cluster.assign(embedding)
-    lastSpeakerIdBySession.set(sessionId, speakerId)
-    return speakerId
-  }
-
-  async function fetchSpeakerEmbedding(url: string, pcm: Buffer): Promise<SpeakerEmbedding | null> {
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          format: 'pcm_s16le',
-          sampleRate: 16000,
-          channels: 1,
-          audioBase64: pcm.toString('base64'),
-        }),
-      })
-
-      if (!response.ok) {
-        wsLogger.warn(`Embedding service failed: status=${response.status}`)
-        return null
-      }
-
-      const data = (await response.json()) as { embedding?: unknown }
-      const embedding = data?.embedding
-      if (!Array.isArray(embedding)) return null
-
-      const values: number[] = []
-      for (const item of embedding) {
-        const value = Number(item)
-        if (!Number.isFinite(value)) return null
-        values.push(value)
-      }
-      return values
-    } catch (error) {
-      wsLogger.warn(
-        `Embedding request failed: ${error instanceof Error ? error.message : String(error)}`
-      )
-      return null
-    }
   }
 
   function readNumberFromEnv(
@@ -1229,7 +952,7 @@ async function bootstrap() {
       }
 
       // 当 segmentKey 变化时，把之前的 segmentKey 对应的事件标记为 isFinal=true
-      // 这是因为豆包 ASR 在音频 > 15s 时会强制分段返回结果，但 is_final=false
+      // 这是因为 ASR 在音频较长时可能分段返回结果，但 is_final=false
       if (input.segmentKey) {
         const sessionClientKey = getSegmentKeyMapKey(sessionId, clientId)
         const activeSegmentKey = activeSegmentKeyBySessionClient.get(sessionClientKey)

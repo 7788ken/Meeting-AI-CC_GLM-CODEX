@@ -248,8 +248,6 @@ Content-Type: application/json
 - `full-report` - 完整报告
 
 **支持的模型**:
-- `qianwen` - 千问
-- `doubao` - 豆包
 - `glm` - 智谱 GLM（模型版本由 `GLM_ANALYSIS_MODEL` 配置）
 - `GLM_ANALYSIS_MODEL` 中配置的模型名 - 智谱 GLM（兼容别名）
 
@@ -279,8 +277,7 @@ Content-Type: application/json
 {
   "sessionId": "session-1",
   "speechIds": ["speech-1", "speech-2"],
-  "analysisType": "summary",
-  "model": "qianwen"
+  "analysisType": "summary"
 }
 ```
 
@@ -329,8 +326,7 @@ ws://localhost:5181/transcript
   "event": "start",
   "data": {
     "sessionId": "session-1",
-    "language": "zh-CN",
-    "model": "doubao"
+    "language": "zh-CN"
   }
 }
 ```

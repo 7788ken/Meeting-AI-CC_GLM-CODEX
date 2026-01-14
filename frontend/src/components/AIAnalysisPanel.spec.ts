@@ -61,7 +61,7 @@ describe('AIAnalysisPanel.vue', () => {
     id: 'analysis-1',
     sessionId: 'session-1',
     analysisType: 'summary',
-    modelUsed: 'qianwen',
+    modelUsed: 'glm',
     result: '## 会议摘要\n\n今天讨论了项目进度，前端开发已完成80%。',
     status: 'completed',
     processingTime: 1500,
@@ -204,7 +204,6 @@ describe('AIAnalysisPanel.vue', () => {
         sessionId: 'session-1',
         speechIds: ['1'],
         analysisType: 'summary',
-        model: 'qianwen',
       })
     })
 
@@ -454,9 +453,9 @@ describe('AIAnalysisPanel.vue', () => {
       expect(wrapper.vm.modelText).toBe('智谱 GLM')
     })
 
-    it('应该正确显示豆包模型名称', () => {
-      wrapper.vm.currentAnalysis = { ...mockAnalysis, modelUsed: 'doubao' }
-      expect(wrapper.vm.modelText).toBe('豆包')
+    it('应该回显未知模型名称', () => {
+      wrapper.vm.currentAnalysis = { ...mockAnalysis, modelUsed: 'custom-model' }
+      expect(wrapper.vm.modelText).toBe('custom-model')
     })
 
     it('应该正确显示状态文本', () => {

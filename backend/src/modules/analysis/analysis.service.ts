@@ -5,7 +5,6 @@ import { Model, Types } from 'mongoose'
 import { Analysis, AnalysisDocument } from './schemas/analysis.schema'
 import { AnalysisDto, GenerateAnalysisDto } from './dto/analysis.dto'
 import { AnalysisType } from './dto/analysis.enum'
-import { ModelManagerService, AIModelType } from './model-manager.service'
 import { SpeechService } from '../speech/speech.service'
 import { GlmClient } from './clients/glm.client'
 import { StreamSegmentAnalysisDto } from './dto/segment-analysis.dto'
@@ -13,13 +12,12 @@ import { StreamSegmentAnalysisDto } from './dto/segment-analysis.dto'
 /**
  * AI 分析服务 (B1026)
  * 使用 Mongoose 实现分析结果的持久化
- * 通过 ModelManager 统一管理多个 AI 模型
+ * 统一使用 GLM 模型生成分析
  */
 @Injectable()
 export class AnalysisService {
   constructor(
     @InjectModel(Analysis.name) private analysisModel: Model<AnalysisDocument>,
-    private readonly modelManager: ModelManagerService,
     private readonly glmClient: GlmClient,
     private readonly speechService: SpeechService,
     private readonly configService: ConfigService
@@ -31,15 +29,14 @@ export class AnalysisService {
   async generate(dto: GenerateAnalysisDto): Promise<AnalysisDto> {
     const startTime = Date.now()
 
-    // 确定使用的模型
-    const modelType = dto.model ? this.parseModelType(dto.model) : undefined
     const analysisType = this.normalizeAnalysisType(dto.analysisType)
+    const modelUsed = this.resolveModelName()
 
     // 创建分析记录（初始状态为 processing）
     const analysis = new this.analysisModel({
       sessionId: dto.sessionId,
       analysisType,
-      modelUsed: modelType || this.modelManager.getDefaultModel(),
+      modelUsed,
       modelVersion: 'auto',
       result: '',
       status: 'processing',
@@ -51,11 +48,10 @@ export class AnalysisService {
 
     try {
       // 调用 AI 模型生成分析
-      const { result, modelUsed } = await this.callAIModel(
+      const { result, modelUsed: resolvedModelUsed } = await this.callGlmModel(
         analysisType,
         dto.sessionId,
         dto.speechIds,
-        modelType,
         dto.prompt
       )
 
@@ -63,7 +59,7 @@ export class AnalysisService {
 
       // 更新分析结果
       analysis.result = result
-      analysis.modelUsed = modelUsed
+      analysis.modelUsed = resolvedModelUsed
       analysis.status = 'completed'
       analysis.processingTime = processingTime
       analysis.generatedAt = new Date()
@@ -122,23 +118,23 @@ export class AnalysisService {
   /**
    * 调用 AI 模型生成分析
    */
-  private async callAIModel(
+  private async callGlmModel(
     analysisType: string,
     sessionId: string,
     speechIds: string[],
-    modelType?: AIModelType,
     prompt?: string
   ): Promise<{ result: string; modelUsed: string }> {
     // 获取发言记录内容
     const speeches = await this.getSpeechesForAnalysis(speechIds)
 
-    return this.modelManager.generateAnalysis({
+    const result = await this.glmClient.generateAnalysis({
       analysisType,
       speeches,
       sessionId,
-      modelType,
       prompt,
     })
+
+    return { result, modelUsed: this.resolveModelName() }
   }
 
   private normalizeAnalysisType(value?: string): string {
@@ -146,19 +142,9 @@ export class AnalysisService {
     return normalized || AnalysisType.SUMMARY
   }
 
-  /**
-   * 解析模型类型
-   */
-  private parseModelType(model: string): AIModelType {
-    const normalized = typeof model === 'string' ? model.trim() : ''
-    if (Object.values(AIModelType).includes(normalized as AIModelType)) {
-      return normalized as AIModelType
-    }
-    const glmAlias = (this.configService.get<string>('GLM_ANALYSIS_MODEL') || '').trim()
-    if (glmAlias && normalized === glmAlias) {
-      return AIModelType.GLM
-    }
-    return AIModelType.GLM
+  private resolveModelName(): string {
+    const raw = (this.configService.get<string>('GLM_ANALYSIS_MODEL') || '').trim()
+    return raw || 'glm'
   }
 
   /**

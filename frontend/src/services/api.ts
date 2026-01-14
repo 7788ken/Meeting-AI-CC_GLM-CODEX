@@ -220,7 +220,6 @@ export interface AnalysisRequest {
   speechIds: string[]
   analysisType?: string
   prompt?: string
-  model?: string
 }
 
 export const analysisApi = {

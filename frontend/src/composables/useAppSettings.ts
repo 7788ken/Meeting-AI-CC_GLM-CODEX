@@ -4,7 +4,7 @@ import { setApiBaseUrl } from '@/services/http'
 import { websocket } from '@/services/websocket'
 import { transcriptEventSegmentationConfigApi } from '@/services/api'
 
-export type AsrModel = 'doubao' | 'glm'
+export type AsrModel = 'glm'
 
 export type PromptTemplate = {
   id: string
@@ -78,7 +78,7 @@ const DEFAULT_SEGMENTATION_SYSTEM_PROMPT = [
   '- 参考句末标点：。！？?!；;',
   '',
   '示例（应该这样）：',
-  '- extractedText 是“欢迎收听豆包AI播客节目。”时，nextSentence 直接输出“欢迎收听豆包AI播客节目。”。',
+  '- extractedText 是“欢迎收听AI播客节目。”时，nextSentence 直接输出“欢迎收听AI播客节目。”。',
   '- extractedText 是“啊今天咱们来聊一聊这个ai会议助手是怎么通过合理的模块设计能够让会议变得更高效？”时，nextSentence 不得追加后续文本。',
   '',
   '输出 JSON 格式（必须严格匹配）：',
@@ -93,7 +93,7 @@ const buildDefaultSettings = (): AppSettings => {
   const now = new Date().toISOString()
   const templates = buildDefaultPromptTemplates(now)
   return {
-    asrModel: resolveEnv(import.meta.env.VITE_ASR_MODEL as AsrModel, 'doubao'),
+    asrModel: 'glm',
     vadStartTh: vad.startThreshold,
     vadStopTh: vad.stopThreshold,
     vadGapMs: vad.gapMs,
@@ -182,7 +182,7 @@ function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppS
   const activeTemplateId = normalizeTemplateId((input as any).activePromptTemplateId, templates, defaultTemplateId)
 
   const next: AppSettings = {
-    asrModel: (input.asrModel === 'doubao' || input.asrModel === 'glm') ? input.asrModel : base.asrModel,
+    asrModel: 'glm',
     vadStartTh: normalizeNumber(input.vadStartTh, base.vadStartTh, 0),
     vadStopTh: normalizeNumber(input.vadStopTh, base.vadStopTh, 0),
     vadGapMs: normalizeNumber(input.vadGapMs, base.vadGapMs, 0),

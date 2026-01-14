@@ -323,7 +323,7 @@
   "confidence": 0.95,
   "audio_url": "https://example.com/audio.mp3",
   "metadata": {
-    "transcription_service": "doubao",
+    "transcription_service": "glm",
     "language": "zh-CN",
     "channel": 1
   }
@@ -348,7 +348,7 @@
   "created_at": "2026-01-09T09:05:00Z",
   "audio_url": "https://example.com/audio.mp3",
   "metadata": {
-    "transcription_service": "doubao",
+    "transcription_service": "glm",
     "language": "zh-CN",
     "channel": 1
   }
@@ -427,7 +427,7 @@
   "created_at": "2026-01-09T09:05:00Z",
   "audio_url": "https://example.com/audio.mp3",
   "metadata": {
-    "transcription_service": "doubao",
+    "transcription_service": "glm",
     "language": "zh-CN",
     "channel": 1
   }
@@ -471,7 +471,7 @@
   "created_at": "2026-01-09T09:05:00Z",
   "audio_url": "https://example.com/audio.mp3",
   "metadata": {
-    "transcription_service": "doubao",
+    "transcription_service": "glm",
     "language": "zh-CN",
     "channel": 1
   }
@@ -597,17 +597,6 @@
     "deep_answer": "深度回答",
     "generated_at": "2026-01-09T10:00:00Z",
     "confidence": 0.9
-  },
-  {
-    "_id": "objectid",
-    "speech_id": "objectid",
-    "session_id": "uuid",
-    "model_name": "minimax",
-    "core_analysis": "核心要点分析",
-    "brief_answer": "简要回答",
-    "deep_answer": "深度回答",
-    "generated_at": "2026-01-09T10:05:00Z",
-    "confidence": 0.85
   }
 ]
 ```
@@ -661,46 +650,11 @@
 ```json
 [
   {
-    "name": "qianwen",
-    "display_name": "字节跳动千问",
-    "description": "字节跳动推出的大语言模型",
-    "is_default": true,
-    "cost_per_1k_tokens": 0.15
-  },
-  {
-    "name": "doubao",
-    "display_name": "豆包",
-    "description": "字节跳动推出的大语言模型",
-    "is_default": false,
-    "cost_per_1k_tokens": 0.2
-  },
-  {
-    "name": "glm-4XXXX",
-    "display_name": "智谱glm-4XXXX",
+    "name": "glm",
+    "display_name": "智谱 GLM",
     "description": "智谱AI推出的大语言模型",
-    "is_default": false,
+    "is_default": true,
     "cost_per_1k_tokens": 0.2
-  },
-  {
-    "name": "minimax",
-    "display_name": "MINIMAX",
-    "description": "MINIMAX推出的大语言模型",
-    "is_default": false,
-    "cost_per_1k_tokens": 0.3
-  },
-  {
-    "name": "kimi",
-    "display_name": "KIMI",
-    "description": "月之暗面推出的大语言模型",
-    "is_default": false,
-    "cost_per_1k_tokens": 0.4
-  },
-  {
-    "name": "dc",
-    "display_name": "深度求索",
-    "description": "深度求索推出的大语言模型",
-    "is_default": false,
-    "cost_per_1k_tokens": 0.5
   }
 ]
 ```
@@ -720,7 +674,7 @@
 {
   "audio_url": "https://example.com/audio.mp3",
   "language": "zh-CN",
-  "service": "doubao"
+  "service": "glm"
 }
 ```
 
