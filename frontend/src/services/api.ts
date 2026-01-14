@@ -84,6 +84,18 @@ export interface TranscriptEventSegmentationConfig {
   jsonMode: boolean
 }
 
+// ==================== 全文分析总结（Markdown） ====================
+
+export interface TranscriptSummary {
+  sessionId: string
+  markdown: string
+  model: string
+  generatedAt: string
+  sourceRevision: number
+  sourceEventCount: number
+  mode: 'single' | 'chunked'
+}
+
 // ==================== 会话调试错误 ====================
 
 export interface DebugError {
@@ -210,10 +222,18 @@ export const transcriptEventSegmentationConfigApi = {
     ),
 }
 
+export const transcriptAnalysisApi = {
+  generateSummary: (sessionId: string) =>
+    post<ApiResponse<TranscriptSummary>>(`/transcript-analysis/session/${sessionId}/summary`, {}),
+}
+
 export const debugErrorApi = {
   // 获取会话的调试错误列表
   listBySession: (sessionId: string) =>
     get<ApiResponse<DebugError[]>>(`/debug-errors/session/${sessionId}`),
+  // 获取单条调试错误详情
+  getById: (id: string) =>
+    get<ApiResponse<DebugError>>(`/debug-errors/${id}`),
   // 清空会话的调试错误列表
   clearBySession: (sessionId: string) =>
     del<ApiResponse<{ deletedCount: number }>>(`/debug-errors/session/${sessionId}`),

@@ -2,7 +2,9 @@ import { parseTranscriptEventSegmentJson } from './transcript-event-segmentation
 
 describe('transcript-event-segmentation.validation', () => {
   it('解析 nextSentence 字段', () => {
-    expect(parseTranscriptEventSegmentJson('{ "nextSentence": "你好" }')).toEqual({ nextSentence: '你好' })
+    expect(parseTranscriptEventSegmentJson('{ "nextSentence": "你好" }')).toEqual({
+      nextSentence: '你好',
+    })
   })
 
   it('JSON 中 nextSentence 为空时返回空串', () => {
@@ -27,4 +29,3 @@ describe('transcript-event-segmentation.validation', () => {
     expect(() => parseTranscriptEventSegmentJson('')).toThrow('LLM 输出不是合法 JSON')
   })
 })
-

@@ -7,16 +7,7 @@ import { SmartAudioBufferService } from './smart-audio-buffer.service'
 
 @Module({
   imports: [HttpModule],
-  providers: [
-    TranscriptGateway,
-    TranscriptService,
-    GlmAsrClient,
-    SmartAudioBufferService,
-  ],
-  exports: [
-    TranscriptService,
-    TranscriptGateway,
-    GlmAsrClient,
-  ],
+  providers: [TranscriptGateway, TranscriptService, GlmAsrClient, SmartAudioBufferService],
+  exports: [TranscriptService, TranscriptGateway, GlmAsrClient],
 })
 export class TranscriptModule {}

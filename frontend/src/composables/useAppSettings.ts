@@ -54,7 +54,7 @@ const buildDefaultSettings = (): AppSettings => {
     vadStopTh: vad.stopThreshold,
     vadGapMs: vad.gapMs,
     segmentationSystemPrompt: DEFAULT_SEGMENTATION_SYSTEM_PROMPT,
-    segmentationWindowEvents: 120,
+    segmentationWindowEvents: 120, // 降级默认值，实际从后端 API 获取
     segmentationIntervalMs: 3000,
     segmentationTriggerOnStopTranscribe: true,
     segmentationModel: resolveEnv(
@@ -72,9 +72,11 @@ const buildDefaultSettings = (): AppSettings => {
   }
 }
 
-const defaults: AppSettings = buildDefaultSettings()
+const fallbackDefaults: AppSettings = buildDefaultSettings()
 
-const settings = ref<AppSettings>(loadFromStorage() ?? defaults)
+let settings = ref<AppSettings>(fallbackDefaults)
+let defaults: AppSettings = { ...fallbackDefaults }
+let initialized = false
 
 function loadFromStorage(): AppSettings | null {
   if (typeof localStorage === 'undefined') return null
@@ -216,9 +218,6 @@ function resetSettings(): AppSettings {
   return settings.value
 }
 
-// 初始化时应用一次
-applySettings(settings.value)
-
 async function refreshSegmentationConfigFromServer(): Promise<boolean> {
   if (typeof window === 'undefined' || import.meta.env.MODE === 'test') return false
   try {
@@ -226,7 +225,7 @@ async function refreshSegmentationConfigFromServer(): Promise<boolean> {
     const serverConfig = response?.data
     if (!serverConfig) return false
 
-    updateSettings({
+    const serverDefaults: Partial<AppSettings> = {
       segmentationSystemPrompt: serverConfig.systemPrompt,
       segmentationWindowEvents: serverConfig.windowEvents,
       segmentationIntervalMs: serverConfig.intervalMs,
@@ -234,19 +233,47 @@ async function refreshSegmentationConfigFromServer(): Promise<boolean> {
       segmentationModel: serverConfig.model,
       segmentationMaxTokens: serverConfig.maxTokens,
       segmentationJsonMode: serverConfig.jsonMode,
-    })
+    }
+
+    // 更新默认值为后端配置
+    defaults = normalizeSettings(serverDefaults, fallbackDefaults)
+
+    // 首次加载（localStorage 为空）时，直接使用后端配置作为初始值
+    if (!initialized) {
+      initialized = true
+      const stored = loadFromStorage()
+      if (!stored) {
+        settings.value = { ...defaults }
+        persist(settings.value)
+        applySettings(settings.value)
+        return true
+      }
+      settings.value = stored
+      applySettings(settings.value)
+      return true
+    }
+
+    // 非首次加载，只更新默认值，不覆盖用户已保存的设置
     return true
   } catch {
     return false
   }
 }
 
-// 用后端配置覆盖一次（后端默认来自 .env）
-void refreshSegmentationConfigFromServer()
+// 初始化：先从后端获取配置，再设置初始值
+refreshSegmentationConfigFromServer().catch(() => {
+  // 后端配置获取失败，使用降级默认值
+  const stored = loadFromStorage()
+  if (stored) {
+    settings.value = stored
+  }
+  initialized = true
+  applySettings(settings.value)
+})
 
 export const useAppSettings = () => ({
   settings,
-  defaults,
+  get defaults() { return defaults },
   updateSettings,
   resetSettings,
   applySettings,

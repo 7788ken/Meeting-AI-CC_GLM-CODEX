@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Param } from '@nestjs/common'
+import { Controller, Delete, Get, NotFoundException, Param } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { DebugErrorService } from './debug-error.service'
 import { DebugErrorDto } from './dto/debug-error.dto'
@@ -21,6 +21,21 @@ export class DebugErrorController {
   @ApiResponse({ status: 200, type: [DebugErrorDto] })
   async findBySession(@Param('sessionId') sessionId: string): Promise<DebugErrorDto[]> {
     return this.debugErrorService.findBySession(sessionId)
+  }
+
+  /**
+   * 获取单条调试错误详情
+   */
+  @Public()
+  @Get(':id')
+  @ApiOperation({ summary: '获取单条调试错误详情' })
+  @ApiResponse({ status: 200, type: DebugErrorDto })
+  async findById(@Param('id') id: string): Promise<DebugErrorDto> {
+    const result = await this.debugErrorService.findById(id)
+    if (!result) {
+      throw new NotFoundException('Debug error not found')
+    }
+    return result
   }
 
   /**

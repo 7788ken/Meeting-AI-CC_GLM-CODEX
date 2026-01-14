@@ -121,34 +121,20 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     expect(getRequestBody(0).model).toBe(testModel)
   })
 
-  it('JSON mode 返回空对象时，回退为非 JSON mode 重试', async () => {
-    httpService.post
-      .mockReturnValueOnce(
-        of({
-          status: 200,
-          data: {
-            choices: [
-              {
-                finish_reason: 'stop',
-                message: { content: '{}' },
-              },
-            ],
-          },
-        } as any)
-      )
-      .mockReturnValueOnce(
-        of({
-          status: 200,
-          data: {
-            choices: [
-              {
-                finish_reason: 'stop',
-                message: { content: '{ "nextSentence": "你好" }' },
-              },
-            ],
-          },
-        } as any)
-      )
+  it('JSON mode 返回空对象时，直接返回（语义校验交给 service 层）', async () => {
+    httpService.post.mockReturnValueOnce(
+      of({
+        status: 200,
+        data: {
+          choices: [
+            {
+              finish_reason: 'stop',
+              message: { content: '{}' },
+            },
+          ],
+        },
+      } as any)
+    )
 
     const client = new TranscriptEventSegmentationGlmClient(
       configService,
@@ -158,13 +144,40 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
-    expect(result).toBe('{ "nextSentence": "你好" }')
-    expect(httpService.post).toHaveBeenCalledTimes(2)
+    expect(result).toBe('{}')
+    expect(httpService.post).toHaveBeenCalledTimes(1)
     expect(getRequestBody(0).response_format).toEqual({ type: 'json_object' })
-    expect(getRequestBody(1).response_format).toBeUndefined()
   })
 
-  it('JSON mode 返回空 nextSentence 时，回退为非 JSON mode 重试', async () => {
+  it('JSON mode 返回空 nextSentence 时，直接返回（语义校验交给 service 层）', async () => {
+    httpService.post.mockReturnValueOnce(
+      of({
+        status: 200,
+        data: {
+          choices: [
+            {
+              finish_reason: 'stop',
+              message: { content: '{ "nextSentence": "" }' },
+            },
+          ],
+        },
+      } as any)
+    )
+
+    const client = new TranscriptEventSegmentationGlmClient(
+      configService,
+      httpService,
+      segmentationConfigService as any,
+      glmRateLimiter as any
+    )
+    const result = await client.generateStructuredJson({ system: 's', user: 'u' })
+
+    expect(result).toBe('{ "nextSentence": "" }')
+    expect(httpService.post).toHaveBeenCalledTimes(1)
+    expect(getRequestBody(0).response_format).toEqual({ type: 'json_object' })
+  })
+
+  it('JSON mode 连续两次缺少有效文本时，抛出异常且不回退为非 JSON mode', async () => {
     httpService.post
       .mockReturnValueOnce(
         of({
@@ -173,7 +186,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
             choices: [
               {
                 finish_reason: 'stop',
-                message: { content: '{ "nextSentence": "" }' },
+                message: { content: '' },
               },
             ],
           },
@@ -186,7 +199,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
             choices: [
               {
                 finish_reason: 'stop',
-                message: { content: '{ "nextSentence": "你好" }' },
+                message: { content: '' },
               },
             ],
           },
@@ -199,12 +212,13 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       segmentationConfigService as any,
       glmRateLimiter as any
     )
-    const result = await client.generateStructuredJson({ system: 's', user: 'u' })
+    await expect(client.generateStructuredJson({ system: 's', user: 'u' })).rejects.toThrow(
+      'Invalid response format from GLM API'
+    )
 
-    expect(result).toBe('{ "nextSentence": "你好" }')
     expect(httpService.post).toHaveBeenCalledTimes(2)
     expect(getRequestBody(0).response_format).toEqual({ type: 'json_object' })
-    expect(getRequestBody(1).response_format).toBeUndefined()
+    expect(getRequestBody(1).response_format).toEqual({ type: 'json_object' })
   })
 
   it('finish_reason=length 且 max_tokens 太小时，自动提升 max_tokens 重试', async () => {
@@ -350,21 +364,19 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       headers: { 'retry-after': '0' },
     }
 
-    httpService.post
-      .mockReturnValueOnce(throwError(() => rateLimitError))
-      .mockReturnValueOnce(
-        of({
-          status: 200,
-          data: {
-            choices: [
-              {
-                finish_reason: 'stop',
-                message: { content: '{ "nextSentence": "ok" }' },
-              },
-            ],
-          },
-        } as any)
-      )
+    httpService.post.mockReturnValueOnce(throwError(() => rateLimitError)).mockReturnValueOnce(
+      of({
+        status: 200,
+        data: {
+          choices: [
+            {
+              finish_reason: 'stop',
+              message: { content: '{ "nextSentence": "ok" }' },
+            },
+          ],
+        },
+      } as any)
+    )
 
     const client = new TranscriptEventSegmentationGlmClient(
       configService,

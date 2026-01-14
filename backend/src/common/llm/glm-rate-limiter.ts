@@ -123,11 +123,7 @@ export class GlmRateLimiter {
     }, delay)
   }
 
-  private readNumber(
-    key: string,
-    fallback: number,
-    isValid: (value: number) => boolean
-  ): number {
+  private readNumber(key: string, fallback: number, isValid: (value: number) => boolean): number {
     const raw = this.configService.get<string>(key) || process.env[key]
     if (!raw) return fallback
     const value = Number(raw)

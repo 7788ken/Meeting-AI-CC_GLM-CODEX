@@ -11,6 +11,7 @@ import { SpeechModule } from './modules/speech/speech.module'
 import { TranscriptModule } from './modules/transcript/transcript.module'
 import { TranscriptStreamModule } from './modules/transcript-stream/transcript-stream.module'
 import { TranscriptEventSegmentationModule } from './modules/transcript-event-segmentation/transcript-event-segmentation.module'
+import { TranscriptAnalysisModule } from './modules/transcript-analysis/transcript-analysis.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { DebugErrorModule } from './modules/debug-error/debug-error.module'
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
@@ -34,6 +35,7 @@ import { AppService } from './app.service'
     TranscriptModule,
     TranscriptStreamModule,
     TranscriptEventSegmentationModule,
+    TranscriptAnalysisModule,
     DebugErrorModule,
   ],
   controllers: [AppController],

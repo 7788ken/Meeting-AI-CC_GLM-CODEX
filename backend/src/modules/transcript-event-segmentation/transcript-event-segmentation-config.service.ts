@@ -51,15 +51,15 @@ export class TranscriptEventSegmentationConfigService {
     const windowEvents =
       this.readNumberFromEnv('TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE') ??
       this.readNumberFromEnv('TRANSCRIPT_EVENTS_SEGMENT_WINDOW_EVENTS') ??
-      120
+      4
 
     const intervalMs = this.readNumberFromEnv('TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS') ?? 3000
 
-    const model =
-      (this.configService.get<string>('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') || '').trim()
+    const model = (
+      this.configService.get<string>('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') || ''
+    ).trim()
 
-    const maxTokens =
-      this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS') ?? 2000
+    const maxTokens = this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS') ?? 2000
 
     const jsonMode = this.readBooleanFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE', true)
 
@@ -97,29 +97,20 @@ export class TranscriptEventSegmentationConfigService {
         base.triggerOnStopTranscribe
       ),
       model: this.normalizeText(input.model, base.model),
-      maxTokens: this.normalizeInt(
-        input.maxTokens,
-        base.maxTokens,
-        MAX_TOKENS_MIN,
-        MAX_TOKENS_MAX
-      ),
+      maxTokens: this.normalizeInt(input.maxTokens, base.maxTokens, MAX_TOKENS_MIN, MAX_TOKENS_MAX),
       jsonMode: this.normalizeBoolean(input.jsonMode, base.jsonMode),
     }
   }
 
   private readNumberFromEnv(key: string): number | undefined {
-    const raw =
-      this.configService.get<string>(key) ||
-      process.env[key]
+    const raw = this.configService.get<string>(key) || process.env[key]
     if (!raw) return undefined
     const value = Number(raw)
     return Number.isFinite(value) ? value : undefined
   }
 
   private readBooleanFromEnv(key: string, fallback: boolean): boolean {
-    const raw =
-      this.configService.get<string>(key) ||
-      process.env[key]
+    const raw = this.configService.get<string>(key) || process.env[key]
     if (raw == null || raw === '') return fallback
     const normalized = String(raw).trim().toLowerCase()
     if (normalized === '0' || normalized === 'false') return false

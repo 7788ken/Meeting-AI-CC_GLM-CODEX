@@ -41,7 +41,7 @@ export class TranscriptEventSegmentationGlmClient {
         { role: 'system', content: [{ type: 'text', text: params.system }] },
         { role: 'user', content: [{ type: 'text', text: params.user }] },
       ],
-      temperature: 0.2,
+      temperature: useJsonMode ? 0 : 0.2,
       max_tokens: maxTokens,
       thinking: { type: 'disabled' },
     }
@@ -53,30 +53,58 @@ export class TranscriptEventSegmentationGlmClient {
 
     this.logger.debug(`Calling GLM for transcript event segmentation, model=${model}`)
 
-    try {
-      return await this.callAndExtractStructuredText({
+    const callOnce = (body: Record<string, unknown>) =>
+      this.callAndExtractStructuredText({
         endpoint,
         headers,
-        requestBody: this.withJsonMode(requestBody, useJsonMode),
+        requestBody: body,
       })
-    } catch (error) {
-      if (this.isRateLimitedError(error)) {
+
+    if (!useJsonMode) {
+      try {
+        return await callOnce(requestBody)
+      } catch (error) {
         throw this.attachGlmMeta(error)
       }
-      if (!useJsonMode) {
-        throw this.attachGlmMeta(error)
-      }
-      this.logger.error(
-        'GLM JSON mode failed, retrying without json mode',
-        error instanceof Error ? error.stack : undefined
-      )
     }
 
-    try {
-      return await this.callAndExtractStructuredText({ endpoint, headers, requestBody })
-    } catch (error) {
-      throw this.attachGlmMeta(error)
+    const jsonModeBody = this.withJsonMode(requestBody, true)
+
+    let lastError: Error | null = null
+    const maxAttempts = 2
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        return await callOnce(jsonModeBody)
+      } catch (error) {
+        if (this.isRateLimitedError(error)) {
+          throw this.attachGlmMeta(error)
+        }
+
+        const normalized = this.attachGlmMeta(error)
+        lastError = normalized
+        const isInvalidJsonModeResponse = normalized.message.startsWith(
+          'Invalid response format from GLM API'
+        )
+        if (!isInvalidJsonModeResponse) {
+          throw normalized
+        }
+
+        if (attempt + 1 < maxAttempts) {
+          this.logger.warn(
+            `GLM JSON mode returned invalid response, retrying in JSON mode, model=${model}`
+          )
+          continue
+        }
+
+        this.logger.error(
+          `GLM JSON mode returned invalid response after ${maxAttempts} attempts, giving up, model=${model}`,
+          normalized.stack
+        )
+        throw normalized
+      }
     }
+
+    throw lastError ?? new Error('GLM JSON mode failed')
   }
 
   getModelName(): string {
@@ -125,18 +153,9 @@ export class TranscriptEventSegmentationGlmClient {
     if (extracted.text) {
       const normalizedJson = this.extractJsonObjectIfValid(extracted.text)
       if (normalizedJson) {
-        if (
-          isJsonMode &&
-          (this.isEmptyJsonObject(normalizedJson) || this.isMissingNextSentence(normalizedJson))
-        ) {
-          throw this.buildInvalidResponseError(response, extracted.finishReason)
-        }
         return normalizedJson
       }
       if (extracted.finishReason !== 'length') {
-        if (isJsonMode && this.isEmptyJsonObject(extracted.text)) {
-          throw this.buildInvalidResponseError(response, extracted.finishReason)
-        }
         return extracted.text
       }
     }
@@ -352,42 +371,6 @@ export class TranscriptEventSegmentationGlmClient {
   private isJsonModeRequest(requestBody: Record<string, unknown>): boolean {
     const format = requestBody.response_format as { type?: unknown } | undefined
     return typeof format?.type === 'string' && format.type === 'json_object'
-  }
-
-  private isEmptyJsonObject(text: string): boolean {
-    const trimmed = text.trim()
-    if (!trimmed) return false
-    try {
-      const parsed = JSON.parse(trimmed)
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return false
-      }
-      return Object.keys(parsed).length === 0
-    } catch {
-      return false
-    }
-  }
-
-  private isMissingNextSentence(text: string): boolean {
-    const trimmed = text.trim()
-    if (!trimmed) return false
-    try {
-      const parsed = JSON.parse(trimmed) as { nextSentence?: unknown; content?: unknown }
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return false
-      }
-
-      const value =
-        typeof parsed.nextSentence === 'string'
-          ? parsed.nextSentence
-          : typeof parsed.content === 'string'
-            ? parsed.content
-            : ''
-
-      return !value.trim()
-    } catch {
-      return false
-    }
   }
 
   private buildInvalidResponseError(

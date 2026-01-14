@@ -44,9 +44,7 @@ describe('transcript-event-segmentation.extraction', () => {
       ],
     })
 
-    expect(rawSegment).toBe(
-      '这个文档呢是我们二零二六年一月九号刚刚创建的啊'
-    )
+    expect(rawSegment).toBe('这个文档呢是我们二零二六年一月九号刚刚创建的啊')
   })
 
   it('normalizeForPunctuationOnlyCompare 允许仅插入标点与空格', () => {
@@ -55,7 +53,9 @@ describe('transcript-event-segmentation.extraction', () => {
     const punctuated =
       '这个文档呢是我们二零二六年一月九号，刚刚创建的啊，这个文档呢其实就是把每个模块负责什么啊，他们之间怎么分工啊，怎么协作啊，都讲的特别明白。'
 
-    expect(normalizeForPunctuationOnlyCompare(punctuated)).toBe(normalizeForPunctuationOnlyCompare(raw))
+    expect(normalizeForPunctuationOnlyCompare(punctuated)).toBe(
+      normalizeForPunctuationOnlyCompare(raw)
+    )
   })
 
   it('previousSentence 带标点时仍可定位到无标点原文', () => {

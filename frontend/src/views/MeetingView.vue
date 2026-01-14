@@ -201,15 +201,6 @@
 	          <el-button
 	            v-if="hasAnalysisContent && !isAnalyzing"
 	            size="small"
-	            class="ghost-button"
-	            :icon="Refresh"
-	            @click="startAnalysis"
-	          >
-	            重新分析
-	          </el-button>
-	          <el-button
-	            v-if="hasAnalysisContent && !isAnalyzing"
-	            size="small"
 	            type="danger"
 	            plain
 	            @click="clearAnalysis"
@@ -221,15 +212,15 @@
 	            type="primary"
 	            :icon="MagicStick"
 	            :loading="isAnalyzing"
-	            :disabled="!sessionId || transcriptEventSegmentationStore.segments.length === 0"
+	            :disabled="!sessionId || transcriptStreamStore.nextEventIndex === 0"
 	            @click="startAnalysis"
 	          >
-	            {{ isAnalyzing ? '分析中...' : '开始分析' }}
+	            {{ isAnalyzing ? '分析中...' : (hasAnalysisContent ? '重新分析' : '开始分析') }}
 	          </el-button>
 	        </div>
 	      </div>
 
-	      <div class="analysis-content">
+	      <div class="analysis-content" ref="analysisScrollRef">
 	        <!-- 空状态占位符 -->
 	        <div v-if="!hasAnalysisContent && !isAnalyzing && !analysisError" class="analysis-empty">
 	          <div class="empty-icon">
@@ -240,9 +231,14 @@
 	        </div>
 
 	        <!-- 加载状态 -->
-	        <div v-if="isAnalyzing" class="analysis-loading">
+	        <div v-if="isAnalyzing && !hasAnalysisContent" class="analysis-loading">
 	          <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
 	          <p>正在分析中，请稍候...</p>
+	          <p v-if="analysisProgress" class="analysis-progress">{{ analysisProgress }}</p>
+	        </div>
+
+	        <div v-if="isAnalyzing && hasAnalysisContent && analysisProgress" class="analysis-stream-status">
+	          {{ analysisProgress }}
 	        </div>
 
 	        <!-- 错误状态 -->
@@ -252,7 +248,7 @@
 	        </div>
 
 	        <!-- 分析结果 -->
-	        <div v-if="hasAnalysisContent && !isAnalyzing" class="analysis-result" v-html="renderedAnalysisResult" />
+	        <div v-if="hasAnalysisContent" class="analysis-result" v-html="renderedAnalysisResult" />
 	      </div>
 	    </section>
 
@@ -358,7 +354,8 @@ import {
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { sessionApi, speechApi, transcriptEventSegmentationApi, type Session, type Speech, type TranscriptEventSegment } from '@/services/api'
+import { sessionApi, speechApi, transcriptAnalysisApi, transcriptEventSegmentationApi, type Session, type Speech, type TranscriptEventSegment } from '@/services/api'
+import { getApiBaseUrl } from '@/services/http'
 import { transcription } from '@/services/transcription'
 import { websocket, type ConnectionStatus, type TranscriptEventSegmentationProgressData } from '@/services/websocket'
 import { useTranscriptStreamStore } from '@/stores/transcriptStream'
@@ -408,9 +405,12 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
 
 	// 分析总结状态
+	const analysisScrollRef = ref<HTMLElement | null>(null)
 	const analysisResult = ref<string>('')
 	const isAnalyzing = ref(false)
 	const analysisError = ref<string>('')
+	const analysisProgress = ref<string>('')
+	let analysisEventSource: EventSource | null = null
 
 	// 针对性分析状态
 	const analysisMode = ref<'general' | 'target'>('general')
@@ -798,6 +798,10 @@ onUnmounted(() => {
     actionBarResizeObserver.disconnect()
     actionBarResizeObserver = null
   }
+  if (analysisEventSource) {
+    analysisEventSource.close()
+    analysisEventSource = null
+  }
   transcription.dispose()
   transcriptStreamStore.reset()
   transcriptEventSegmentationStore.reset()
@@ -1014,6 +1018,8 @@ const renderedAnalysisResult = computed(() => {
   // 使用 marked.parse 的同步版本
   const rawHtml = marked.parse(analysisResult.value, {
     async: false,
+    gfm: true,
+    breaks: true,
   }) as string
   return DOMPurify.sanitize(rawHtml)
 })
@@ -1025,6 +1031,8 @@ const renderedTargetAnalysisResult = computed(() => {
   if (!targetAnalysisResult.value) return ''
   const rawHtml = marked.parse(targetAnalysisResult.value, {
     async: false,
+    gfm: true,
+    breaks: true,
   }) as string
   return DOMPurify.sanitize(rawHtml)
 })
@@ -1044,55 +1052,208 @@ async function startAnalysis(): Promise<void> {
     return
   }
 
-  if (transcriptEventSegmentationStore.segments.length === 0) {
-    ElMessage.warning('暂无语句拆分内容，请等待拆分完成')
+  if (transcriptStreamStore.nextEventIndex === 0) {
+    ElMessage.warning('暂无原文内容，请先开始录音/转写')
     return
   }
 
-  try {
-    isAnalyzing.value = true
-    analysisError.value = ''
-
-    // 构建分析内容：使用语句拆分结果
-    const segmentsText = transcriptEventSegmentationStore.segments
-      .map(seg => `@${seg.sequence}: ${seg.content}`)
-      .join('\n\n')
-
-    // TODO: 调用后端分析 API
-    // 临时使用模拟数据展示效果
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    analysisResult.value = `# 会议分析总结
-
-## 讨论主题
-本次会议主要讨论了项目进展和技术方案相关内容。
-
-## 关键要点
-- 语句拆分功能正常运行
-- 共处理 **${transcriptEventSegmentationStore.segments.length}** 条语句
-- 系统状态良好
-
-## 待办事项
-1. 完成后端分析 API 接入
-2. 添加更多分析维度
-3. 优化分析结果展示
-
----
-*分析时间: ${new Date().toLocaleString('zh-CN')}*`
-
-    ElMessage.success('分析完成')
-  } catch (error) {
-    console.error('分析失败:', error)
-    analysisError.value = error instanceof Error ? error.message : '分析失败'
-    ElMessage.error('分析失败')
-  } finally {
-    isAnalyzing.value = false
+  if (analysisEventSource) {
+    analysisEventSource.close()
+    analysisEventSource = null
   }
+
+  isAnalyzing.value = true
+  analysisError.value = ''
+  analysisProgress.value = '正在连接分析服务…'
+  analysisResult.value = ''
+
+  if (typeof EventSource === 'undefined') {
+    try {
+      const response = await transcriptAnalysisApi.generateSummary(sessionId.value)
+      const markdown = response?.data?.markdown
+      if (!markdown) {
+        throw new Error('分析服务返回为空')
+      }
+      analysisResult.value = markdown
+      ElMessage.success('分析完成')
+    } catch (error) {
+      console.error('分析失败:', error)
+      analysisError.value = error instanceof Error ? error.message : '分析失败'
+      ElMessage.error('分析失败')
+    } finally {
+      analysisProgress.value = ''
+      isAnalyzing.value = false
+    }
+    return
+  }
+
+  const baseUrl = String(getApiBaseUrl() || '/api').replace(/\/+$/, '')
+	const streamUrl = `${baseUrl}/transcript-analysis/session/${encodeURIComponent(
+		sessionId.value
+	)}/summary/stream`
+
+	let finished = false
+	let hadAnyDelta = false
+	let errorProbeInFlight = false
+	let consecutiveErrorCount = 0
+	analysisEventSource = new EventSource(streamUrl)
+
+	const isNearBottom = (el: HTMLElement, thresholdPx: number): boolean => {
+		const threshold = Math.max(0, Math.floor(thresholdPx))
+		const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
+		return remaining <= threshold
+	}
+
+	const scrollToBottomIfNeeded = async (shouldStick: boolean): Promise<void> => {
+		if (!shouldStick) return
+		await nextTick()
+		const el = analysisScrollRef.value
+		if (!el) return
+		el.scrollTop = el.scrollHeight
+	}
+
+  const finishOnce = (payload?: { ok?: boolean; message?: string }) => {
+    if (finished) return
+    finished = true
+    if (analysisEventSource) {
+      analysisEventSource.close()
+      analysisEventSource = null
+    }
+    analysisProgress.value = ''
+    isAnalyzing.value = false
+
+    if (payload?.ok) {
+      ElMessage.success('分析完成')
+    } else if (payload?.message) {
+      analysisError.value = payload.message
+      ElMessage.error('分析失败')
+    }
+  }
+
+  analysisEventSource.addEventListener('progress', (event) => {
+    const message = (event as MessageEvent).data
+    if (typeof message === 'string' && message.trim()) {
+      analysisProgress.value = message
+    }
+  })
+
+	analysisEventSource.addEventListener('delta', (event) => {
+		const el = analysisScrollRef.value
+		const shouldStick = el ? isNearBottom(el, 120) : true
+		const text = (event as MessageEvent).data
+		if (typeof text === 'string' && text) {
+			hadAnyDelta = true
+			analysisResult.value += text
+			void scrollToBottomIfNeeded(shouldStick)
+		}
+	})
+
+	analysisEventSource.addEventListener('done', () => {
+		finishOnce({ ok: true })
+	})
+
+	analysisEventSource.onmessage = (event) => {
+		const raw = (event as MessageEvent).data
+		if (typeof raw !== 'string' || !raw.trim()) return
+
+		const el = analysisScrollRef.value
+		const shouldStick = el ? isNearBottom(el, 120) : true
+
+		if (!raw.trimStart().startsWith('{')) {
+			hadAnyDelta = true
+			analysisResult.value += raw
+			void scrollToBottomIfNeeded(shouldStick)
+			return
+		}
+
+		try {
+			const parsed = JSON.parse(raw)
+			const type = parsed?.type
+			const data = parsed?.data
+			if (type === 'progress' && typeof data === 'string') {
+				analysisProgress.value = data
+				return
+			}
+			if (type === 'delta' && typeof data === 'string') {
+				hadAnyDelta = true
+				analysisResult.value += data
+				void scrollToBottomIfNeeded(shouldStick)
+				return
+			}
+			if (type === 'done') {
+				finishOnce({ ok: true })
+				return
+			}
+			if (type === 'server_error') {
+				const message = data?.message ? String(data.message) : '分析失败'
+				finishOnce({ ok: false, message })
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	analysisEventSource.addEventListener('server_error', (event) => {
+		const raw = (event as MessageEvent).data
+		try {
+			const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+      const message = parsed?.message ? String(parsed.message) : '分析失败'
+      finishOnce({ ok: false, message })
+    } catch {
+      finishOnce({ ok: false, message: typeof raw === 'string' ? raw : '分析失败' })
+		}
+	})
+
+	analysisEventSource.onerror = async () => {
+		if (finished) return
+		consecutiveErrorCount += 1
+		analysisProgress.value = '分析连接中断，正在重连…'
+
+		const readyState = analysisEventSource?.readyState
+		console.error('[analysis SSE error]', { streamUrl, readyState, consecutiveErrorCount })
+
+		if (consecutiveErrorCount < 3) {
+			return
+		}
+
+		if (!errorProbeInFlight) {
+			errorProbeInFlight = true
+			try {
+				const controller = new AbortController()
+				const timer = window.setTimeout(() => controller.abort(), 3000)
+				const resp = await fetch(streamUrl, {
+					method: 'GET',
+					headers: { Accept: 'text/event-stream' },
+					signal: controller.signal,
+				})
+				window.clearTimeout(timer)
+
+				if (!resp.ok) {
+					const text = await resp.text().catch(() => '')
+					const detail = text ? ` ${text.slice(0, 300)}` : ''
+					finishOnce({ ok: false, message: `分析流式接口返回异常：HTTP ${resp.status}.${detail}` })
+					return
+				}
+			} catch (error) {
+				console.error('[analysis SSE probe failed]', error)
+			} finally {
+				errorProbeInFlight = false
+			}
+		}
+
+		const suffix = hadAnyDelta ? '（已接收部分内容）' : ''
+		finishOnce({ ok: false, message: `分析连接中断，请重试${suffix}` })
+	}
 }
 
 function clearAnalysis(): void {
+  if (analysisEventSource) {
+    analysisEventSource.close()
+    analysisEventSource = null
+  }
   analysisResult.value = ''
   analysisError.value = ''
+  analysisProgress.value = ''
 }
 
 // 切换到针对性分析模式
@@ -1713,6 +1874,25 @@ function clearTargetAnalysis(): void {
   font-size: 14px;
 }
 
+.analysis-progress {
+  font-size: 13px;
+  color: var(--ink-400);
+}
+
+.analysis-stream-status {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(47, 107, 255, 0.14);
+  background: rgba(47, 107, 255, 0.06);
+  color: var(--ink-600);
+  font-size: 13px;
+  backdrop-filter: blur(8px);
+}
+
 /* 错误状态 */
 .analysis-error {
   display: flex;
@@ -1810,6 +1990,57 @@ function clearTargetAnalysis(): void {
   border: none;
   border-top: 1px solid rgba(15, 23, 42, 0.10);
   margin: 20px 0;
+}
+
+.analysis-result:deep(a) {
+  color: var(--brand-600);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.analysis-result:deep(a:hover) {
+  color: var(--brand-700);
+}
+
+.analysis-result:deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.analysis-result:deep(del) {
+  color: var(--ink-500);
+}
+
+.analysis-result:deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+}
+
+.analysis-result:deep(th),
+.analysis-result:deep(td) {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  vertical-align: top;
+}
+
+.analysis-result:deep(th) {
+  background: rgba(15, 23, 42, 0.04);
+  font-weight: 600;
+}
+
+.analysis-result:deep(tr:last-child td) {
+  border-bottom: none;
+}
+
+.analysis-result:deep(input[type="checkbox"]) {
+  margin-right: 6px;
+  transform: translateY(1px);
 }
 
 /* 三列布局适配 - 在大屏时将 content-area 改为三列 */

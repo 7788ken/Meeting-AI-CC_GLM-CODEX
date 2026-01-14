@@ -269,6 +269,5 @@ describe('API E2E Tests', () => {
       const { TranscriptGateway } = require('../src/modules/transcript/transcript.gateway')
       expect(TranscriptGateway).toBeDefined()
     })
-
   })
 })

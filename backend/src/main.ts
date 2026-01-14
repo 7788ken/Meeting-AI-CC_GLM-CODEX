@@ -144,7 +144,6 @@ async function bootstrap() {
     }
   >()
 
-
   // raw_llm：segmentKey -> eventIndex 映射（每 session + client，用于原文流 upsert）
   const segmentKeyToEventIndexBySessionClient = new Map<string, Map<string, number>>()
   // 保存每个 segmentKey 对应的原始内容（用于 15 秒强制分段时标记 isFinal）
@@ -271,7 +270,6 @@ async function bootstrap() {
               })
             )
             break
-
         }
       } catch {
         // 不是 JSON，处理为二进制音频数据
@@ -845,10 +843,13 @@ async function bootstrap() {
       clearTimeout(existing)
     }
 
-    const timer = setTimeout(() => {
-      transcriptEventSegmentationTimerBySession.delete(sessionId)
-      void runTranscriptEventSegmentation(sessionId, { force: false, reason })
-    }, Math.max(0, delayMs))
+    const timer = setTimeout(
+      () => {
+        transcriptEventSegmentationTimerBySession.delete(sessionId)
+        void runTranscriptEventSegmentation(sessionId, { force: false, reason })
+      },
+      Math.max(0, delayMs)
+    )
 
     transcriptEventSegmentationTimerBySession.set(sessionId, timer)
   }
@@ -875,11 +876,7 @@ async function bootstrap() {
       const nextAllowedAt = lastRunAt + intervalMs
       const now = Date.now()
       if (now < nextAllowedAt) {
-        scheduleTranscriptEventSegmentationAfter(
-          sessionId,
-          nextAllowedAt - now,
-          `merged_${reason}`
-        )
+        scheduleTranscriptEventSegmentationAfter(sessionId, nextAllowedAt - now, `merged_${reason}`)
         return
       }
     }

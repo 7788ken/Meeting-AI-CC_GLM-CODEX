@@ -98,6 +98,13 @@ export class DebugErrorService {
     return errors.map(error => this.toDto(error))
   }
 
+  async findById(id: string): Promise<DebugErrorDto | null> {
+    const normalized = typeof id === 'string' ? id.trim() : ''
+    if (!normalized) return null
+    const error = await this.debugErrorModel.findById(normalized).exec()
+    return error ? this.toDto(error) : null
+  }
+
   async deleteBySession(sessionId: string): Promise<{ deletedCount: number }> {
     const normalized = typeof sessionId === 'string' ? sessionId.trim() : ''
     if (!normalized) return { deletedCount: 0 }

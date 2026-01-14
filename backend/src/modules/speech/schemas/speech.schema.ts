@@ -48,7 +48,6 @@ export class Speech {
 
   @Prop()
   duration?: number // 发言时长（毫秒）
-
 }
 
 export const SpeechSchema = SchemaFactory.createForClass(Speech)

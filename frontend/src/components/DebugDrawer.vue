@@ -112,15 +112,25 @@
                 <pre class="detail-code">{{ activeError.message }}</pre>
               </div>
 
-              <div v-if="activeError.stack" class="detail-block">
-                <div class="detail-title">堆栈</div>
-                <pre class="detail-code">{{ activeError.stack }}</pre>
-              </div>
+	              <div v-if="activeError.stack" class="detail-block">
+	                <div class="detail-title">堆栈</div>
+	                <pre class="detail-code">{{ activeError.stack }}</pre>
+	              </div>
 
-              <div v-if="activeError.context" class="detail-block">
-                <div class="detail-title">上下文</div>
-                <pre class="detail-code">{{ formatContext(activeError.context) }}</pre>
-              </div>
+		              <div v-if="glmSnippetText" class="detail-block">
+		                <div class="detail-title">GLM 返回</div>
+		                <pre class="detail-code">{{ glmSnippetText }}</pre>
+		              </div>
+
+		              <div v-if="promptSnippetText" class="detail-block">
+		                <div class="detail-title">LLM 提示词</div>
+		                <pre class="detail-code">{{ promptSnippetText }}</pre>
+		              </div>
+
+		              <div v-if="activeError.context" class="detail-block">
+		                <div class="detail-title">上下文</div>
+		                <pre class="detail-code">{{ formatContext(activeError.context) }}</pre>
+		              </div>
             </div>
             <div v-else class="empty-detail">
               <div class="empty-title">选择一条报错查看详情</div>
@@ -134,10 +144,10 @@
 </template>
 
 <script setup lang="ts">
-	import { computed, ref, watch } from 'vue'
-	import { ElMessage, ElMessageBox } from 'element-plus'
-	import { Delete, Refresh } from '@element-plus/icons-vue'
-	import { debugErrorApi, type DebugError } from '@/services/api'
+		import { computed, ref, watch } from 'vue'
+		import { ElMessage, ElMessageBox } from 'element-plus'
+		import { Delete, Refresh } from '@element-plus/icons-vue'
+		import { debugErrorApi, type DebugError } from '@/services/api'
 
 const props = withDefaults(
   defineProps<{
@@ -169,6 +179,98 @@ const activeError = computed(() => {
     return errors.value.find(item => item.id === selectedId.value) || null
   }
   return errors.value[0] || null
+})
+
+type GlmSnippet = {
+  requestId?: string
+  id?: string
+  model?: string
+  finishReason?: string
+  content?: string
+}
+
+type PromptSnippet = {
+  promptLength?: number
+  promptSystem?: string
+  promptUser?: string
+}
+
+function extractGlmContent(raw: unknown): string | null {
+  if (typeof raw === 'string') return raw
+  if (!Array.isArray(raw)) return null
+  const parts: string[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const text = (item as any).text
+    if (typeof text === 'string' && text.trim()) parts.push(text)
+  }
+  const merged = parts.join('')
+  return merged ? merged : null
+}
+
+function extractGlmSnippet(context: DebugError['context']): GlmSnippet | null {
+  if (!context || typeof context !== 'object') return null
+  const glm = (context as any).glm
+  if (!glm || typeof glm !== 'object') return null
+  const response = glm.response
+  if (!response || typeof response !== 'object') return null
+  const choices = (response as any).choices
+  const choice = Array.isArray(choices) ? choices[0] : null
+  if (!choice || typeof choice !== 'object') return null
+  const message = (choice as any).message
+  if (!message || typeof message !== 'object') return null
+
+  const finishReason =
+    typeof (choice as any).finish_reason === 'string' ? (choice as any).finish_reason : undefined
+  const content =
+    extractGlmContent((message as any).content) ??
+    extractGlmContent((message as any).reasoning_content) ??
+    null
+
+  if (!content && !finishReason) return null
+
+  return {
+    requestId: typeof (response as any).request_id === 'string' ? (response as any).request_id : undefined,
+    id: typeof (response as any).id === 'string' ? (response as any).id : undefined,
+    model: typeof (response as any).model === 'string' ? (response as any).model : undefined,
+    finishReason,
+    content: content ?? undefined,
+  }
+}
+
+const glmSnippetText = computed(() => {
+  const snippet = extractGlmSnippet(activeError.value?.context)
+  if (!snippet) return null
+  try {
+    return JSON.stringify(snippet, null, 2)
+  } catch {
+    return String(snippet)
+  }
+})
+
+function extractPromptSnippet(context: DebugError['context']): PromptSnippet | null {
+  if (!context || typeof context !== 'object') return null
+  const promptSystem = (context as any).promptSystem
+  const promptUser = (context as any).promptUser
+  const promptLength = (context as any).promptLength
+
+  const snippet: PromptSnippet = {}
+  if (typeof promptLength === 'number' && Number.isFinite(promptLength)) snippet.promptLength = promptLength
+  if (typeof promptSystem === 'string' && promptSystem.trim()) snippet.promptSystem = promptSystem
+  if (typeof promptUser === 'string' && promptUser.trim()) snippet.promptUser = promptUser
+
+  if (!snippet.promptSystem && !snippet.promptUser && snippet.promptLength == null) return null
+  return snippet
+}
+
+const promptSnippetText = computed(() => {
+  const snippet = extractPromptSnippet(activeError.value?.context)
+  if (!snippet) return null
+  try {
+    return JSON.stringify(snippet, null, 2)
+  } catch {
+    return String(snippet)
+  }
 })
 
 watch(

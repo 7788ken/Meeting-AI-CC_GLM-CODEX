@@ -119,7 +119,8 @@ export function extractRawNextSegment(input: {
   hasSentenceEndPunctuation: boolean
 } {
   const windowText = buildWindowText(input.events)
-  const previousSentence = typeof input.previousSentence === 'string' ? input.previousSentence.trim() : ''
+  const previousSentence =
+    typeof input.previousSentence === 'string' ? input.previousSentence.trim() : ''
 
   let previousSentenceFoundAt = -1
   let startOffset = 0
@@ -131,7 +132,8 @@ export function extractRawNextSegment(input: {
       const normalizedIndex = windowMap.normalized.lastIndexOf(prevMap.normalized)
       if (normalizedIndex >= 0) {
         const matchStart = windowMap.originalStartOffsets[normalizedIndex]
-        const matchEnd = windowMap.originalEndOffsets[normalizedIndex + prevMap.normalized.length - 1]
+        const matchEnd =
+          windowMap.originalEndOffsets[normalizedIndex + prevMap.normalized.length - 1]
         if (typeof matchStart === 'number' && typeof matchEnd === 'number') {
           previousSentenceFoundAt = matchStart
           const exactSlice = windowText.slice(matchStart, matchStart + previousSentence.length)
@@ -165,7 +167,8 @@ export function extractRawNextSegment(input: {
     candidates.push({ reason: 'soft_boundary', index: softBoundaryIndex })
   }
 
-  let selected: { reason: 'sentence_end' | 'lead_in' | 'soft_boundary'; index: number } | null = null
+  let selected: { reason: 'sentence_end' | 'lead_in' | 'soft_boundary'; index: number } | null =
+    null
   for (const candidate of candidates) {
     if (!selected || candidate.index < selected.index) {
       selected = candidate
