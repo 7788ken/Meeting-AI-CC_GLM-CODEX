@@ -167,7 +167,7 @@ export function maskString(str: string, visibleChars = 4, maskChar = '*'): strin
  * 邮箱掩码处理
  */
 export function maskEmail(email: string): string {
-  const [username, domain] = email.split('@')
+  const [username = '', domain] = email.split('@')
   if (!domain) return maskString(email)
 
   const visibleChars = Math.min(3, username.length)

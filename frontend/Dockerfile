@@ -1,22 +1,19 @@
 # 前端 Dockerfile
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# 复制 package.json 和 pnpm-lock.yaml
-COPY package.json pnpm-lock.yaml ./
-
-# 安装 pnpm
-RUN npm install -g pnpm
+# 复制 package.json
+COPY package.json ./
 
 # 安装依赖
-RUN pnpm install --frozen-lockfile
+RUN npm install --include=dev --no-package-lock
 
 # 复制源代码
 COPY . .
 
 # 构建
-RUN pnpm build
+RUN npm run build
 
 # 生产环境镜像
 FROM nginx:alpine

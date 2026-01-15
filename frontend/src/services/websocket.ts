@@ -375,7 +375,7 @@ export class WebSocketService {
   private getReconnectDelayMs(attempt: number): number {
     const delays = [1000, 2000, 5000, 10000]
     const index = Math.max(0, Math.min(attempt - 1, delays.length - 1))
-    return delays[index]
+    return delays[index] ?? delays[delays.length - 1] ?? 1000
   }
 
   private restoreSubscriptions(): void {

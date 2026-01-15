@@ -148,7 +148,8 @@ export class AudioCaptureService {
   static floatToPCM16(float32Array: Float32Array): Int16Array {
     const pcm16 = new Int16Array(float32Array.length)
     for (let i = 0; i < float32Array.length; i++) {
-      const sample = Math.max(-1, Math.min(1, float32Array[i]))
+      const value = float32Array[i] ?? 0
+      const sample = Math.max(-1, Math.min(1, value))
       pcm16[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
     }
     return pcm16
@@ -173,7 +174,8 @@ export class AudioCaptureService {
     const samplesToCheck = (duration * 16000) / 1000 // 假设 16kHz
 
     for (let i = 0; i < Math.min(float32Array.length, samplesToCheck); i++) {
-      if (Math.abs(float32Array[i]) < threshold) {
+      const value = float32Array[i] ?? 0
+      if (Math.abs(value) < threshold) {
         silenceCount++
       }
     }
@@ -185,9 +187,12 @@ export class AudioCaptureService {
    * 获取音频能量（用于音量可视化）
    */
   static getAudioEnergy(float32Array: Float32Array): number {
+    if (float32Array.length === 0) return 0
+
     let sum = 0
     for (let i = 0; i < float32Array.length; i++) {
-      sum += float32Array[i] * float32Array[i]
+      const value = float32Array[i] ?? 0
+      sum += value * value
     }
     return Math.sqrt(sum / float32Array.length)
   }

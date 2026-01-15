@@ -1,41 +1,41 @@
 # 后端 Dockerfile
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# 复制 package.json 和 pnpm-lock.yaml
-COPY package.json pnpm-lock.yaml ./
+# 复制 package.json
+COPY package.json ./
 
-# 安装 pnpm
-RUN npm install -g pnpm
-
-# 安装依赖
-RUN pnpm install --frozen-lockfile
+# 安装依赖（包含 dev 依赖以支持构建）
+RUN npm install --include=dev --no-package-lock
 
 # 复制源代码
 COPY . .
 
+# 生成 Prisma Client
+RUN npx prisma generate
+
+# 确认 TypeScript 可用
+RUN node -e "const ts = require('typescript'); console.log('TypeScript version', ts.version)"
+
 # 构建
-RUN pnpm build
+RUN npm run build
 
 # 生产环境镜像
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
-# 复制 package.json 和 pnpm-lock.yaml
-COPY package.json pnpm-lock.yaml ./
-
-# 安装 pnpm
-RUN npm install -g pnpm
+# 复制 package.json 和 Prisma schema（postinstall 需要 schema）
+COPY --from=builder /app/prisma ./prisma
+COPY package.json ./
 
 # 只安装生产依赖
-RUN pnpm install --prod --frozen-lockfile
+RUN npm install --omit=dev --no-package-lock
 
 # 复制构建产物
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 5181
 
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]

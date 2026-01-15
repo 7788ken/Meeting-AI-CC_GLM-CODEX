@@ -130,7 +130,7 @@ async function getMicrophones() {
     microphones.value = devices.filter((d) => d.kind === 'audioinput')
 
     if (microphones.value.length > 0) {
-      selectedMic.value = microphones.value[0].deviceId
+      selectedMic.value = microphones.value[0]?.deviceId ?? ''
     }
   } catch (error) {
     console.error('获取麦克风列表失败:', error)
