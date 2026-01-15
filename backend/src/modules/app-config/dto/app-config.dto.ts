@@ -35,6 +35,15 @@ export class AppConfigDto {
   @ApiProperty({ description: '语句翻译：是否启用语句拆分后翻译' })
   transcriptSegmentTranslationEnabled: boolean
 
+  @ApiProperty({ description: '语句翻译目标语言' })
+  transcriptSegmentTranslationLanguage: string
+
+  @ApiProperty({ description: 'AI 分析：是否强制输出指定语言' })
+  transcriptAnalysisLanguageEnabled: boolean
+
+  @ApiProperty({ description: 'AI 分析输出目标语言' })
+  transcriptAnalysisLanguage: string
+
   @ApiProperty({ description: '会议总结模型' })
   glmTranscriptSummaryModel: string
 
@@ -123,6 +132,21 @@ export class UpdateAppConfigDto {
   @IsOptional()
   @IsBoolean()
   transcriptSegmentTranslationEnabled?: boolean
+
+  @ApiPropertyOptional({ description: '语句翻译目标语言' })
+  @IsOptional()
+  @IsString()
+  transcriptSegmentTranslationLanguage?: string
+
+  @ApiPropertyOptional({ description: 'AI 分析：是否强制输出指定语言' })
+  @IsOptional()
+  @IsBoolean()
+  transcriptAnalysisLanguageEnabled?: boolean
+
+  @ApiPropertyOptional({ description: 'AI 分析输出目标语言' })
+  @IsOptional()
+  @IsString()
+  transcriptAnalysisLanguage?: string
 
   @ApiPropertyOptional({ description: '会议总结模型' })
   @IsOptional()

@@ -1,16 +1,21 @@
 import * as crypto from 'crypto'
 
-export function extractGlmTextContent(content: unknown): string | null {
+export function extractGlmTextContent(
+  content: unknown,
+  options?: { trim?: boolean }
+): string | null {
+  const shouldTrim = options?.trim !== false
+  const normalize = (value: string): string => (shouldTrim ? value.trim() : value)
+  const hasText = (value: string): boolean => (shouldTrim ? value.trim().length > 0 : value.length > 0)
+
   if (typeof content === 'string') {
-    const trimmed = content.trim()
-    return trimmed ? trimmed : null
+    return hasText(content) ? normalize(content) : null
   }
 
   if (content && typeof content === 'object' && !Array.isArray(content)) {
     const maybeText = (content as any).text
     if (typeof maybeText === 'string') {
-      const trimmed = maybeText.trim()
-      return trimmed ? trimmed : null
+      return hasText(maybeText) ? normalize(maybeText) : null
     }
   }
 
@@ -21,19 +26,20 @@ export function extractGlmTextContent(content: unknown): string | null {
   const parts: string[] = []
   for (const item of content) {
     if (typeof item === 'string') {
-      if (item.trim()) parts.push(item)
+      if (hasText(item)) parts.push(shouldTrim ? item.trim() : item)
       continue
     }
     if (item && typeof item === 'object') {
       const maybeText = (item as any).text
-      if (typeof maybeText === 'string' && maybeText.trim()) {
-        parts.push(maybeText)
+      if (typeof maybeText === 'string' && hasText(maybeText)) {
+        parts.push(shouldTrim ? maybeText.trim() : maybeText)
       }
     }
   }
 
-  const joined = parts.join('\n').trim()
-  return joined ? joined : null
+  if (parts.length === 0) return null
+  const joined = shouldTrim ? parts.join('\n').trim() : parts.join('')
+  return joined.length > 0 ? joined : null
 }
 
 export function getGlmAuthorizationToken(rawApiKey: string): string {

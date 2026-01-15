@@ -282,7 +282,7 @@ export class TranscriptAnalysisGlmClient {
   private extractDeltaText(payload: unknown): string | null {
     const choice = (payload as any)?.choices?.[0]
     const delta = choice?.delta
-    const content = extractGlmTextContent(delta?.content)
+    const content = extractGlmTextContent(delta?.content, { trim: false })
     if (content) return content
     return null
   }

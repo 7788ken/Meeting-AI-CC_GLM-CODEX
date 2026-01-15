@@ -108,6 +108,9 @@ export interface BackendConfig {
   transcriptMaxBufferDurationHardMs: number
   transcriptDebugLogUtterances: boolean
   transcriptSegmentTranslationEnabled: boolean
+  transcriptSegmentTranslationLanguage: string
+  transcriptAnalysisLanguageEnabled: boolean
+  transcriptAnalysisLanguage: string
   glmTranscriptSummaryModel: string
   glmTranscriptSummaryMaxTokens: number
   glmTranscriptSummaryThinking: boolean

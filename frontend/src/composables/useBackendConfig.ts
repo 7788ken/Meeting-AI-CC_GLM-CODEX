@@ -13,6 +13,9 @@ const fallbackDefaults: BackendConfig = {
   transcriptMaxBufferDurationHardMs: 50000,
   transcriptDebugLogUtterances: false,
   transcriptSegmentTranslationEnabled: false,
+  transcriptSegmentTranslationLanguage: '简体中文',
+  transcriptAnalysisLanguageEnabled: true,
+  transcriptAnalysisLanguage: '简体中文',
   glmTranscriptSummaryModel: '',
   glmTranscriptSummaryMaxTokens: 2500,
   glmTranscriptSummaryThinking: true,
@@ -109,6 +112,16 @@ function normalizeBackendConfig(
       input.transcriptSegmentTranslationEnabled,
       base.transcriptSegmentTranslationEnabled
     ),
+    transcriptSegmentTranslationLanguage:
+      normalizeText(input.transcriptSegmentTranslationLanguage, base.transcriptSegmentTranslationLanguage) ||
+      base.transcriptSegmentTranslationLanguage,
+    transcriptAnalysisLanguageEnabled: normalizeBoolean(
+      input.transcriptAnalysisLanguageEnabled,
+      base.transcriptAnalysisLanguageEnabled
+    ),
+    transcriptAnalysisLanguage:
+      normalizeText(input.transcriptAnalysisLanguage, base.transcriptAnalysisLanguage) ||
+      base.transcriptAnalysisLanguage,
     glmTranscriptSummaryModel: normalizeText(
       input.glmTranscriptSummaryModel,
       base.glmTranscriptSummaryModel
@@ -163,6 +176,24 @@ function validateBackendConfig(input: Partial<BackendConfig> | BackendConfig): s
   const hard = Number((input as any).transcriptMaxBufferDurationHardMs)
   if (Number.isFinite(soft) && Number.isFinite(hard) && hard < soft) {
     errors.push('音频 buffer 硬上限必须大于等于软上限')
+  }
+
+  const translationEnabled = (input as any).transcriptSegmentTranslationEnabled === true
+  const translationLanguage =
+    typeof (input as any).transcriptSegmentTranslationLanguage === 'string'
+      ? (input as any).transcriptSegmentTranslationLanguage.trim()
+      : ''
+  if (translationEnabled && !translationLanguage) {
+    errors.push('语句翻译目标语言不能为空')
+  }
+
+  const analysisLanguageEnabled = (input as any).transcriptAnalysisLanguageEnabled === true
+  const analysisLanguage =
+    typeof (input as any).transcriptAnalysisLanguage === 'string'
+      ? (input as any).transcriptAnalysisLanguage.trim()
+      : ''
+  if (analysisLanguageEnabled && !analysisLanguage) {
+    errors.push('AI 分析目标语言不能为空')
   }
 
   return errors

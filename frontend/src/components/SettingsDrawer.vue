@@ -610,10 +610,42 @@
                       {{ getRemark('TRANSCRIPT_DEBUG_LOG_UTTERANCES') }}
                     </div>
                   </el-form-item>
-                  <el-form-item label="语句翻译（简体中文）">
+                </div>
+
+                <div class="pane-title section-title">语言设置</div>
+                <div class="pane-subtitle">控制语句翻译与 AI 分析输出语言。</div>
+
+                <div class="grid two-col">
+                  <el-form-item label="语句翻译开关">
                     <el-switch v-model="backendForm.transcriptSegmentTranslationEnabled" />
                     <div v-if="getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED')" class="hint">
                       {{ getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="语句翻译目标语言">
+                    <el-input
+                      v-model="backendForm.transcriptSegmentTranslationLanguage"
+                      placeholder="如 简体中文 / English / 日本語"
+                      :disabled="!backendForm.transcriptSegmentTranslationEnabled"
+                    />
+                    <div v-if="getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE')" class="hint">
+                      {{ getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="AI 分析语言开关">
+                    <el-switch v-model="backendForm.transcriptAnalysisLanguageEnabled" />
+                    <div v-if="getRemark('TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED')" class="hint">
+                      {{ getRemark('TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="AI 分析目标语言">
+                    <el-input
+                      v-model="backendForm.transcriptAnalysisLanguage"
+                      placeholder="如 简体中文 / English / 日本語"
+                      :disabled="!backendForm.transcriptAnalysisLanguageEnabled"
+                    />
+                    <div v-if="getRemark('TRANSCRIPT_ANALYSIS_LANGUAGE')" class="hint">
+                      {{ getRemark('TRANSCRIPT_ANALYSIS_LANGUAGE') }}
                     </div>
                   </el-form-item>
                 </div>

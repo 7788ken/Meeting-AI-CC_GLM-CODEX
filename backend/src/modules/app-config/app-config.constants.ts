@@ -29,6 +29,9 @@ export const APP_CONFIG_SEED_KEYS = [
   'TRANSCRIPT_AUTO_SPLIT_GAP_MS',
   'TRANSCRIPT_DEBUG_LOG_UTTERANCES',
   'TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED',
+  'TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE',
+  'TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED',
+  'TRANSCRIPT_ANALYSIS_LANGUAGE',
   'TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS',
   'TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS',
 ] as const
@@ -79,7 +82,13 @@ export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
     '实时转写：无 segmentKey 时，相邻 utterance 更新超过该间隔（ms）将强制切分为新 speech。',
   TRANSCRIPT_DEBUG_LOG_UTTERANCES: '转写调试：打印最终 utterance / event（仅用于排障，建议关闭）。',
   TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED:
-    '语句翻译：是否在语句拆分后生成简体中文翻译（保留技术名/标识符）。',
+    '语句翻译：是否在语句拆分后生成翻译（保留技术名/标识符）。',
+  TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE:
+    '语句翻译：翻译目标语言（如“简体中文”“English”），用于控制翻译输出语言。',
+  TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED:
+    'AI 分析：是否强制输出指定语言结果（关闭则不强制输出语言）。',
+  TRANSCRIPT_ANALYSIS_LANGUAGE:
+    'AI 分析：输出目标语言（如“简体中文”“English”）。',
   TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS:
     'SmartAudioBuffer：软上限（ms），满足“有静音”条件时触发 flush。',
   TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS:
@@ -166,6 +175,24 @@ export const APP_CONFIG_FIELDS = [
     key: 'TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED',
     type: 'boolean',
     defaultValue: false,
+  },
+  {
+    field: 'transcriptSegmentTranslationLanguage',
+    key: 'TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE',
+    type: 'string',
+    defaultValue: '简体中文',
+  },
+  {
+    field: 'transcriptAnalysisLanguageEnabled',
+    key: 'TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED',
+    type: 'boolean',
+    defaultValue: true,
+  },
+  {
+    field: 'transcriptAnalysisLanguage',
+    key: 'TRANSCRIPT_ANALYSIS_LANGUAGE',
+    type: 'string',
+    defaultValue: '简体中文',
   },
   {
     field: 'glmTranscriptSummaryModel',

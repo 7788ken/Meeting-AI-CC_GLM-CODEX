@@ -45,6 +45,13 @@ export class TranscriptEventSegmentTranslationService {
     return this.appConfigService.getBoolean('TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED', false)
   }
 
+  private resolveTargetLanguage(): string {
+    const raw = this.appConfigService
+      .getString('TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE', '')
+      .trim()
+    return raw || '简体中文'
+  }
+
   private toDTO(segment: TranscriptEventSegmentDocument): TranscriptEventSegmentDTO {
     return {
       id: segment._id.toString(),
@@ -83,7 +90,8 @@ export class TranscriptEventSegmentTranslationService {
     if (existing.translatedContent && existing.translatedContent.trim()) return
 
     try {
-      const { translatedText, model } = await this.glmClient.translateToSimplifiedChinese(sourceText)
+      const targetLanguage = this.resolveTargetLanguage()
+      const { translatedText, model } = await this.glmClient.translate(sourceText, targetLanguage)
       const normalized = translatedText.trim()
       if (!normalized) {
         await this.segmentModel
@@ -141,4 +149,3 @@ export class TranscriptEventSegmentTranslationService {
     this.onSegmentUpsert?.(this.toDTO(updated))
   }
 }
-

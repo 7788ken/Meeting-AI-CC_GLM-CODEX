@@ -28,7 +28,7 @@ export class TranscriptEventSegmentTranslationGlmClient {
     return fallback
   }
 
-  async translateToSimplifiedChinese(text: string): Promise<{ translatedText: string; model: string }> {
+  async translate(text: string, targetLanguage: string): Promise<{ translatedText: string; model: string }> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
       throw new Error('GLM_API_KEY not configured')
@@ -43,7 +43,10 @@ export class TranscriptEventSegmentTranslationGlmClient {
     }
 
     const model = this.getModelName()
-    const prompt = buildTranscriptEventSegmentTranslationPrompt({ text: normalizedText })
+    const prompt = buildTranscriptEventSegmentTranslationPrompt({
+      text: normalizedText,
+      targetLanguage,
+    })
 
     const requestBody: Record<string, unknown> = {
       model,
@@ -127,4 +130,3 @@ export class TranscriptEventSegmentTranslationGlmClient {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 }
-

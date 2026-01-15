@@ -25,6 +25,7 @@ import {
   TranscriptEventSegment,
   type TranscriptEventSegmentDocument,
 } from '../transcript-event-segmentation/schemas/transcript-event-segment.schema'
+import { AppConfigService } from '../app-config/app-config.service'
 
 export type TranscriptSummaryDTO = {
   sessionId: string
@@ -73,6 +74,7 @@ export class TranscriptAnalysisService {
     @InjectModel(TranscriptEventSegment.name)
     private readonly segmentModel: Model<TranscriptEventSegmentDocument>,
     private readonly transcriptStreamService: TranscriptStreamService,
+    private readonly appConfigService: AppConfigService,
     private readonly glmClient: TranscriptAnalysisGlmClient
   ) {}
 
@@ -126,7 +128,7 @@ export class TranscriptAnalysisService {
 
     if (chunks.length <= 1) {
       const { markdown, model } = await this.glmClient.generateMarkdown({
-        system: DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT,
+        system: this.buildAnalysisSystemPrompt(DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT),
         user: buildTranscriptSummaryUserPrompt({
           sessionId,
           revision: snapshot.revision,
@@ -150,7 +152,7 @@ export class TranscriptAnalysisService {
     for (let i = 0; i < chunks.length; i += 1) {
       const chunkText = this.buildEventsText(chunks[i])
       const { markdown } = await this.glmClient.generateMarkdown({
-        system: DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT,
+        system: this.buildAnalysisSystemPrompt(DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT),
         user: buildTranscriptSummaryUserPrompt({
           sessionId,
           revision: snapshot.revision,
@@ -164,7 +166,7 @@ export class TranscriptAnalysisService {
     const combinedPartials = reduced.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
 
     const { markdown, model } = await this.glmClient.generateMarkdown({
-      system: DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT,
+      system: this.buildAnalysisSystemPrompt(DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT),
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
     })
 
@@ -237,7 +239,7 @@ export class TranscriptAnalysisService {
       yield { type: 'progress', data: '正在生成总结…' }
       const totalText = this.buildEventsText(events)
       for await (const chunk of this.glmClient.generateMarkdownStream({
-        system: DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT,
+        system: this.buildAnalysisSystemPrompt(DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT),
         user: buildTranscriptSummaryUserPrompt({
           sessionId,
           revision: snapshot.revision,
@@ -268,7 +270,7 @@ export class TranscriptAnalysisService {
       yield { type: 'progress', data: `正在提炼片段要点（${i + 1}/${chunks.length}）…` }
       const chunkText = this.buildEventsText(chunks[i])
       const { markdown } = await this.glmClient.generateMarkdown({
-        system: DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT,
+        system: this.buildAnalysisSystemPrompt(DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT),
         user: buildTranscriptSummaryUserPrompt({
           sessionId,
           revision: snapshot.revision,
@@ -284,7 +286,7 @@ export class TranscriptAnalysisService {
 
     yield { type: 'progress', data: '正在生成最终结构化总结…' }
     for await (const chunk of this.glmClient.generateMarkdownStream({
-      system: DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT,
+      system: this.buildAnalysisSystemPrompt(DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT),
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
     })) {
       if (chunk.type === 'delta') {
@@ -363,7 +365,7 @@ export class TranscriptAnalysisService {
     }
 
     const { markdown, model } = await this.glmClient.generateMarkdown({
-      system: DEFAULT_TRANSCRIPT_SEGMENT_ANALYSIS_SYSTEM_PROMPT,
+      system: this.buildAnalysisSystemPrompt(DEFAULT_TRANSCRIPT_SEGMENT_ANALYSIS_SYSTEM_PROMPT),
       user: buildTranscriptSegmentAnalysisUserPrompt({
         sessionId,
         revision: segment.sourceRevision,
@@ -388,6 +390,22 @@ export class TranscriptAnalysisService {
 
     await this.persistSegmentAnalysis(dto)
     return dto
+  }
+
+  private buildAnalysisSystemPrompt(basePrompt: string): string {
+    const legacyEnabled = this.appConfigService.getBoolean(
+      'TRANSCRIPT_ANALYSIS_SIMPLIFIED_CHINESE_ENABLED',
+      true
+    )
+    const enabled = this.appConfigService.getBoolean(
+      'TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED',
+      legacyEnabled
+    )
+    if (!enabled) return basePrompt
+    const targetLanguage = this.appConfigService
+      .getString('TRANSCRIPT_ANALYSIS_LANGUAGE', '')
+      .trim() || '简体中文'
+    return `${basePrompt}\n\n输出语言要求：${targetLanguage}。`
   }
 
   private buildEventsText(events: TranscriptEventDTO[]): string {
@@ -430,7 +448,7 @@ export class TranscriptAnalysisService {
         const group = materials.slice(i, i + this.reduceBatchSize)
         const mergedInput = group.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
         const { markdown } = await this.glmClient.generateMarkdown({
-          system: DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT,
+          system: this.buildAnalysisSystemPrompt(DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT),
           user: `请合并以下要点列表：去重、合并同类项，输出 Markdown 要点列表（不要标题）。\n\n${mergedInput}`,
         })
         next.push(markdown.trim())
