@@ -20,6 +20,21 @@ export class AppConfigDto {
   @ApiProperty({ description: 'GLM 冷却时间上限（ms）', minimum: 0, maximum: 300000 })
   glmGlobalRateLimitMaxMs: number
 
+  @ApiProperty({ description: '转写自动切分间隔（ms）', minimum: 0, maximum: 600000 })
+  transcriptAutoSplitGapMs: number
+
+  @ApiProperty({ description: '音频 buffer 软上限（ms）', minimum: 5000, maximum: 59000 })
+  transcriptMaxBufferDurationSoftMs: number
+
+  @ApiProperty({ description: '音频 buffer 硬上限（ms）', minimum: 5000, maximum: 59000 })
+  transcriptMaxBufferDurationHardMs: number
+
+  @ApiProperty({ description: '转写调试：打印语句日志' })
+  transcriptDebugLogUtterances: boolean
+
+  @ApiProperty({ description: '语句翻译：是否启用语句拆分后翻译' })
+  transcriptSegmentTranslationEnabled: boolean
+
   @ApiProperty({ description: '会议总结模型' })
   glmTranscriptSummaryModel: string
 
@@ -77,6 +92,37 @@ export class UpdateAppConfigDto {
   @Min(0)
   @Max(300000)
   glmGlobalRateLimitMaxMs?: number
+
+  @ApiPropertyOptional({ description: '转写自动切分间隔（ms）', minimum: 0, maximum: 600000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(600000)
+  transcriptAutoSplitGapMs?: number
+
+  @ApiPropertyOptional({ description: '音频 buffer 软上限（ms）', minimum: 5000, maximum: 59000 })
+  @IsOptional()
+  @IsInt()
+  @Min(5000)
+  @Max(59000)
+  transcriptMaxBufferDurationSoftMs?: number
+
+  @ApiPropertyOptional({ description: '音频 buffer 硬上限（ms）', minimum: 5000, maximum: 59000 })
+  @IsOptional()
+  @IsInt()
+  @Min(5000)
+  @Max(59000)
+  transcriptMaxBufferDurationHardMs?: number
+
+  @ApiPropertyOptional({ description: '转写调试：打印语句日志' })
+  @IsOptional()
+  @IsBoolean()
+  transcriptDebugLogUtterances?: boolean
+
+  @ApiPropertyOptional({ description: '语句翻译：是否启用语句拆分后翻译' })
+  @IsOptional()
+  @IsBoolean()
+  transcriptSegmentTranslationEnabled?: boolean
 
   @ApiPropertyOptional({ description: '会议总结模型' })
   @IsOptional()

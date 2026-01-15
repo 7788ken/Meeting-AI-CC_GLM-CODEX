@@ -61,7 +61,7 @@
             针对性分析
           </el-button>
         </div>
-        <div class="segment-content">{{ segment.content }}</div>
+        <div class="segment-content">{{ getDisplayContent(segment) }}</div>
       </div>
     </div>
   </div>
@@ -79,6 +79,7 @@ const props = defineProps<{
   loading?: boolean
   progress?: TranscriptEventSegmentationProgressData | null
   highlightedSegmentId?: string | null
+  translationEnabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -98,6 +99,13 @@ const orderedSegments = computed(() => {
 
 const isSegmentHighlighted = (segment: TranscriptEventSegment): boolean => {
   return segment.id === props.highlightedSegmentId
+}
+
+function getDisplayContent(segment: TranscriptEventSegment): string {
+  const translationEnabled = props.translationEnabled === true
+  if (!translationEnabled) return segment.content
+  const translated = typeof segment.translatedContent === 'string' ? segment.translatedContent.trim() : ''
+  return translated ? translated : segment.content
 }
 
 function getDisplayStartIndex(segment: TranscriptEventSegment): number {

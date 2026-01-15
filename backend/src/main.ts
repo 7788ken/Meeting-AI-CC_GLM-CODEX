@@ -17,6 +17,7 @@ import {
   TranscriptEventSegmentationProgressDTO,
 } from './modules/transcript-event-segmentation/transcript-event-segmentation.service'
 import { TranscriptEventSegmentationConfigService } from './modules/transcript-event-segmentation/transcript-event-segmentation-config.service'
+import { TranscriptEventSegmentTranslationService } from './modules/transcript-event-segmentation/transcript-event-segment-translation.service'
 import { AppConfigService } from './modules/app-config/app-config.service'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
@@ -102,11 +103,21 @@ async function bootstrap() {
   const debugErrorService = app.get(DebugErrorService)
   const transcriptEventSegmentationService = app.get(TranscriptEventSegmentationService)
   const transcriptEventSegmentationConfigService = app.get(TranscriptEventSegmentationConfigService)
+  const transcriptEventSegmentTranslationService = app.get(TranscriptEventSegmentTranslationService)
+
+  transcriptEventSegmentTranslationService.setOnSegmentUpsert((data: TranscriptEventSegmentDTO) => {
+    broadcastToSession(data.sessionId, {
+      type: 'transcript_event_segment_upsert',
+      data,
+    })
+  })
+
   transcriptEventSegmentationService.setOnSegmentUpdate((data: TranscriptEventSegmentDTO) => {
     broadcastToSession(data.sessionId, {
       type: 'transcript_event_segment_upsert',
       data,
     })
+    transcriptEventSegmentTranslationService.handleSegmentUpsert(data)
   })
   transcriptEventSegmentationService.setOnSegmentReset((sessionId: string) => {
     broadcastToSession(sessionId, {
@@ -165,6 +176,15 @@ async function bootstrap() {
   const getSegmentationIntervalMs = () => getSegmentationConfig().intervalMs
   const shouldTriggerEventSegmentationOnStopTranscribe = () =>
     getSegmentationConfig().triggerOnStopTranscribe
+  const shouldDebugLogUtterances = () =>
+    appConfigService.getBoolean('TRANSCRIPT_DEBUG_LOG_UTTERANCES', false)
+
+  const truncateLogText = (value: string, maxLength = 240): string => {
+    const trimmed = value.trim()
+    if (!trimmed) return ''
+    if (trimmed.length <= maxLength) return trimmed
+    return `${trimmed.slice(0, maxLength)}…(truncated)`
+  }
 
   wss.on('connection', (ws: WebSocket) => {
     const clientId = createClientId()
@@ -698,6 +718,13 @@ async function bootstrap() {
         timestamp: Date.now(),
       },
     })
+
+    if (shouldDebugLogUtterances() && input.isFinal) {
+      wsLogger.debug(
+        `[Utterance] sessionId=${sessionId}, clientId=${clientId}, speechId=${speech.id}, ` +
+          `content="${truncateLogText(content)}"`
+      )
+    }
   }
 
   async function persistAndBroadcastTranscriptEvent(
@@ -811,6 +838,13 @@ async function bootstrap() {
           event: result.event,
         },
       })
+
+      if (shouldDebugLogUtterances() && input.isFinal) {
+        wsLogger.debug(
+          `[TranscriptEvent] sessionId=${sessionId}, clientId=${clientId}, eventIndex=${result.event.eventIndex}, ` +
+            `isFinal=${input.isFinal}, content="${truncateLogText(content)}"`
+        )
+      }
 
       if (input.isFinal && segmentKeyDurationMap && input.segmentKey) {
         segmentKeyDurationMap.delete(input.segmentKey)

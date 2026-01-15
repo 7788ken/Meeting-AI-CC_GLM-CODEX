@@ -170,59 +170,197 @@
               <div class="pane-title">语句拆分提示设置</div>
               <div class="pane-subtitle">配置语句拆分的系统提示词与上下文窗口等参数。</div>
 
-              <el-form label-position="top" :model="form" class="pane-form">
+              <el-form label-position="top" :model="segmentationForm" class="pane-form">
                 <el-form-item label="系统提示词">
                   <el-input
-                    v-model="form.segmentationSystemPrompt"
+                    v-model="segmentationForm.systemPrompt"
                     type="textarea"
                     :autosize="{ minRows: 8, maxRows: 18 }"
                     placeholder="用于语句拆分的系统提示词"
                   />
                   <div class="hint">调整后将影响语句拆分的系统提示词规则。</div>
+                  <div
+                    v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_SYSTEM_PROMPT')"
+                    class="hint"
+                  >
+                    {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_SYSTEM_PROMPT') }}
+                  </div>
+                </el-form-item>
+
+                <el-form-item label="严格回显提示词">
+                  <el-input
+                    v-model="segmentationForm.strictSystemPrompt"
+                    type="textarea"
+                    :autosize="{ minRows: 4, maxRows: 12 }"
+                    placeholder="用于严格 JSON 回显校验失败后的兜底策略提示词"
+                  />
+                  <div class="hint">主要用于提升 JSON 模式下的输出稳定性；留空将沿用后端当前值。</div>
+                  <div
+                    v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_STRICT_SYSTEM_PROMPT')"
+                    class="hint"
+                  >
+                    {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_STRICT_SYSTEM_PROMPT') }}
+                  </div>
                 </el-form-item>
 
                 <div class="grid two-col">
                   <el-form-item label="上下文窗口事件数">
                     <el-input-number
-                      v-model="form.segmentationWindowEvents"
+                      v-model="segmentationForm.windowEvents"
                       :min="5"
                       :max="2000"
                       :step="1"
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE')" class="hint">
+                      {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="拆分触发间隔 (ms)">
                     <el-input-number
-                      v-model="form.segmentationIntervalMs"
+                      v-model="segmentationForm.intervalMs"
                       :min="0"
                       :max="600000"
                       :step="100"
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS')" class="hint">
+                      {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="GLM 模型">
-                    <el-input v-model="form.segmentationModel" placeholder="如 GLM-4X" />
+                    <el-input v-model="segmentationForm.model" placeholder="如 GLM-4X" />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="最大输出 tokens">
                     <el-input-number
-                      v-model="form.segmentationMaxTokens"
+                      v-model="segmentationForm.maxTokens"
                       :min="256"
                       :max="8192"
                       :step="128"
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS') }}
+                    </div>
                   </el-form-item>
                 </div>
 
                 <div class="grid two-col">
                   <el-form-item label="JSON 模式">
-                    <el-switch v-model="form.segmentationJsonMode" />
+                    <el-switch v-model="segmentationForm.jsonMode" />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="触发条件：stop_transcribe">
-                    <el-switch v-model="form.segmentationTriggerOnStopTranscribe" />
+                    <el-switch v-model="segmentationForm.triggerOnStopTranscribe" />
+                    <div
+                      v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE')"
+                      class="hint"
+                    >
+                      {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE') }}
+                    </div>
+                  </el-form-item>
+                </div>
+
+                <div class="pane-title section-title">高级参数</div>
+                <div class="pane-subtitle">影响单次拆分生成上限、截断补偿、429 退避与严格失败降级。</div>
+
+                <div class="grid two-col">
+                  <el-form-item label="单次最多生成段数">
+                    <el-input-number
+                      v-model="segmentationForm.maxSegmentsPerRun"
+                      :min="1"
+                      :max="100"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN')"
+                      class="hint"
+                    >
+                      {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="截断补偿 tokens">
+                    <el-input-number
+                      v-model="segmentationForm.bumpMaxTokens"
+                      :min="256"
+                      :max="8192"
+                      :step="128"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS')"
+                      class="hint"
+                    >
+                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS') }}
+                    </div>
+                  </el-form-item>
+                </div>
+
+                <div class="grid two-col">
+                  <el-form-item label="429 重试次数">
+                    <el-input-number
+                      v-model="segmentationForm.retryMax"
+                      :min="0"
+                      :max="10"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="退避基准 (ms)">
+                    <el-input-number
+                      v-model="segmentationForm.retryBaseMs"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="退避上限 (ms)">
+                    <el-input-number
+                      v-model="segmentationForm.retryMaxMs"
+                      :min="0"
+                      :max="120000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="严格失败降级">
+                    <el-switch v-model="segmentationForm.degradeOnStrictFail" />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL')"
+                      class="hint"
+                    >
+                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL') }}
+                    </div>
                   </el-form-item>
                 </div>
 
@@ -249,17 +387,26 @@
                     show-password
                     placeholder="如 apiKey 或 apiKey.secret"
                   />
+                  <div v-if="getRemark('GLM_API_KEY')" class="hint">
+                    {{ getRemark('GLM_API_KEY') }}
+                  </div>
                 </el-form-item>
                 <el-form-item label="GLM Endpoint">
                   <el-input
                     v-model="backendForm.glmEndpoint"
                     placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions"
                   />
+                  <div v-if="getRemark('GLM_ENDPOINT')" class="hint">
+                    {{ getRemark('GLM_ENDPOINT') }}
+                  </div>
                 </el-form-item>
 
                 <div class="grid two-col">
                   <el-form-item label="会议总结模型">
                     <el-input v-model="backendForm.glmTranscriptSummaryModel" placeholder="如 GLM-4.6V-Flash" />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_MODEL')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_MODEL') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="会议总结最大 tokens">
                     <el-input-number
@@ -270,12 +417,18 @@
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS') }}
+                    </div>
                   </el-form-item>
                 </div>
 
                 <div class="grid two-col">
                   <el-form-item label="会议总结深度思考">
                     <el-switch v-model="backendForm.glmTranscriptSummaryThinking" />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_THINKING')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_THINKING') }}
+                    </div>
                   </el-form-item>
                 </div>
 
@@ -292,6 +445,9 @@
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('GLM_GLOBAL_CONCURRENCY')" class="hint">
+                      {{ getRemark('GLM_GLOBAL_CONCURRENCY') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="最小间隔 (ms)">
                     <el-input-number
@@ -302,6 +458,9 @@
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('GLM_GLOBAL_MIN_INTERVAL_MS')" class="hint">
+                      {{ getRemark('GLM_GLOBAL_MIN_INTERVAL_MS') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="冷却时间 (ms)">
                     <el-input-number
@@ -312,6 +471,9 @@
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('GLM_GLOBAL_RATE_LIMIT_COOLDOWN_MS')" class="hint">
+                      {{ getRemark('GLM_GLOBAL_RATE_LIMIT_COOLDOWN_MS') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="冷却上限 (ms)">
                     <el-input-number
@@ -322,6 +484,9 @@
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('GLM_GLOBAL_RATE_LIMIT_MAX_MS')" class="hint">
+                      {{ getRemark('GLM_GLOBAL_RATE_LIMIT_MAX_MS') }}
+                    </div>
                   </el-form-item>
                 </div>
 
@@ -335,6 +500,9 @@
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="退避基准 (ms)">
                     <el-input-number
@@ -345,6 +513,9 @@
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS') }}
+                    </div>
                   </el-form-item>
                   <el-form-item label="退避上限 (ms)">
                     <el-input-number
@@ -355,6 +526,95 @@
                       controls-position="right"
                       class="mono-input"
                     />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS') }}
+                    </div>
+                  </el-form-item>
+                </div>
+
+                <div class="pane-title section-title">系统设置</div>
+                <div class="pane-subtitle">设置系统安全密码，启用后打开设置需验证。</div>
+
+                <el-form-item label="当前状态">
+                  <el-tag v-if="securityStatus.enabled" type="success" size="small">已设置</el-tag>
+                  <el-tag v-else type="info" size="small">未设置</el-tag>
+                </el-form-item>
+
+                <el-form-item v-if="securityStatus.enabled" label="当前密码">
+                  <el-input
+                    v-model="securityForm.currentPassword"
+                    show-password
+                    placeholder="请输入当前密码"
+                  />
+                </el-form-item>
+
+                <el-form-item label="新密码">
+                  <el-input
+                    v-model="securityForm.newPassword"
+                    show-password
+                    placeholder="请输入新密码"
+                  />
+                  <div class="hint">该密码用于进入设置与修改服务配置。</div>
+                </el-form-item>
+
+                <el-button size="small" type="primary" @click="updateSecurityPassword">
+                  {{ securityStatus.enabled ? '更新密码' : '初始化密码' }}
+                </el-button>
+
+                <div class="pane-title section-title">转写与音频</div>
+                <div class="pane-subtitle">影响实时转写的自动切分与音频 buffer 触发策略。</div>
+
+                <div class="grid two-col">
+                  <el-form-item label="自动切分间隔 (ms)">
+                    <el-input-number
+                      v-model="backendForm.transcriptAutoSplitGapMs"
+                      :min="0"
+                      :max="600000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('TRANSCRIPT_AUTO_SPLIT_GAP_MS')" class="hint">
+                      {{ getRemark('TRANSCRIPT_AUTO_SPLIT_GAP_MS') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="音频 buffer 软上限 (ms)">
+                    <el-input-number
+                      v-model="backendForm.transcriptMaxBufferDurationSoftMs"
+                      :min="5000"
+                      :max="59000"
+                      :step="500"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS')" class="hint">
+                      {{ getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="音频 buffer 硬上限 (ms)">
+                    <el-input-number
+                      v-model="backendForm.transcriptMaxBufferDurationHardMs"
+                      :min="backendForm.transcriptMaxBufferDurationSoftMs"
+                      :max="59000"
+                      :step="500"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS')" class="hint">
+                      {{ getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="调试：打印语句日志">
+                    <el-switch v-model="backendForm.transcriptDebugLogUtterances" />
+                    <div v-if="getRemark('TRANSCRIPT_DEBUG_LOG_UTTERANCES')" class="hint">
+                      {{ getRemark('TRANSCRIPT_DEBUG_LOG_UTTERANCES') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="语句翻译（简体中文）">
+                    <el-switch v-model="backendForm.transcriptSegmentTranslationEnabled" />
+                    <div v-if="getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED')" class="hint">
+                      {{ getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED') }}
+                    </div>
                   </el-form-item>
                 </div>
               </el-form>
@@ -412,8 +672,9 @@ import {
 } from '@element-plus/icons-vue'
 import { useAppSettings, type AppSettings, type AsrModel, type AudioCaptureMode } from '@/composables/useAppSettings'
 import { useBackendConfig } from '@/composables/useBackendConfig'
-import { transcriptEventSegmentationConfigApi } from '@/services/api'
-import type { BackendConfig } from '@/services/api'
+import { appConfigRemarksApi, appConfigSecurityApi, transcriptEventSegmentationConfigApi } from '@/services/api'
+import type { AppConfigRemark, BackendConfig, TranscriptEventSegmentationConfig } from '@/services/api'
+import { setSettingsPassword } from '@/services/settingsSecurity'
 
 const props = defineProps<{
   modelValue: boolean
@@ -428,9 +689,9 @@ const {
   updateSettings,
   resetSettings,
   validateSettings,
-  refreshSegmentationConfigFromServer,
 } = useAppSettings()
-const { backendConfig, refreshBackendConfig, updateBackendConfig } = useBackendConfig()
+const { backendConfig, refreshBackendConfig, updateBackendConfig, validateBackendConfig } =
+  useBackendConfig()
 
 const visibleProxy = computed({
   get: () => props.modelValue,
@@ -438,9 +699,26 @@ const visibleProxy = computed({
 })
 
 const form = reactive<AppSettings>({ ...settings.value })
+const segmentationForm = reactive<TranscriptEventSegmentationConfig>({
+  systemPrompt: '',
+  strictSystemPrompt: '',
+  windowEvents: 120,
+  intervalMs: 3000,
+  triggerOnStopTranscribe: true,
+  model: '',
+  maxTokens: 2000,
+  jsonMode: true,
+  bumpMaxTokens: 4096,
+  retryMax: 5,
+  retryBaseMs: 500,
+  retryMaxMs: 8000,
+  degradeOnStrictFail: false,
+  maxSegmentsPerRun: 8,
+})
 const activeSection = ref<'asr' | 'vad' | 'segmentation' | 'backend' | 'service'>('asr')
 const microphones = ref<MediaDeviceInfo[]>([])
 const loadingMicrophones = ref(false)
+const configRemarks = ref<Record<string, string>>({})
 
 const asrModels: Array<{ value: AsrModel; label: string; desc: string }> = [
   { value: 'glm', label: 'GLM ASR', desc: '高精度，适合高噪声场景' },
@@ -453,6 +731,11 @@ const audioCaptureModes: Array<{ value: AudioCaptureMode; label: string; desc: s
 ]
 
 const backendForm = reactive<BackendConfig>({ ...backendConfig.value })
+const securityStatus = ref({ enabled: false })
+const securityForm = reactive({
+  currentPassword: '',
+  newPassword: '',
+})
 
 const vadPreview = computed(() => {
   return `VAD_START_TH=${form.vadStartTh}  VAD_STOP_TH=${form.vadStopTh}  VAD_GAP_MS=${form.vadGapMs}`
@@ -462,8 +745,10 @@ watch(
   () => props.modelValue,
   async (v) => {
     if (v) {
-      await refreshSegmentationConfigFromServer()
       await refreshBackendConfig()
+      await refreshConfigRemarks()
+      await refreshSegmentationConfig()
+      await refreshSecurityStatus()
       Object.assign(form, settings.value)
       Object.assign(backendForm, backendConfig.value)
       activeSection.value = 'asr'
@@ -472,6 +757,7 @@ watch(
       }
     }
   },
+  { immediate: true },
 )
 
 watch(
@@ -510,15 +796,135 @@ async function refreshMicrophones(): Promise<void> {
   }
 }
 
+function getRemark(key: string): string {
+  return (configRemarks.value[key] ?? '').trim()
+}
+
+async function refreshConfigRemarks(): Promise<void> {
+  try {
+    const response = await appConfigRemarksApi.get()
+    const list: AppConfigRemark[] = Array.isArray(response?.data) ? response.data : []
+    configRemarks.value = Object.fromEntries(list.map(item => [item.key, item.remark]))
+  } catch {
+    configRemarks.value = {}
+  }
+}
+
+function validateSegmentationConfig(input: Partial<TranscriptEventSegmentationConfig>): string[] {
+  const errors: string[] = []
+  if (!String(input.systemPrompt ?? '').trim()) errors.push('语句拆分提示词不能为空')
+  if (!String(input.model ?? '').trim()) errors.push('语句拆分模型不能为空')
+
+  const windowEvents = Number(input.windowEvents)
+  if (!Number.isFinite(windowEvents) || windowEvents < 5 || windowEvents > 2000) {
+    errors.push('语句拆分上下文窗口事件数范围为 5~2000')
+  }
+
+  const intervalMs = Number(input.intervalMs)
+  if (!Number.isFinite(intervalMs) || intervalMs < 0 || intervalMs > 10 * 60 * 1000) {
+    errors.push('语句拆分触发间隔范围为 0~600000ms')
+  }
+
+  const maxTokens = Number(input.maxTokens)
+  if (!Number.isFinite(maxTokens) || maxTokens < 256 || maxTokens > 8192) {
+    errors.push('语句拆分最大 tokens 范围为 256~8192')
+  }
+
+  const bumpMaxTokens = Number(input.bumpMaxTokens)
+  if (!Number.isFinite(bumpMaxTokens) || bumpMaxTokens < 256 || bumpMaxTokens > 8192) {
+    errors.push('语句拆分补偿 tokens 范围为 256~8192')
+  }
+
+  const retryMax = Number(input.retryMax)
+  if (!Number.isFinite(retryMax) || retryMax < 0 || retryMax > 10) {
+    errors.push('语句拆分重试次数范围为 0~10')
+  }
+
+  const retryBaseMs = Number(input.retryBaseMs)
+  if (!Number.isFinite(retryBaseMs) || retryBaseMs < 0 || retryBaseMs > 60000) {
+    errors.push('语句拆分退避基准范围为 0~60000ms')
+  }
+
+  const retryMaxMs = Number(input.retryMaxMs)
+  if (!Number.isFinite(retryMaxMs) || retryMaxMs < 0 || retryMaxMs > 120000) {
+    errors.push('语句拆分退避上限范围为 0~120000ms')
+  }
+
+  const maxSegmentsPerRun = Number(input.maxSegmentsPerRun)
+  if (!Number.isFinite(maxSegmentsPerRun) || maxSegmentsPerRun < 1 || maxSegmentsPerRun > 100) {
+    errors.push('单次语句拆分最大生成段数范围为 1~100')
+  }
+
+  return errors
+}
+
+async function refreshSegmentationConfig(): Promise<boolean> {
+  try {
+    const response = await transcriptEventSegmentationConfigApi.get()
+    if (response?.data) {
+      Object.assign(segmentationForm, response.data)
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+async function refreshSecurityStatus(): Promise<void> {
+  try {
+    const response = await appConfigSecurityApi.getStatus()
+    securityStatus.value.enabled = response?.data?.enabled === true
+  } catch {
+    securityStatus.value.enabled = false
+  }
+}
+
+async function updateSecurityPassword(): Promise<void> {
+  const nextPassword = securityForm.newPassword.trim()
+  if (!nextPassword) {
+    ElMessage.warning('请输入新密码')
+    return
+  }
+  const payload: { password: string; currentPassword?: string } = {
+    password: nextPassword,
+  }
+  if (securityStatus.value.enabled) {
+    const currentPassword = securityForm.currentPassword.trim()
+    if (!currentPassword) {
+      ElMessage.warning('请输入当前密码')
+      return
+    }
+    payload.currentPassword = currentPassword
+  }
+  try {
+    await appConfigSecurityApi.updatePassword(payload)
+    securityStatus.value.enabled = true
+    setSettingsPassword(nextPassword)
+    securityForm.currentPassword = ''
+    securityForm.newPassword = ''
+    ElMessage.success('系统设置密码已更新')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '系统设置密码更新失败')
+  }
+}
+
 function buildSegmentationConfigPayload() {
   return {
-    systemPrompt: form.segmentationSystemPrompt,
-    windowEvents: form.segmentationWindowEvents,
-    intervalMs: form.segmentationIntervalMs,
-    triggerOnStopTranscribe: form.segmentationTriggerOnStopTranscribe,
-    model: form.segmentationModel,
-    maxTokens: form.segmentationMaxTokens,
-    jsonMode: form.segmentationJsonMode,
+    systemPrompt: segmentationForm.systemPrompt,
+    strictSystemPrompt: segmentationForm.strictSystemPrompt,
+    windowEvents: segmentationForm.windowEvents,
+    intervalMs: segmentationForm.intervalMs,
+    triggerOnStopTranscribe: segmentationForm.triggerOnStopTranscribe,
+    model: segmentationForm.model,
+    maxTokens: segmentationForm.maxTokens,
+    jsonMode: segmentationForm.jsonMode,
+    bumpMaxTokens: segmentationForm.bumpMaxTokens,
+    retryMax: segmentationForm.retryMax,
+    retryBaseMs: segmentationForm.retryBaseMs,
+    retryMaxMs: segmentationForm.retryMaxMs,
+    degradeOnStrictFail: segmentationForm.degradeOnStrictFail,
+    maxSegmentsPerRun: segmentationForm.maxSegmentsPerRun,
   }
 }
 
@@ -546,6 +952,16 @@ const onSave = async () => {
     ElMessage.error(errors[0])
     return
   }
+  const segmentationErrors = validateSegmentationConfig(segmentationForm)
+  if (segmentationErrors.length > 0) {
+    ElMessage.error(segmentationErrors[0])
+    return
+  }
+  const backendErrors = validateBackendConfig(backendForm)
+  if (backendErrors.length > 0) {
+    ElMessage.error(backendErrors[0])
+    return
+  }
   updateSettings(form)
   const segmentationSynced = await syncSegmentationConfig()
   const backendSynced = await syncBackendConfig()
@@ -569,16 +985,7 @@ const onReset = async () => {
 
     try {
       const response = await transcriptEventSegmentationConfigApi.reset()
-      updateSettings({
-        segmentationSystemPrompt: response.data.systemPrompt,
-        segmentationWindowEvents: response.data.windowEvents,
-        segmentationIntervalMs: response.data.intervalMs,
-        segmentationTriggerOnStopTranscribe: response.data.triggerOnStopTranscribe,
-        segmentationModel: response.data.model,
-        segmentationMaxTokens: response.data.maxTokens,
-        segmentationJsonMode: response.data.jsonMode,
-      })
-      Object.assign(form, settings.value)
+      Object.assign(segmentationForm, response.data)
       ElMessage.success('已恢复默认值')
     } catch (error) {
       console.error('语句拆分配置重置失败:', error)
@@ -734,6 +1141,7 @@ const onReset = async () => {
   margin-top: 6px;
   font-size: 12px;
   color: var(--ink-500);
+  line-height: 16px;
 }
 
 .choice-grid {

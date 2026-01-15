@@ -1,9 +1,23 @@
-import { Body, Controller, Get, Put } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Get, Post, Put, UnauthorizedException, UseGuards } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Public } from '../auth/decorators/public.decorator'
 import { AppConfigService } from './app-config.service'
-import { APP_CONFIG_FIELDS, type AppConfigFieldConfig } from './app-config.constants'
+import {
+  APP_CONFIG_FIELDS,
+  APP_CONFIG_REMARKS,
+  APP_CONFIG_SEED_KEYS,
+  type AppConfigFieldConfig,
+} from './app-config.constants'
 import { AppConfigDto, UpdateAppConfigDto } from './dto/app-config.dto'
+import {
+  AppConfigSecurityStatusDto,
+  AppConfigSecurityUpdateResponseDto,
+  AppConfigSecurityVerifyResponseDto,
+  UpdateAppConfigSecurityPasswordDto,
+  VerifyAppConfigSecurityDto,
+} from './dto/app-config-security.dto'
+import { AppConfigRemarkDto } from './dto/app-config-remark.dto'
+import { SettingsPasswordGuard } from './guards/settings-password.guard'
 
 @ApiTags('app-config')
 @Controller('app-config')
@@ -12,6 +26,7 @@ export class AppConfigController {
 
   @Public()
   @Get()
+  @UseGuards(SettingsPasswordGuard)
   @ApiOperation({ summary: '获取后端服务配置' })
   @ApiResponse({ status: 200, type: AppConfigDto })
   async getConfig(): Promise<AppConfigDto> {
@@ -20,6 +35,7 @@ export class AppConfigController {
 
   @Public()
   @Put()
+  @UseGuards(SettingsPasswordGuard)
   @ApiOperation({ summary: '更新后端服务配置' })
   @ApiResponse({ status: 200, type: AppConfigDto })
   async updateConfig(@Body() dto: UpdateAppConfigDto): Promise<AppConfigDto> {
@@ -39,6 +55,75 @@ export class AppConfigController {
     }
     await this.appConfigService.setMany(updates)
     return this.buildConfigDto()
+  }
+
+  @Public()
+  @Get('security/status')
+  @ApiOperation({ summary: '获取系统安全密码状态' })
+  @ApiResponse({ status: 200, type: AppConfigSecurityStatusDto })
+  async getSecurityStatus(): Promise<AppConfigSecurityStatusDto> {
+    return { enabled: this.appConfigService.isSecurityPasswordSet() }
+  }
+
+  @Public()
+  @Post('security/verify')
+  @ApiOperation({ summary: '校验系统安全密码' })
+  @ApiResponse({ status: 200, type: AppConfigSecurityVerifyResponseDto })
+  async verifySecurityPassword(
+    @Body() dto: VerifyAppConfigSecurityDto
+  ): Promise<AppConfigSecurityVerifyResponseDto> {
+    const password = dto.password?.trim()
+    if (!password) {
+      throw new BadRequestException('password is required')
+    }
+    if (this.appConfigService.isSecurityPasswordSet()) {
+      const verified = await this.appConfigService.verifySecurityPassword(password)
+      if (!verified) {
+        throw new UnauthorizedException('Settings password incorrect')
+      }
+    }
+    return { verified: true }
+  }
+
+  @Public()
+  @Put('security/password')
+  @ApiOperation({ summary: '设置或更新系统安全密码' })
+  @ApiResponse({ status: 200, type: AppConfigSecurityUpdateResponseDto })
+  async updateSecurityPassword(
+    @Body() dto: UpdateAppConfigSecurityPasswordDto
+  ): Promise<AppConfigSecurityUpdateResponseDto> {
+    const password = dto.password?.trim()
+    if (!password) {
+      throw new BadRequestException('password is required')
+    }
+    if (this.appConfigService.isSecurityPasswordSet()) {
+      const currentPassword = dto.currentPassword?.trim()
+      if (!currentPassword) {
+        throw new BadRequestException('currentPassword is required')
+      }
+      const verified = await this.appConfigService.verifySecurityPassword(currentPassword)
+      if (!verified) {
+        throw new UnauthorizedException('Settings password incorrect')
+      }
+    }
+    await this.appConfigService.setSecurityPassword(password)
+    return { updated: true }
+  }
+
+  @Public()
+  @Get('remarks')
+  @UseGuards(SettingsPasswordGuard)
+  @ApiOperation({ summary: '获取配置备注说明' })
+  @ApiResponse({ status: 200, type: AppConfigRemarkDto, isArray: true })
+  async getRemarks(): Promise<AppConfigRemarkDto[]> {
+    const dbRemarks = await this.appConfigService.getRemarks(APP_CONFIG_SEED_KEYS)
+    return APP_CONFIG_SEED_KEYS.map(key => {
+      const dbRemark = (dbRemarks[key] ?? '').trim()
+      return {
+        key,
+        remark: dbRemark ? dbRemark : APP_CONFIG_REMARKS[key],
+      }
+    })
   }
 
   private buildConfigDto(): AppConfigDto {

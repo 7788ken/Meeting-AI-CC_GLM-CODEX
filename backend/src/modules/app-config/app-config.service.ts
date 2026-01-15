@@ -1,12 +1,19 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import * as bcrypt from 'bcrypt'
 import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../../database/prisma.service'
-import { APP_CONFIG_SEED_KEYS } from './app-config.constants'
+import {
+  APP_CONFIG_REMARKS,
+  APP_CONFIG_SEED_KEYS,
+  APP_CONFIG_SECURITY_PASSWORD_KEY,
+  type AppConfigSeedKey,
+} from './app-config.constants'
 
 @Injectable()
 export class AppConfigService implements OnModuleInit {
   private readonly logger = new Logger(AppConfigService.name)
   private cache = new Map<string, string>()
+  private refreshInFlight: Promise<void> | null = null
 
   constructor(
     private readonly prisma: PrismaService,
@@ -16,10 +23,27 @@ export class AppConfigService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     try {
       await this.seedFromEnv(APP_CONFIG_SEED_KEYS)
+    } catch (error) {
+      this.logger.error(
+        'Failed to seed app config from env',
+        error instanceof Error ? error.stack : String(error)
+      )
+    }
+
+    try {
       await this.refreshCache()
     } catch (error) {
       this.logger.error(
         'Failed to initialize app config cache',
+        error instanceof Error ? error.stack : String(error)
+      )
+    }
+
+    try {
+      await this.ensureRemarks(APP_CONFIG_SEED_KEYS)
+    } catch (error) {
+      this.logger.error(
+        'Failed to update app config remarks',
         error instanceof Error ? error.stack : String(error)
       )
     }
@@ -55,9 +79,10 @@ export class AppConfigService implements OnModuleInit {
 
   async setValue(key: string, value: string): Promise<void> {
     const normalized = value ?? ''
+    const remark = this.getRemarkForKey(key)
     await this.prisma.appConfig.upsert({
       where: { key },
-      create: { key, value: normalized },
+      create: { key, value: normalized, remark },
       update: { value: normalized },
     })
     this.cache.set(key, normalized)
@@ -70,7 +95,7 @@ export class AppConfigService implements OnModuleInit {
       entries.map(([key, value]) =>
         this.prisma.appConfig.upsert({
           where: { key },
-          create: { key, value: value ?? '' },
+          create: { key, value: value ?? '', remark: this.getRemarkForKey(key) },
           update: { value: value ?? '' },
         })
       )
@@ -78,6 +103,22 @@ export class AppConfigService implements OnModuleInit {
     for (const [key, value] of entries) {
       this.cache.set(key, value ?? '')
     }
+  }
+
+  isSecurityPasswordSet(): boolean {
+    return this.getSecurityPasswordHash().length > 0
+  }
+
+  async verifySecurityPassword(password: string): Promise<boolean> {
+    const hash = this.getSecurityPasswordHash()
+    if (!hash) return false
+    return bcrypt.compare(password, hash)
+  }
+
+  async setSecurityPassword(password: string): Promise<void> {
+    const normalized = password.trim()
+    const hash = normalized ? await bcrypt.hash(normalized, 10) : ''
+    await this.setValue(APP_CONFIG_SECURITY_PASSWORD_KEY, hash)
   }
 
   private getRaw(key: string): string | undefined {
@@ -88,9 +129,24 @@ export class AppConfigService implements OnModuleInit {
     return envValue ?? undefined
   }
 
-  private async refreshCache(): Promise<void> {
-    const rows = await this.prisma.appConfig.findMany()
-    this.cache = new Map(rows.map(row => [row.key, row.value ?? '']))
+  private getSecurityPasswordHash(): string {
+    return this.getString(APP_CONFIG_SECURITY_PASSWORD_KEY, '').trim()
+  }
+
+  async refreshCache(): Promise<void> {
+    if (this.refreshInFlight) {
+      await this.refreshInFlight
+      return
+    }
+    this.refreshInFlight = (async () => {
+      const rows = await this.prisma.appConfig.findMany()
+      this.cache = new Map(rows.map(row => [row.key, row.value ?? '']))
+    })()
+    try {
+      await this.refreshInFlight
+    } finally {
+      this.refreshInFlight = null
+    }
   }
 
   private async seedFromEnv(keys: readonly string[]): Promise<void> {
@@ -113,6 +169,36 @@ export class AppConfigService implements OnModuleInit {
       data: toCreate,
       skipDuplicates: true,
     })
+  }
+
+  async getRemarks(keys: readonly string[]): Promise<Record<string, string>> {
+    const rows = await this.prisma.appConfig.findMany({
+      where: { key: { in: [...keys] } },
+      select: { key: true, remark: true },
+    })
+    const result: Record<string, string> = {}
+    for (const row of rows) {
+      result[row.key] = row.remark ?? ''
+    }
+    return result
+  }
+
+  private async ensureRemarks(keys: readonly AppConfigSeedKey[]): Promise<void> {
+    await this.prisma.$transaction(
+      keys.map(key =>
+        this.prisma.appConfig.updateMany({
+          where: { key, OR: [{ remark: null }, { remark: '' }, { remark: { not: APP_CONFIG_REMARKS[key] } }] },
+          data: { remark: APP_CONFIG_REMARKS[key] },
+        })
+      )
+    )
+  }
+
+  private getRemarkForKey(key: string): string | undefined {
+    if (Object.prototype.hasOwnProperty.call(APP_CONFIG_REMARKS, key)) {
+      return APP_CONFIG_REMARKS[key as AppConfigSeedKey]
+    }
+    return undefined
   }
 
   private readEnvValue(key: string): string | null {

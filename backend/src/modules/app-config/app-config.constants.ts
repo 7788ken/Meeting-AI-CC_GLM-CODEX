@@ -28,11 +28,63 @@ export const APP_CONFIG_SEED_KEYS = [
   'TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN',
   'TRANSCRIPT_AUTO_SPLIT_GAP_MS',
   'TRANSCRIPT_DEBUG_LOG_UTTERANCES',
+  'TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED',
   'TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS',
   'TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS',
 ] as const
 
+export const APP_CONFIG_SECURITY_PASSWORD_KEY = 'SYSTEM_SECURITY_PASSWORD_HASH'
+
 export type AppConfigSeedKey = typeof APP_CONFIG_SEED_KEYS[number]
+
+export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
+  GLM_API_KEY: 'GLM 平台 API Key，用于所有 GLM 请求鉴权（敏感信息，建议仅在可信环境配置）。',
+  GLM_ENDPOINT: 'GLM Chat Completions 接口地址（http/https）。',
+  GLM_GLOBAL_CONCURRENCY: '全局 GLM 并发上限：所有 GLM 请求共享同一个队列/限流器。',
+  GLM_GLOBAL_MIN_INTERVAL_MS: '全局 GLM 启动请求最小间隔（ms），用于控制 QPS（0 表示不做间隔限制）。',
+  GLM_GLOBAL_RATE_LIMIT_COOLDOWN_MS: '遇到 429 后的全局冷却时间（ms），冷却期间会延后调度请求。',
+  GLM_GLOBAL_RATE_LIMIT_MAX_MS: '全局冷却时间上限（ms），用于限制指数退避的最大延迟。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL: '语句拆分任务使用的 GLM 模型名称；为空会导致语句拆分不可用。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS: '语句拆分：单次请求的 max_tokens 上限（影响输出长度与成本）。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS:
+    '语句拆分：当 finish_reason=length（截断）时，二次请求提升 max_tokens 的目标值。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE:
+    '语句拆分：是否启用 JSON 模式（response_format=json_object），用于提升结构化输出稳定性。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX: '语句拆分：遇到 429 的最大重试次数（0 表示不重试）。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS: '语句拆分：429 退避基准延迟（ms）。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS: '语句拆分：429 退避最大延迟（ms）。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL:
+    '语句拆分：严格 JSON 解析/校验失败时是否允许降级为原始 extractedText（减少失败率但可能降低一致性）。',
+  GLM_TRANSCRIPT_SUMMARY_MODEL:
+    '会议总结模型；不配置时会回退使用语句拆分模型（GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL）。',
+  GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS: '会议总结：单次输出 max_tokens 上限。',
+  GLM_TRANSCRIPT_SUMMARY_THINKING: '会议总结：是否启用深度思考（可能提升质量但更慢/更贵）。',
+  GLM_TRANSCRIPT_SUMMARY_RETRY_MAX: '会议总结：遇到 429 的最大重试次数（0 表示不重试）。',
+  GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS: '会议总结：429 退避基准延迟（ms）。',
+  GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS: '会议总结：429 退避最大延迟（ms）。',
+  TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS:
+    '语句拆分触发间隔（ms，去抖/合并窗口）；0 表示每次事件更新都尝试拆分。',
+  TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE:
+    '语句拆分上下文窗口事件数（CHUNK_SIZE）：取尾部 N 条事件作为 LLM 上下文。',
+  TRANSCRIPT_EVENTS_SEGMENT_WINDOW_EVENTS:
+    '语句拆分上下文窗口事件数（历史兼容字段 WINDOW_EVENTS）；建议使用 CHUNK_SIZE。',
+  TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE:
+    '收到 stop_transcribe 时是否立即触发一次语句拆分。',
+  TRANSCRIPT_EVENTS_SEGMENT_SYSTEM_PROMPT: '语句拆分：系统提示词（system prompt）。',
+  TRANSCRIPT_EVENTS_SEGMENT_STRICT_SYSTEM_PROMPT:
+    '语句拆分：严格回显提示词（用于约束/回显 JSON 输出的提示词）。',
+  TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN:
+    '单次语句拆分任务最多生成段数（用于限制一次运行的处理量）。',
+  TRANSCRIPT_AUTO_SPLIT_GAP_MS:
+    '实时转写：无 segmentKey 时，相邻 utterance 更新超过该间隔（ms）将强制切分为新 speech。',
+  TRANSCRIPT_DEBUG_LOG_UTTERANCES: '转写调试：打印最终 utterance / event（仅用于排障，建议关闭）。',
+  TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED:
+    '语句翻译：是否在语句拆分后生成简体中文翻译（保留技术名/标识符）。',
+  TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS:
+    'SmartAudioBuffer：软上限（ms），满足“有静音”条件时触发 flush。',
+  TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS:
+    'SmartAudioBuffer：硬上限（ms），无静音也会强制 flush；必须 >= 软上限。',
+}
 
 export const APP_CONFIG_FIELDS = [
   {
@@ -78,6 +130,42 @@ export const APP_CONFIG_FIELDS = [
     defaultValue: 15000,
     min: 0,
     max: 300000,
+  },
+  {
+    field: 'transcriptAutoSplitGapMs',
+    key: 'TRANSCRIPT_AUTO_SPLIT_GAP_MS',
+    type: 'number',
+    defaultValue: 2500,
+    min: 0,
+    max: 600000,
+  },
+  {
+    field: 'transcriptMaxBufferDurationSoftMs',
+    key: 'TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS',
+    type: 'number',
+    defaultValue: 30000,
+    min: 5000,
+    max: 59000,
+  },
+  {
+    field: 'transcriptMaxBufferDurationHardMs',
+    key: 'TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS',
+    type: 'number',
+    defaultValue: 50000,
+    min: 5000,
+    max: 59000,
+  },
+  {
+    field: 'transcriptDebugLogUtterances',
+    key: 'TRANSCRIPT_DEBUG_LOG_UTTERANCES',
+    type: 'boolean',
+    defaultValue: false,
+  },
+  {
+    field: 'transcriptSegmentTranslationEnabled',
+    key: 'TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED',
+    type: 'boolean',
+    defaultValue: false,
   },
   {
     field: 'glmTranscriptSummaryModel',

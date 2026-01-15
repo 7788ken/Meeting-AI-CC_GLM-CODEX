@@ -14,6 +14,12 @@ export interface TranscriptEventSegmentationConfig {
   model: string
   maxTokens: number
   jsonMode: boolean
+  bumpMaxTokens: number
+  retryMax: number
+  retryBaseMs: number
+  retryMaxMs: number
+  degradeOnStrictFail: boolean
+  maxSegmentsPerRun: number
 }
 
 const WINDOW_EVENTS_MIN = 5
@@ -21,6 +27,12 @@ const WINDOW_EVENTS_MAX = 2000
 const INTERVAL_MS_MAX = 10 * 60 * 1000
 const MAX_TOKENS_MIN = 256
 const MAX_TOKENS_MAX = 8192
+const RETRY_MAX_MIN = 0
+const RETRY_MAX_MAX = 10
+const RETRY_BASE_MS_MAX = 60000
+const RETRY_MAX_MS_MAX = 120000
+const MAX_SEGMENTS_PER_RUN_MIN = 1
+const MAX_SEGMENTS_PER_RUN_MAX = 100
 
 @Injectable()
 export class TranscriptEventSegmentationConfigService implements OnModuleInit {
@@ -35,6 +47,12 @@ export class TranscriptEventSegmentationConfigService implements OnModuleInit {
   }
 
   getConfig(): TranscriptEventSegmentationConfig {
+    return { ...this.config }
+  }
+
+  async reloadFromStorage(): Promise<TranscriptEventSegmentationConfig> {
+    await this.appConfigService.refreshCache()
+    this.config = this.buildDefaultConfig()
     return { ...this.config }
   }
 
@@ -70,6 +88,23 @@ export class TranscriptEventSegmentationConfigService implements OnModuleInit {
 
     const jsonMode = this.readBooleanFromConfig('GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE', true)
 
+    const bumpMaxTokens =
+      this.readNumberFromConfig('GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS') ?? 4096
+
+    const retryMax = this.readNumberFromConfig('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX') ?? 5
+    const retryBaseMs =
+      this.readNumberFromConfig('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS') ?? 500
+    const retryMaxMs =
+      this.readNumberFromConfig('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS') ?? 8000
+
+    const degradeOnStrictFail = this.readBooleanFromConfig(
+      'GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL',
+      false
+    )
+
+    const maxSegmentsPerRun =
+      this.readNumberFromConfig('TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN') ?? 8
+
     return {
       systemPrompt: this.normalizeText(
         this.appConfigService.getString(
@@ -94,6 +129,22 @@ export class TranscriptEventSegmentationConfigService implements OnModuleInit {
       model: this.normalizeText(model, ''),
       maxTokens: this.normalizeInt(maxTokens, 2000, MAX_TOKENS_MIN, MAX_TOKENS_MAX),
       jsonMode,
+      bumpMaxTokens: this.normalizeInt(
+        bumpMaxTokens,
+        4096,
+        MAX_TOKENS_MIN,
+        MAX_TOKENS_MAX
+      ),
+      retryMax: this.normalizeInt(retryMax, 5, RETRY_MAX_MIN, RETRY_MAX_MAX),
+      retryBaseMs: this.normalizeInt(retryBaseMs, 500, 0, RETRY_BASE_MS_MAX),
+      retryMaxMs: this.normalizeInt(retryMaxMs, 8000, 0, RETRY_MAX_MS_MAX),
+      degradeOnStrictFail,
+      maxSegmentsPerRun: this.normalizeInt(
+        maxSegmentsPerRun,
+        8,
+        MAX_SEGMENTS_PER_RUN_MIN,
+        MAX_SEGMENTS_PER_RUN_MAX
+      ),
     }
   }
 
@@ -107,6 +158,19 @@ export class TranscriptEventSegmentationConfigService implements OnModuleInit {
     const model = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL || '').trim()
     const maxTokens = this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS') ?? 2000
     const jsonMode = this.readBooleanFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE', true)
+    const bumpMaxTokens =
+      this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS') ?? 4096
+    const retryMax = this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX') ?? 5
+    const retryBaseMs =
+      this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS') ?? 500
+    const retryMaxMs =
+      this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS') ?? 8000
+    const degradeOnStrictFail = this.readBooleanFromEnv(
+      'GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL',
+      false
+    )
+    const maxSegmentsPerRun =
+      this.readNumberFromEnv('TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN') ?? 8
 
     return {
       systemPrompt: DEFAULT_SEGMENTATION_SYSTEM_PROMPT,
@@ -120,6 +184,22 @@ export class TranscriptEventSegmentationConfigService implements OnModuleInit {
       model: this.normalizeText(model, ''),
       maxTokens: this.normalizeInt(maxTokens, 2000, MAX_TOKENS_MIN, MAX_TOKENS_MAX),
       jsonMode,
+      bumpMaxTokens: this.normalizeInt(
+        bumpMaxTokens,
+        4096,
+        MAX_TOKENS_MIN,
+        MAX_TOKENS_MAX
+      ),
+      retryMax: this.normalizeInt(retryMax, 5, RETRY_MAX_MIN, RETRY_MAX_MAX),
+      retryBaseMs: this.normalizeInt(retryBaseMs, 500, 0, RETRY_BASE_MS_MAX),
+      retryMaxMs: this.normalizeInt(retryMaxMs, 8000, 0, RETRY_MAX_MS_MAX),
+      degradeOnStrictFail,
+      maxSegmentsPerRun: this.normalizeInt(
+        maxSegmentsPerRun,
+        8,
+        MAX_SEGMENTS_PER_RUN_MIN,
+        MAX_SEGMENTS_PER_RUN_MAX
+      ),
     }
   }
 
@@ -144,6 +224,25 @@ export class TranscriptEventSegmentationConfigService implements OnModuleInit {
       model: this.normalizeText(input.model, base.model),
       maxTokens: this.normalizeInt(input.maxTokens, base.maxTokens, MAX_TOKENS_MIN, MAX_TOKENS_MAX),
       jsonMode: this.normalizeBoolean(input.jsonMode, base.jsonMode),
+      bumpMaxTokens: this.normalizeInt(
+        input.bumpMaxTokens,
+        base.bumpMaxTokens,
+        MAX_TOKENS_MIN,
+        MAX_TOKENS_MAX
+      ),
+      retryMax: this.normalizeInt(input.retryMax, base.retryMax, RETRY_MAX_MIN, RETRY_MAX_MAX),
+      retryBaseMs: this.normalizeInt(input.retryBaseMs, base.retryBaseMs, 0, RETRY_BASE_MS_MAX),
+      retryMaxMs: this.normalizeInt(input.retryMaxMs, base.retryMaxMs, 0, RETRY_MAX_MS_MAX),
+      degradeOnStrictFail: this.normalizeBoolean(
+        input.degradeOnStrictFail,
+        base.degradeOnStrictFail
+      ),
+      maxSegmentsPerRun: this.normalizeInt(
+        input.maxSegmentsPerRun,
+        base.maxSegmentsPerRun,
+        MAX_SEGMENTS_PER_RUN_MIN,
+        MAX_SEGMENTS_PER_RUN_MAX
+      ),
     }
   }
 
@@ -184,6 +283,12 @@ export class TranscriptEventSegmentationConfigService implements OnModuleInit {
       GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL: next.model,
       GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS: String(next.maxTokens),
       GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE: next.jsonMode ? '1' : '0',
+      GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS: String(next.bumpMaxTokens),
+      GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX: String(next.retryMax),
+      GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS: String(next.retryBaseMs),
+      GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS: String(next.retryMaxMs),
+      GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL: next.degradeOnStrictFail ? '1' : '0',
+      TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN: String(next.maxSegmentsPerRun),
     })
   }
 

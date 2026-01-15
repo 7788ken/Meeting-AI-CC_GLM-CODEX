@@ -17,6 +17,21 @@ export class TranscriptEventSegment {
   @Prop({ required: true })
   content: string
 
+  @Prop()
+  translatedContent?: string
+
+  @Prop({ enum: ['completed', 'failed'] })
+  translationStatus?: 'completed' | 'failed'
+
+  @Prop()
+  translationError?: string
+
+  @Prop()
+  translationModel?: string
+
+  @Prop()
+  translationGeneratedAt?: Date
+
   @Prop({ required: true })
   sourceStartEventIndex: number
 

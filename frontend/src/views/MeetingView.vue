@@ -32,7 +32,7 @@
               size="small"
               circle
               class="header-icon-button ghost-icon"
-              @click="settingsDrawerVisible = true"
+              @click="openSettingsDrawer"
             >
               <el-icon><Setting /></el-icon>
               <span class="sr-only">设置</span>
@@ -181,6 +181,7 @@
 	          :order="transcriptSegmentOrder"
 	          :loading="transcriptEventSegmentationStore.isLoadingSnapshot"
 	          :progress="transcriptEventSegmentationStore.progress"
+	          :translation-enabled="transcriptSegmentTranslationEnabled"
 	          :highlighted-segment-id="analysisMode === 'target' ? targetSegment?.id : null"
 	          @select-range="focusRealtimeRange"
 	          @target-analysis="handleTargetAnalysis"
@@ -368,11 +369,22 @@ import {
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { sessionApi, speechApi, transcriptAnalysisApi, transcriptEventSegmentationApi, type Session, type Speech, type TranscriptEventSegment } from '@/services/api'
+import {
+  appConfigSecurityApi,
+  sessionApi,
+  speechApi,
+  transcriptAnalysisApi,
+  transcriptEventSegmentationApi,
+  type Session,
+  type Speech,
+  type TranscriptEventSegment,
+} from '@/services/api'
 import { getApiBaseUrl } from '@/services/http'
+import { clearSettingsPassword, getSettingsPassword, setSettingsPassword } from '@/services/settingsSecurity'
 import { transcription } from '@/services/transcription'
 import { websocket, type ConnectionStatus, type TranscriptEventSegmentationProgressData } from '@/services/websocket'
 import { useAppSettings } from '@/composables/useAppSettings'
+import { useBackendConfig } from '@/composables/useBackendConfig'
 import { useTranscriptStreamStore } from '@/stores/transcriptStream'
 import { useTranscriptEventSegmentationStore } from '@/stores/transcriptEventSegmentation'
 import MainLayout from '@/components/MainLayout.vue'
@@ -407,6 +419,7 @@ const sessionEndedOverride = ref(false)
 const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	const debugDrawerVisible = ref(false)
 	const settingsDrawerVisible = ref(false)
+  const openingSettingsDrawer = ref(false)
 	const transcriptSegmentOrder = ref<'asc' | 'desc'>('desc')
 	const rebuildingTranscriptSegments = ref(false)
 	const realtimeCollapsed = ref(false)
@@ -419,6 +432,66 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	const transcriptStreamStore = useTranscriptStreamStore()
 	const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
   const { settings: appSettings } = useAppSettings()
+  const { backendConfig, refreshBackendConfig } = useBackendConfig()
+  const transcriptSegmentTranslationEnabled = computed(
+    () => backendConfig.value.transcriptSegmentTranslationEnabled === true
+  )
+
+  async function verifySettingsPassword(password: string): Promise<boolean> {
+    try {
+      await appConfigSecurityApi.verify(password)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function openSettingsDrawer(): Promise<void> {
+    if (openingSettingsDrawer.value) return
+    openingSettingsDrawer.value = true
+    try {
+      const status = await appConfigSecurityApi.getStatus()
+      const enabled = status?.data?.enabled === true
+      if (!enabled) {
+        settingsDrawerVisible.value = true
+        return
+      }
+      const cachedPassword = getSettingsPassword().trim()
+      if (cachedPassword) {
+        const verified = await verifySettingsPassword(cachedPassword)
+        if (verified) {
+          settingsDrawerVisible.value = true
+          return
+        }
+        clearSettingsPassword()
+      }
+      try {
+        const { value } = await ElMessageBox.prompt('请输入系统设置密码', '验证', {
+          inputType: 'password',
+          confirmButtonText: '确认',
+          cancelButtonText: '取消',
+        })
+        const password = String(value ?? '').trim()
+        if (!password) {
+          ElMessage.warning('密码不能为空')
+          return
+        }
+        const verified = await verifySettingsPassword(password)
+        if (!verified) {
+          ElMessage.error('密码错误')
+          return
+        }
+        setSettingsPassword(password)
+        settingsDrawerVisible.value = true
+      } catch {
+        // 用户取消
+      }
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '获取系统设置状态失败')
+    } finally {
+      openingSettingsDrawer.value = false
+    }
+  }
 
 	// 分析总结状态
 	const analysisScrollRef = ref<HTMLElement | null>(null)
@@ -783,6 +856,7 @@ const recordingIndicatorIcon = computed(() => {
 
 // 初始化
 	onMounted(async () => {
+    void refreshBackendConfig()
 	  mediaQuery = window.matchMedia('(max-width: 960px)')
 	  updateIsNarrow()
 	  mediaQuery.addEventListener('change', updateIsNarrow)

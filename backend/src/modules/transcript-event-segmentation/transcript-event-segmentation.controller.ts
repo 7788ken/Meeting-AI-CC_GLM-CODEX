@@ -1,6 +1,7 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Public } from '../auth/decorators/public.decorator'
+import { SettingsPasswordGuard } from '../app-config/guards/settings-password.guard'
 import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
 import {
   TranscriptEventSegmentationConfigDto,
@@ -47,14 +48,16 @@ export class TranscriptEventSegmentationController {
 
   @Public()
   @Get('config')
+  @UseGuards(SettingsPasswordGuard)
   @ApiOperation({ summary: '获取语句拆分配置' })
   @ApiResponse({ status: 200, type: TranscriptEventSegmentationConfigDto })
   async getConfig(): Promise<TranscriptEventSegmentationConfigDto> {
-    return this.transcriptEventSegmentationConfigService.getConfig()
+    return this.transcriptEventSegmentationConfigService.reloadFromStorage()
   }
 
   @Public()
   @Post('config/reset')
+  @UseGuards(SettingsPasswordGuard)
   @ApiOperation({ summary: '重置语句拆分配置为默认值（来自环境变量与默认 prompt）' })
   @ApiResponse({ status: 200, type: TranscriptEventSegmentationConfigDto })
   async resetConfig(): Promise<TranscriptEventSegmentationConfigDto> {
@@ -63,6 +66,7 @@ export class TranscriptEventSegmentationController {
 
   @Public()
   @Put('config')
+  @UseGuards(SettingsPasswordGuard)
   @ApiOperation({ summary: '更新语句拆分配置' })
   @ApiResponse({ status: 200, type: TranscriptEventSegmentationConfigDto })
   async updateConfig(

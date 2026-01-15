@@ -26,6 +26,11 @@ export type TranscriptEventSegmentDTO = {
   sessionId: string
   sequence: number
   content: string
+  translatedContent?: string
+  translationStatus?: 'completed' | 'failed'
+  translationError?: string
+  translationModel?: string
+  translationGeneratedAt?: string
   sourceStartEventIndex: number
   sourceEndEventIndex: number
   sourceStartEventIndexExact?: number
@@ -249,6 +254,13 @@ export class TranscriptEventSegmentationService {
       sessionId: segment.sessionId,
       sequence: segment.sequence,
       content: segment.content,
+      translatedContent: segment.translatedContent,
+      translationStatus: segment.translationStatus,
+      translationError: segment.translationError,
+      translationModel: segment.translationModel,
+      translationGeneratedAt: segment.translationGeneratedAt
+        ? segment.translationGeneratedAt.toISOString()
+        : undefined,
       sourceStartEventIndex: segment.sourceStartEventIndex,
       sourceEndEventIndex: segment.sourceEndEventIndex,
       sourceStartEventIndexExact: segment.sourceStartEventIndexExact,

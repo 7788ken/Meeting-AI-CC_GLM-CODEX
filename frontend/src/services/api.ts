@@ -1,4 +1,5 @@
 import { get, post, put, del, type ApiResponse } from './http'
+import { getSettingsAuthHeaders } from './settingsSecurity'
 
 // ==================== 类型定义 ====================
 
@@ -53,6 +54,11 @@ export interface TranscriptEventSegment {
   sessionId: string
   sequence: number
   content: string
+  translatedContent?: string
+  translationStatus?: 'completed' | 'failed'
+  translationError?: string
+  translationModel?: string
+  translationGeneratedAt?: string
   sourceStartEventIndex: number
   sourceEndEventIndex: number
   sourceStartEventIndexExact?: number
@@ -82,6 +88,12 @@ export interface TranscriptEventSegmentationConfig {
   model: string
   maxTokens: number
   jsonMode: boolean
+  bumpMaxTokens: number
+  retryMax: number
+  retryBaseMs: number
+  retryMaxMs: number
+  degradeOnStrictFail: boolean
+  maxSegmentsPerRun: number
 }
 
 export interface BackendConfig {
@@ -91,12 +103,34 @@ export interface BackendConfig {
   glmGlobalMinIntervalMs: number
   glmGlobalRateLimitCooldownMs: number
   glmGlobalRateLimitMaxMs: number
+  transcriptAutoSplitGapMs: number
+  transcriptMaxBufferDurationSoftMs: number
+  transcriptMaxBufferDurationHardMs: number
+  transcriptDebugLogUtterances: boolean
+  transcriptSegmentTranslationEnabled: boolean
   glmTranscriptSummaryModel: string
   glmTranscriptSummaryMaxTokens: number
   glmTranscriptSummaryThinking: boolean
   glmTranscriptSummaryRetryMax: number
   glmTranscriptSummaryRetryBaseMs: number
   glmTranscriptSummaryRetryMaxMs: number
+}
+
+export interface AppConfigSecurityStatus {
+  enabled: boolean
+}
+
+export interface AppConfigSecurityVerifyResult {
+  verified: boolean
+}
+
+export interface AppConfigSecurityUpdateResult {
+  updated: boolean
+}
+
+export interface AppConfigRemark {
+  key: string
+  remark: string
 }
 
 // ==================== 全文分析总结（Markdown） ====================
@@ -238,24 +272,41 @@ export const transcriptEventSegmentationApi = {
 
 export const transcriptEventSegmentationConfigApi = {
   get: () =>
-    get<ApiResponse<TranscriptEventSegmentationConfig>>('/transcript-event-segmentation/config'),
+    get<ApiResponse<TranscriptEventSegmentationConfig>>('/transcript-event-segmentation/config', {
+      headers: getSettingsAuthHeaders(),
+    }),
   reset: () =>
     post<ApiResponse<TranscriptEventSegmentationConfig>>(
       '/transcript-event-segmentation/config/reset',
-      {}
+      {},
+      { headers: getSettingsAuthHeaders() }
     ),
   update: (data: Partial<TranscriptEventSegmentationConfig>) =>
     put<ApiResponse<TranscriptEventSegmentationConfig>>(
       '/transcript-event-segmentation/config',
-      data
+      data,
+      { headers: getSettingsAuthHeaders() }
     ),
 }
 
 export const appConfigApi = {
   get: () =>
-    get<ApiResponse<BackendConfig>>('/app-config'),
+    get<ApiResponse<BackendConfig>>('/app-config', { headers: getSettingsAuthHeaders() }),
   update: (data: Partial<BackendConfig>) =>
-    put<ApiResponse<BackendConfig>>('/app-config', data),
+    put<ApiResponse<BackendConfig>>('/app-config', data, { headers: getSettingsAuthHeaders() }),
+}
+
+export const appConfigSecurityApi = {
+  getStatus: () =>
+    get<ApiResponse<AppConfigSecurityStatus>>('/app-config/security/status'),
+  verify: (password: string) =>
+    post<ApiResponse<AppConfigSecurityVerifyResult>>('/app-config/security/verify', { password }),
+  updatePassword: (data: { password: string; currentPassword?: string }) =>
+    put<ApiResponse<AppConfigSecurityUpdateResult>>('/app-config/security/password', data),
+}
+
+export const appConfigRemarksApi = {
+  get: () => get<ApiResponse<AppConfigRemark[]>>('/app-config/remarks', { headers: getSettingsAuthHeaders() }),
 }
 
 export const transcriptAnalysisApi = {

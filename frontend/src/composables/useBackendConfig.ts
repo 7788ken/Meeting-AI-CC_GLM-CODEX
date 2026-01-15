@@ -8,6 +8,11 @@ const fallbackDefaults: BackendConfig = {
   glmGlobalMinIntervalMs: 500,
   glmGlobalRateLimitCooldownMs: 2000,
   glmGlobalRateLimitMaxMs: 15000,
+  transcriptAutoSplitGapMs: 2500,
+  transcriptMaxBufferDurationSoftMs: 30000,
+  transcriptMaxBufferDurationHardMs: 50000,
+  transcriptDebugLogUtterances: false,
+  transcriptSegmentTranslationEnabled: false,
   glmTranscriptSummaryModel: '',
   glmTranscriptSummaryMaxTokens: 2500,
   glmTranscriptSummaryThinking: true,
@@ -46,6 +51,18 @@ function normalizeBackendConfig(
   input: Partial<BackendConfig>,
   base: BackendConfig
 ): BackendConfig {
+  const transcriptMaxBufferDurationSoftMs = normalizeNumberInRange(
+    input.transcriptMaxBufferDurationSoftMs,
+    base.transcriptMaxBufferDurationSoftMs,
+    5000,
+    59000
+  )
+  const transcriptMaxBufferDurationHardMsCandidate = normalizeNumberInRange(
+    input.transcriptMaxBufferDurationHardMs,
+    base.transcriptMaxBufferDurationHardMs,
+    5000,
+    59000
+  )
   return {
     glmApiKey: normalizeText(input.glmApiKey, base.glmApiKey),
     glmEndpoint: normalizeText(input.glmEndpoint, base.glmEndpoint),
@@ -72,6 +89,25 @@ function normalizeBackendConfig(
       base.glmGlobalRateLimitMaxMs,
       0,
       300000
+    ),
+    transcriptAutoSplitGapMs: normalizeNumberInRange(
+      input.transcriptAutoSplitGapMs,
+      base.transcriptAutoSplitGapMs,
+      0,
+      600000
+    ),
+    transcriptMaxBufferDurationSoftMs,
+    transcriptMaxBufferDurationHardMs: Math.max(
+      transcriptMaxBufferDurationSoftMs,
+      transcriptMaxBufferDurationHardMsCandidate
+    ),
+    transcriptDebugLogUtterances: normalizeBoolean(
+      input.transcriptDebugLogUtterances,
+      base.transcriptDebugLogUtterances
+    ),
+    transcriptSegmentTranslationEnabled: normalizeBoolean(
+      input.transcriptSegmentTranslationEnabled,
+      base.transcriptSegmentTranslationEnabled
     ),
     glmTranscriptSummaryModel: normalizeText(
       input.glmTranscriptSummaryModel,
@@ -108,6 +144,30 @@ function normalizeBackendConfig(
   }
 }
 
+function validateBackendConfig(input: Partial<BackendConfig> | BackendConfig): string[] {
+  const errors: string[] = []
+
+  const endpoint = typeof input.glmEndpoint === 'string' ? input.glmEndpoint.trim() : ''
+  if (endpoint) {
+    try {
+      const url = new URL(endpoint)
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        errors.push('GLM Endpoint 必须为 http/https URL')
+      }
+    } catch {
+      errors.push('GLM Endpoint 不是合法 URL')
+    }
+  }
+
+  const soft = Number((input as any).transcriptMaxBufferDurationSoftMs)
+  const hard = Number((input as any).transcriptMaxBufferDurationHardMs)
+  if (Number.isFinite(soft) && Number.isFinite(hard) && hard < soft) {
+    errors.push('音频 buffer 硬上限必须大于等于软上限')
+  }
+
+  return errors
+}
+
 async function refreshBackendConfig(): Promise<boolean> {
   try {
     const response = await appConfigApi.get()
@@ -141,4 +201,5 @@ export const useBackendConfig = () => ({
   },
   refreshBackendConfig,
   updateBackendConfig,
+  validateBackendConfig,
 })
