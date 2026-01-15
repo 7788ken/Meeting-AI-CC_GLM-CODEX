@@ -7,6 +7,8 @@ export interface AudioConfig {
   sampleRate?: number
   channelCount?: number
   bufferSize?: number
+  deviceId?: string
+  captureMode?: 'mic' | 'tab' | 'mix'
 }
 
 export interface AudioData {
@@ -18,41 +20,152 @@ export type AudioDataCallback = (data: AudioData) => void
 export type ErrorHandler = (error: Error) => void
 
 export class AudioCaptureService {
-  private stream: MediaStream | null = null
+  private micStream: MediaStream | null = null
+  private displayStream: MediaStream | null = null
   private audioContext: AudioContext | null = null
   private processor: ScriptProcessorNode | null = null
-  private source: MediaStreamAudioSourceNode | null = null
+  private sources: MediaStreamAudioSourceNode[] = []
+  private mixer: GainNode | null = null
   private sink: GainNode | null = null
 
   private isCapturing = false
   private onDataCallback: AudioDataCallback | null = null
   private onErrorCallback: ErrorHandler | null = null
   private loggedFirstFrame = false
+  private lastPermissionError: Error | null = null
 
   private readonly DEFAULT_SAMPLE_RATE = 16000 // PCM 16kHz
   private readonly DEFAULT_CHANNEL_COUNT = 1
   // 4096 对应 16kHz 下约 256ms，部分流式 ASR 更偏好更小的分片以降低断连风险
   private readonly DEFAULT_BUFFER_SIZE = 1024
+  private readonly DEFAULT_DEVICE_ID: string | undefined = undefined
+  private readonly DEFAULT_CAPTURE_MODE: NonNullable<AudioConfig['captureMode']> = 'mic'
+
+  private targetSampleRate = this.DEFAULT_SAMPLE_RATE
+  private resampleState: {
+    ratio: number
+    position: number
+    lastSample: number
+    sourceRate: number
+    targetRate: number
+  } | null = null
 
   /**
    * 请求麦克风权限
    */
-  async requestPermission(): Promise<boolean> {
+  async requestPermission(config?: AudioConfig): Promise<boolean> {
+    this.cleanupStreamsOnly()
+    this.lastPermissionError = null
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: this.DEFAULT_CHANNEL_COUNT,
-          sampleRate: this.DEFAULT_SAMPLE_RATE,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      })
+      const mode = config?.captureMode ?? this.DEFAULT_CAPTURE_MODE
+
+      const needMic = mode === 'mic' || mode === 'mix'
+      const needDisplay = mode === 'tab' || mode === 'mix'
+
+      if (needMic) {
+        this.micStream = await this.getUserMediaWithFallback(config)
+      }
+      if (needDisplay) {
+        this.displayStream = await this.getDisplayMediaWithFallback()
+      }
+
+      const micOk = this.micStream?.getAudioTracks?.()?.length ? true : false
+      const displayOk = this.displayStream?.getAudioTracks?.()?.length ? true : false
+      if (needMic && !micOk) throw new Error('未找到可用的麦克风音轨')
+      if (needDisplay && !displayOk) {
+        throw new Error('未捕获到共享音频：请在选择要共享的标签页时勾选“共享音频”')
+      }
+
       return true
     } catch (error) {
-      this.handleError(new Error('麦克风权限被拒绝'))
+      this.cleanupStreamsOnly()
+      const normalized = this.normalizeGetUserMediaError(error)
+      this.lastPermissionError = normalized
+      this.handleError(normalized)
       return false
     }
+  }
+
+  private getSupportedConstraints(): MediaTrackSupportedConstraints {
+    return navigator.mediaDevices?.getSupportedConstraints?.() ?? {}
+  }
+
+  private getAudioContextCtor(): (new (options?: AudioContextOptions) => AudioContext) | null {
+    return (globalThis as any).AudioContext || (globalThis as any).webkitAudioContext || null
+  }
+
+  private buildAudioConstraints(config?: AudioConfig): MediaTrackConstraints {
+    const supported = this.getSupportedConstraints()
+    const channelCount = config?.channelCount ?? this.DEFAULT_CHANNEL_COUNT
+    const deviceId = config?.deviceId || this.DEFAULT_DEVICE_ID
+
+    const constraints: MediaTrackConstraints = {}
+    if (supported.channelCount) constraints.channelCount = { ideal: channelCount }
+    if (deviceId && supported.deviceId) constraints.deviceId = { exact: deviceId }
+
+    // 语音场景的默认约束：这些在不同浏览器上通常更稳定（且不强制采样率，避免 overconstrained）。
+    if (supported.echoCancellation) constraints.echoCancellation = true
+    if (supported.noiseSuppression) constraints.noiseSuppression = true
+    if (supported.autoGainControl) constraints.autoGainControl = true
+
+    return constraints
+  }
+
+  private async getUserMediaWithFallback(config?: AudioConfig): Promise<MediaStream> {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('当前浏览器不支持麦克风采集（缺少 mediaDevices.getUserMedia）')
+    }
+
+    const audioConstraints = this.buildAudioConstraints(config)
+
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: audioConstraints })
+    } catch (error) {
+      // 常见场景：保存的 deviceId 失效（设备拔插/权限变化）导致 OverconstrainedError
+      const shouldFallback =
+        Boolean(config?.deviceId) &&
+        typeof error === 'object' &&
+        error !== null &&
+        'name' in error &&
+        (error as any).name === 'OverconstrainedError'
+
+      if (!shouldFallback) throw error
+
+      return await navigator.mediaDevices.getUserMedia({ audio: true })
+    }
+  }
+
+  private async getDisplayMediaWithFallback(): Promise<MediaStream> {
+    const getDisplayMedia = navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices)
+    if (!getDisplayMedia) {
+      throw new Error('当前浏览器不支持共享标签页音频（缺少 mediaDevices.getDisplayMedia）')
+    }
+
+    // 说明：
+    // - Chrome 通常需要 video=true 才会在分享对话框里提供“共享音频”选项。
+    // - 实际仅使用音轨，video 轨会在 cleanup 时 stop。
+    return await getDisplayMedia({ video: true, audio: true } as any)
+  }
+
+  private normalizeGetUserMediaError(error: unknown): Error {
+    if (error instanceof Error && error.message) {
+      // 透传明确的运行时错误（如“不支持”），便于排查。
+      if (error.message.includes('不支持') || error.message.includes('AudioContext') || error.message.includes('getUserMedia')) {
+        return new Error(error.message)
+      }
+      if (error.message.includes('共享音频') || error.message.includes('音轨')) {
+        return new Error(error.message)
+      }
+    }
+    if (typeof error === 'object' && error) {
+      const name = (error as any).name as string | undefined
+      if (name === 'NotAllowedError') return new Error('音频采集权限被拒绝（麦克风/共享音频）')
+      if (name === 'AbortError') return new Error('已取消共享标签页音频')
+      if (name === 'NotFoundError') return new Error('未找到可用的麦克风设备')
+      if (name === 'NotReadableError') return new Error('麦克风被占用或不可用')
+      if (name === 'OverconstrainedError') return new Error('麦克风约束不满足（可能是设备不可用）')
+    }
+    return new Error('无法获取音频采集权限')
   }
 
   /**
@@ -72,18 +185,38 @@ export class AudioCaptureService {
     this.loggedFirstFrame = false
 
     // 请求麦克风权限
-    const hasPermission = await this.requestPermission()
-    if (!hasPermission || !this.stream) {
-      throw new Error('无法获取麦克风权限')
+    const hasPermission = await this.requestPermission(config)
+    if (!hasPermission || (!this.micStream && !this.displayStream)) {
+      this.cleanupStreamsOnly()
+      throw this.lastPermissionError ?? new Error('无法获取音频采集权限')
     }
 
     try {
       // 创建音频上下文
-      const sampleRate = config?.sampleRate || this.DEFAULT_SAMPLE_RATE
-      this.audioContext = new AudioContext({ sampleRate })
+      this.targetSampleRate = config?.sampleRate || this.DEFAULT_SAMPLE_RATE
+      this.audioContext = this.createAudioContextWithFallback(this.targetSampleRate)
 
-      // 创建音频源
-      this.source = this.audioContext.createMediaStreamSource(this.stream)
+      this.sources = []
+      this.mixer = this.audioContext.createGain()
+      this.mixer.gain.value = 1
+
+      const micTrack = this.micStream?.getAudioTracks?.()?.[0] ?? null
+      if (micTrack && this.micStream) {
+        const node = this.audioContext.createMediaStreamSource(this.micStream)
+        this.sources.push(node)
+        node.connect(this.mixer)
+      }
+
+      const displayTrack = this.displayStream?.getAudioTracks?.()?.[0] ?? null
+      if (displayTrack && this.displayStream) {
+        const node = this.audioContext.createMediaStreamSource(this.displayStream)
+        this.sources.push(node)
+        node.connect(this.mixer)
+      }
+
+      if (this.sources.length === 0) {
+        throw new Error('未找到可用的音频输入（请确认麦克风或共享标签页音频已开启）')
+      }
 
       // 创建处理器
       const bufferSize = config?.bufferSize || this.DEFAULT_BUFFER_SIZE
@@ -92,6 +225,7 @@ export class AudioCaptureService {
       this.sink.gain.value = 0
 
       this.isCapturing = true
+      this.resetResampler(this.audioContext.sampleRate, this.targetSampleRate)
 
       // 处理音频数据
       this.processor.onaudioprocess = (event) => {
@@ -100,25 +234,35 @@ export class AudioCaptureService {
         const inputData = event.inputBuffer.getChannelData(0)
         const float32Array = new Float32Array(inputData.length)
         float32Array.set(inputData)
+        const sourceRate = this.audioContext?.sampleRate || this.targetSampleRate
+        const out =
+          sourceRate === this.targetSampleRate
+            ? float32Array
+            : this.resampleToTarget(float32Array, sourceRate, this.targetSampleRate)
 
         if (import.meta.env.DEV && !this.loggedFirstFrame) {
           this.loggedFirstFrame = true
-          const energy = AudioCaptureService.getAudioEnergy(float32Array)
+          const mic = this.micStream?.getAudioTracks?.()?.[0]
+          const display = this.displayStream?.getAudioTracks?.()?.[0]
+          const energy = AudioCaptureService.getAudioEnergy(out)
           console.log('[AudioCapture] 已开始采集音频', {
-            length: float32Array.length,
-            sampleRate: this.audioContext?.sampleRate,
+            length: out.length,
+            targetSampleRate: this.targetSampleRate,
+            contextSampleRate: this.audioContext?.sampleRate,
+            micTrackSettings: mic?.getSettings?.(),
+            displayTrackSettings: display?.getSettings?.(),
             energy,
           })
         }
 
         this.onDataCallback?.({
-          data: float32Array,
-          sampleRate: this.audioContext!.sampleRate,
+          data: out,
+          sampleRate: this.targetSampleRate,
         })
       }
 
       // 连接音频节点
-      this.source.connect(this.processor)
+      this.mixer.connect(this.processor)
       this.processor.connect(this.sink)
       this.sink.connect(this.audioContext.destination)
 
@@ -130,6 +274,65 @@ export class AudioCaptureService {
       this.cleanup()
       throw error
     }
+  }
+
+  private createAudioContextWithFallback(sampleRate: number): AudioContext {
+    const Ctor = this.getAudioContextCtor()
+    if (!Ctor) {
+      throw new Error('当前浏览器不支持音频处理（缺少 AudioContext）')
+    }
+
+    try {
+      return new Ctor({ sampleRate })
+    } catch {
+      return new Ctor()
+    }
+  }
+
+  private resetResampler(sourceRate: number, targetRate: number): void {
+    if (sourceRate === targetRate) {
+      this.resampleState = null
+      return
+    }
+    this.resampleState = {
+      ratio: sourceRate / targetRate,
+      position: 0,
+      lastSample: 0,
+      sourceRate,
+      targetRate,
+    }
+  }
+
+  private resampleToTarget(input: Float32Array, sourceRate: number, targetRate: number): Float32Array {
+    if (input.length < 2) return new Float32Array()
+    if (!this.resampleState || this.resampleState.sourceRate !== sourceRate || this.resampleState.targetRate !== targetRate) {
+      this.resetResampler(sourceRate, targetRate)
+    }
+    if (!this.resampleState) return input
+
+    const state = this.resampleState
+    const ratio = state.ratio
+    let position = state.position
+
+    const maxOut = Math.max(0, Math.ceil((input.length + 1) / Math.max(1e-9, ratio)) + 2)
+    const output = new Float32Array(maxOut)
+    let outIndex = 0
+
+    while (position < input.length - 1 && outIndex < output.length) {
+      const index0 = Math.floor(position)
+      const frac = position - index0
+
+      const sample0 = index0 === -1 ? state.lastSample : (input[index0] ?? 0)
+      const sample1 = input[index0 + 1] ?? sample0
+      output[outIndex++] = sample0 + (sample1 - sample0) * frac
+
+      position += ratio
+    }
+
+    state.lastSample = input[input.length - 1] ?? state.lastSample
+    state.position = position - input.length
+
+    return output.subarray(0, outIndex)
   }
 
   /**
@@ -211,9 +414,16 @@ export class AudioCaptureService {
       this.sink = null
     }
 
-    if (this.source) {
-      this.source.disconnect()
-      this.source = null
+    if (this.mixer) {
+      this.mixer.disconnect()
+      this.mixer = null
+    }
+
+    if (this.sources.length) {
+      for (const source of this.sources) {
+        source.disconnect()
+      }
+      this.sources = []
     }
 
     if (this.audioContext && this.audioContext.state !== 'closed') {
@@ -221,9 +431,19 @@ export class AudioCaptureService {
       this.audioContext = null
     }
 
-    if (this.stream) {
-      this.stream.getTracks().forEach((track) => track.stop())
-      this.stream = null
+    this.cleanupStreamsOnly()
+
+    this.resampleState = null
+  }
+
+  private cleanupStreamsOnly(): void {
+    if (this.micStream) {
+      this.micStream.getTracks().forEach((track) => track.stop())
+      this.micStream = null
+    }
+    if (this.displayStream) {
+      this.displayStream.getTracks().forEach((track) => track.stop())
+      this.displayStream = null
     }
   }
 

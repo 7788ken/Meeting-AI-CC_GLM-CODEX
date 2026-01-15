@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
 import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/llm/glm'
 import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
+import { AppConfigService } from '../app-config/app-config.service'
 
 export type TranscriptSummaryStreamChunk =
   | { type: 'delta'; text: string }
@@ -18,16 +18,18 @@ export class TranscriptAnalysisGlmClient {
   private readonly defaultRetryMaxMs = 8000
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly appConfigService: AppConfigService,
     private readonly httpService: HttpService,
     private readonly glmRateLimiter: GlmRateLimiter
   ) {}
 
   getModelName(): string {
-    const preferred = (this.configService.get<string>('GLM_TRANSCRIPT_SUMMARY_MODEL') || '').trim()
-    const fallback = (
-      this.configService.get<string>('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') || ''
-    ).trim()
+    const preferred = this.appConfigService
+      .getString('GLM_TRANSCRIPT_SUMMARY_MODEL', '')
+      .trim()
+    const fallback = this.appConfigService
+      .getString('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL', '')
+      .trim()
     const model = preferred || fallback
     if (!model) {
       throw new Error('GLM_TRANSCRIPT_SUMMARY_MODEL not configured')
@@ -36,39 +38,28 @@ export class TranscriptAnalysisGlmClient {
   }
 
   readMaxTokens(): number {
-    const raw =
-      this.configService.get<string>('GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS') ||
-      process.env.GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS
-    const value = Number(raw)
-    if (Number.isFinite(value)) {
-      const rounded = Math.floor(value)
-      if (rounded >= 256 && rounded <= 8192) return rounded
-    }
-    return this.defaultMaxTokens
+    return this.appConfigService.getNumber(
+      'GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS',
+      this.defaultMaxTokens,
+      value => value >= 256 && value <= 8192
+    )
   }
 
   private shouldEnableThinking(): boolean {
-    const raw =
-      this.configService.get<string>('GLM_TRANSCRIPT_SUMMARY_THINKING') ||
-      process.env.GLM_TRANSCRIPT_SUMMARY_THINKING
-    if (raw == null || raw === '') return true
-    const normalized = String(raw).trim().toLowerCase()
-    if (normalized === '0' || normalized === 'false') return false
-    if (normalized === '1' || normalized === 'true') return true
-    return true
+    return this.appConfigService.getBoolean('GLM_TRANSCRIPT_SUMMARY_THINKING', true)
   }
 
   async generateMarkdown(params: {
     system: string
     user: string
   }): Promise<{ markdown: string; model: string }> {
-    const apiKey = (this.configService.get<string>('GLM_API_KEY') || '').trim()
+    const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
       throw new Error('GLM_API_KEY not configured')
     }
 
     const endpoint =
-      (this.configService.get<string>('GLM_ENDPOINT') || '').trim() ||
+      this.appConfigService.getString('GLM_ENDPOINT', '').trim() ||
       'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 
     const model = this.getModelName()
@@ -111,13 +102,13 @@ export class TranscriptAnalysisGlmClient {
     system: string
     user: string
   }): AsyncIterable<TranscriptSummaryStreamChunk> {
-    const apiKey = (this.configService.get<string>('GLM_API_KEY') || '').trim()
+    const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
       throw new Error('GLM_API_KEY not configured')
     }
 
     const endpoint =
-      (this.configService.get<string>('GLM_ENDPOINT') || '').trim() ||
+      this.appConfigService.getString('GLM_ENDPOINT', '').trim() ||
       'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 
     const model = this.getModelName()
@@ -363,36 +354,27 @@ export class TranscriptAnalysisGlmClient {
   }
 
   private readRetryMax(): number {
-    const raw =
-      this.configService.get<string>('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX') ||
-      process.env.GLM_TRANSCRIPT_SUMMARY_RETRY_MAX
-    const value = Number(raw)
-    if (Number.isFinite(value) && value >= 0 && value <= 10) {
-      return Math.floor(value)
-    }
-    return this.defaultRetryMax
+    return this.appConfigService.getNumber(
+      'GLM_TRANSCRIPT_SUMMARY_RETRY_MAX',
+      this.defaultRetryMax,
+      value => value >= 0 && value <= 10
+    )
   }
 
   private readRetryBaseMs(): number {
-    const raw =
-      this.configService.get<string>('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS') ||
-      process.env.GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS
-    const value = Number(raw)
-    if (Number.isFinite(value) && value >= 0 && value <= 60000) {
-      return Math.floor(value)
-    }
-    return this.defaultRetryBaseMs
+    return this.appConfigService.getNumber(
+      'GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS',
+      this.defaultRetryBaseMs,
+      value => value >= 0 && value <= 60000
+    )
   }
 
   private readRetryMaxMs(): number {
-    const raw =
-      this.configService.get<string>('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS') ||
-      process.env.GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS
-    const value = Number(raw)
-    if (Number.isFinite(value) && value >= 0 && value <= 120000) {
-      return Math.floor(value)
-    }
-    return this.defaultRetryMaxMs
+    return this.appConfigService.getNumber(
+      'GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS',
+      this.defaultRetryMaxMs,
+      value => value >= 0 && value <= 120000
+    )
   }
 
   private readRetryAfterMs(error: unknown): number | null {

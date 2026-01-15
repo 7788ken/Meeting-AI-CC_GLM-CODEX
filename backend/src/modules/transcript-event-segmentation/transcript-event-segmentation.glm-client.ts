@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
 import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/llm/glm'
 import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
 import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
+import { AppConfigService } from '../app-config/app-config.service'
 
 @Injectable()
 export class TranscriptEventSegmentationGlmClient {
@@ -16,20 +16,20 @@ export class TranscriptEventSegmentationGlmClient {
   private readonly defaultRetryMaxMs = 8000
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly appConfigService: AppConfigService,
     private readonly httpService: HttpService,
     private readonly segmentationConfigService: TranscriptEventSegmentationConfigService,
     private readonly glmRateLimiter: GlmRateLimiter
   ) {}
 
   async generateStructuredJson(params: { system: string; user: string }): Promise<string> {
-    const apiKey = (this.configService.get<string>('GLM_API_KEY') || '').trim()
+    const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
       throw new Error('GLM_API_KEY not configured')
     }
 
     const endpoint =
-      (this.configService.get<string>('GLM_ENDPOINT') || '').trim() ||
+      this.appConfigService.getString('GLM_ENDPOINT', '').trim() ||
       'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 
     const model = this.getModelName()
@@ -122,10 +122,11 @@ export class TranscriptEventSegmentationGlmClient {
   }
 
   private readBumpMaxTokensTo(): number {
-    const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS || '').trim()
-    const value = Number(raw)
-    if (Number.isFinite(value) && value >= 256) return Math.floor(value)
-    return this.defaultBumpMaxTokensTo
+    return this.appConfigService.getNumber(
+      'GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS',
+      this.defaultBumpMaxTokensTo,
+      value => value >= 256
+    )
   }
 
   private shouldUseJsonMode(): boolean {
@@ -276,7 +277,7 @@ export class TranscriptEventSegmentationGlmClient {
   }
 
   private readRetryMax(): number {
-    const value = this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX')
+    const value = this.readNumberFromConfig('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX')
     if (Number.isFinite(value) && value >= 0 && value <= 10) {
       return Math.floor(value)
     }
@@ -284,7 +285,7 @@ export class TranscriptEventSegmentationGlmClient {
   }
 
   private readRetryBaseMs(): number {
-    const value = this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS')
+    const value = this.readNumberFromConfig('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS')
     if (Number.isFinite(value) && value >= 0 && value <= 60000) {
       return Math.floor(value)
     }
@@ -292,17 +293,15 @@ export class TranscriptEventSegmentationGlmClient {
   }
 
   private readRetryMaxMs(): number {
-    const value = this.readNumberFromEnv('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS')
+    const value = this.readNumberFromConfig('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS')
     if (Number.isFinite(value) && value >= 0 && value <= 120000) {
       return Math.floor(value)
     }
     return this.defaultRetryMaxMs
   }
 
-  private readNumberFromEnv(key: string): number | null {
-    const raw = this.configService.get<string>(key) || process.env[key]
-    if (raw == null || raw === '') return null
-    const value = Number(raw)
+  private readNumberFromConfig(key: string): number | null {
+    const value = this.appConfigService.getNumber(key, Number.NaN)
     return Number.isFinite(value) ? value : null
   }
 

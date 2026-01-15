@@ -17,6 +17,7 @@ import {
   TranscriptEventSegmentationProgressDTO,
 } from './modules/transcript-event-segmentation/transcript-event-segmentation.service'
 import { TranscriptEventSegmentationConfigService } from './modules/transcript-event-segmentation/transcript-event-segmentation-config.service'
+import { AppConfigService } from './modules/app-config/app-config.service'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { isSegmentKeyRollback } from './modules/transcript/segment-key'
@@ -31,6 +32,7 @@ async function bootstrap() {
   })
 
   const configService = app.get(ConfigService)
+  const appConfigService = app.get(AppConfigService)
   const logger = new Logger('Bootstrap')
 
   // 全局异常过滤器
@@ -63,6 +65,7 @@ async function bootstrap() {
     .addTag('speeches', '发言记录')
     .addTag('transcript', '实时转写')
     .addTag('transcript-event-segmentation', '语句拆分')
+    .addTag('app-config', '后端配置')
     .addTag('debug-errors', '会话调试报错')
     .addBearerAuth()
     .build()
@@ -584,15 +587,12 @@ async function bootstrap() {
     return created
   }
 
-  function readNumberFromEnv(
+  function readNumberFromConfig(
     key: string,
     defaultValue: number,
     isValid: (value: number) => boolean
   ): number {
-    const raw = process.env[key]
-    if (!raw) return defaultValue
-    const value = Number(raw)
-    return Number.isFinite(value) && isValid(value) ? value : defaultValue
+    return appConfigService.getNumber(key, defaultValue, isValid)
   }
 
   async function finalizeActiveSpeechForClient(clientId: string): Promise<void> {
@@ -911,7 +911,7 @@ async function bootstrap() {
     transcriptEventSegmentationInFlight.add(sessionId)
     transcriptEventSegmentationLastRunAtBySession.set(sessionId, Date.now())
     try {
-      const maxSegmentsPerRun = readNumberFromEnv(
+      const maxSegmentsPerRun = readNumberFromConfig(
         'TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN',
         8,
         value => value >= 1 && value <= 100
@@ -939,10 +939,11 @@ async function bootstrap() {
   }
 
   function getAutoSplitGapMs(): number {
-    const raw = process.env.TRANSCRIPT_AUTO_SPLIT_GAP_MS
-    if (!raw) return 2500
-    const value = Number(raw)
-    return Number.isFinite(value) && value >= 0 ? value : 2500
+    return appConfigService.getNumber(
+      'TRANSCRIPT_AUTO_SPLIT_GAP_MS',
+      2500,
+      value => value >= 0
+    )
   }
 
   // 启动服务器

@@ -38,7 +38,7 @@ const emit = defineEmits<{
   (event: 'pause'): void
 }>()
 
-const mainButtonType = computed(() => (props.status === 'recording' ? 'danger' : 'primary'))
+const mainButtonType = computed(() => (props.status === 'recording' ? 'warning' : 'success'))
 const mainButtonIcon = computed(() => (props.status === 'recording' ? 'VideoPause' : 'VideoPlay'))
 
 const mainButtonText = computed(() => {

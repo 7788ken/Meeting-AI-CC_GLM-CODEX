@@ -12,7 +12,7 @@
       <header class="drawer-header">
         <div class="title-block">
           <div class="title">设置</div>
-          <div class="subtitle">多数设置仅影响本地客户端；语句拆分设置会同步到后端</div>
+          <div class="subtitle">多数设置仅影响本地客户端；语句拆分与服务配置会同步到后端</div>
         </div>
         <div class="header-actions">
           <el-button size="small" class="icon-button" @click="visibleProxy = false">
@@ -42,21 +42,70 @@
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">ASR 模型</div>
-              <div class="pane-subtitle">影响会话录音时的转写模型选择</div>
+              <div class="pane-block">
+                <div class="pane-title">ASR 模型</div>
+                <div class="pane-subtitle">影响会话录音时的转写模型选择</div>
 
-              <el-radio-group v-model="form.asrModel" class="choice-grid">
-                <el-radio
-                  v-for="item in asrModels"
-                  :key="item.value"
-                  :label="item.value"
-                  border
-                  class="choice-card"
+                <el-radio-group v-model="form.asrModel" class="choice-grid">
+                  <el-radio
+                    v-for="item in asrModels"
+                    :key="item.value"
+                    :label="item.value"
+                    border
+                    class="choice-card"
+                  >
+                    <div class="choice-title">{{ item.label }}</div>
+                    <div class="choice-desc">{{ item.desc }}</div>
+                  </el-radio>
+                </el-radio-group>
+              </div>
+
+              <div class="pane-block">
+                <div class="pane-title">录音来源</div>
+                <div class="pane-subtitle">决定采集“麦克风 / 标签页音频 / 混合”。</div>
+
+                <el-radio-group v-model="form.audioCaptureMode" class="choice-grid">
+                  <el-radio
+                    v-for="item in audioCaptureModes"
+                    :key="item.value"
+                    :label="item.value"
+                    border
+                    class="choice-card"
+                  >
+                    <div class="choice-title">{{ item.label }}</div>
+                    <div class="choice-desc">{{ item.desc }}</div>
+                  </el-radio>
+                </el-radio-group>
+
+                <div class="hint">
+                  选择“标签页音频/混合”后，开始录音会弹出共享对话框；请选音頻播放的網頁标签页并勾选“共享音频”。
+                </div>
+
+                <el-form
+                  v-if="form.audioCaptureMode !== 'tab'"
+                  label-position="top"
+                  :model="form"
+                  class="pane-form"
                 >
-                  <div class="choice-title">{{ item.label }}</div>
-                  <div class="choice-desc">{{ item.desc }}</div>
-                </el-radio>
-              </el-radio-group>
+                  <el-form-item label="麦克风设备">
+                    <div class="grid two-col">
+                      <el-select v-model="form.micDeviceId" placeholder="系统默认" style="width: 100%">
+                        <el-option label="系统默认" value="" />
+                        <el-option
+                          v-for="mic in microphones"
+                          :key="mic.deviceId"
+                          :label="mic.label || `麦克风 ${mic.deviceId}`"
+                          :value="mic.deviceId"
+                        />
+                      </el-select>
+                      <el-button size="small" :loading="loadingMicrophones" @click="refreshMicrophones">
+                        刷新设备
+                      </el-button>
+                    </div>
+                    <div class="hint">若设备列表为空，请先允许麦克风权限；“系统默认”会跟随系统输入设备。</div>
+                  </el-form-item>
+                </el-form>
+              </div>
             </section>
           </el-tab-pane>
 
@@ -182,6 +231,136 @@
             </section>
           </el-tab-pane>
 
+          <el-tab-pane name="backend">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Setting /></el-icon>
+                AI 服务
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">AI 服务配置</div>
+              <div class="pane-subtitle">保存后写入后端数据库，用于 GLM 调用与限流。</div>
+
+              <el-form label-position="top" :model="backendForm" class="pane-form">
+                <el-form-item label="GLM API Key">
+                  <el-input
+                    v-model="backendForm.glmApiKey"
+                    show-password
+                    placeholder="如 apiKey 或 apiKey.secret"
+                  />
+                </el-form-item>
+                <el-form-item label="GLM Endpoint">
+                  <el-input
+                    v-model="backendForm.glmEndpoint"
+                    placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions"
+                  />
+                </el-form-item>
+
+                <div class="grid two-col">
+                  <el-form-item label="会议总结模型">
+                    <el-input v-model="backendForm.glmTranscriptSummaryModel" placeholder="如 GLM-4.6V-Flash" />
+                  </el-form-item>
+                  <el-form-item label="会议总结最大 tokens">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptSummaryMaxTokens"
+                      :min="256"
+                      :max="8192"
+                      :step="128"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                </div>
+
+                <div class="grid two-col">
+                  <el-form-item label="会议总结深度思考">
+                    <el-switch v-model="backendForm.glmTranscriptSummaryThinking" />
+                  </el-form-item>
+                </div>
+
+                <div class="pane-title section-title">限流与重试</div>
+                <div class="pane-subtitle">调整请求节奏与重试策略。</div>
+
+                <div class="grid two-col">
+                  <el-form-item label="并发上限">
+                    <el-input-number
+                      v-model="backendForm.glmGlobalConcurrency"
+                      :min="1"
+                      :max="50"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="最小间隔 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmGlobalMinIntervalMs"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="冷却时间 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmGlobalRateLimitCooldownMs"
+                      :min="0"
+                      :max="120000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="冷却上限 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmGlobalRateLimitMaxMs"
+                      :min="0"
+                      :max="300000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                </div>
+
+                <div class="grid two-col">
+                  <el-form-item label="重试次数">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptSummaryRetryMax"
+                      :min="0"
+                      :max="10"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="退避基准 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptSummaryRetryBaseMs"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="退避上限 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptSummaryRetryMaxMs"
+                      :min="0"
+                      :max="120000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                </div>
+              </el-form>
+            </section>
+          </el-tab-pane>
+
           <el-tab-pane name="service">
             <template #label>
               <span class="tab-label">
@@ -229,9 +408,12 @@ import {
   Refresh,
   Close,
   Check,
+  Setting,
 } from '@element-plus/icons-vue'
-import { useAppSettings, type AppSettings, type AsrModel } from '@/composables/useAppSettings'
+import { useAppSettings, type AppSettings, type AsrModel, type AudioCaptureMode } from '@/composables/useAppSettings'
+import { useBackendConfig } from '@/composables/useBackendConfig'
 import { transcriptEventSegmentationConfigApi } from '@/services/api'
+import type { BackendConfig } from '@/services/api'
 
 const props = defineProps<{
   modelValue: boolean
@@ -248,6 +430,7 @@ const {
   validateSettings,
   refreshSegmentationConfigFromServer,
 } = useAppSettings()
+const { backendConfig, refreshBackendConfig, updateBackendConfig } = useBackendConfig()
 
 const visibleProxy = computed({
   get: () => props.modelValue,
@@ -255,11 +438,21 @@ const visibleProxy = computed({
 })
 
 const form = reactive<AppSettings>({ ...settings.value })
-const activeSection = ref<'asr' | 'vad' | 'segmentation' | 'service'>('asr')
+const activeSection = ref<'asr' | 'vad' | 'segmentation' | 'backend' | 'service'>('asr')
+const microphones = ref<MediaDeviceInfo[]>([])
+const loadingMicrophones = ref(false)
 
 const asrModels: Array<{ value: AsrModel; label: string; desc: string }> = [
   { value: 'glm', label: 'GLM ASR', desc: '高精度，适合高噪声场景' },
 ]
+
+const audioCaptureModes: Array<{ value: AudioCaptureMode; label: string; desc: string }> = [
+  { value: 'mic', label: '仅麦克风', desc: '默认模式，只采集你的麦克风输入' },
+  { value: 'tab', label: '仅标签页音频', desc: '采集共享标签页的音频（例如 YouTube）' },
+  { value: 'mix', label: '麦克风 + 标签页音频', desc: '将麦克风与共享标签页音频混合后转写' },
+]
+
+const backendForm = reactive<BackendConfig>({ ...backendConfig.value })
 
 const vadPreview = computed(() => {
   return `VAD_START_TH=${form.vadStartTh}  VAD_STOP_TH=${form.vadStopTh}  VAD_GAP_MS=${form.vadGapMs}`
@@ -270,11 +463,52 @@ watch(
   async (v) => {
     if (v) {
       await refreshSegmentationConfigFromServer()
+      await refreshBackendConfig()
       Object.assign(form, settings.value)
+      Object.assign(backendForm, backendConfig.value)
       activeSection.value = 'asr'
+      if (form.audioCaptureMode !== 'tab') {
+        await refreshMicrophones()
+      }
     }
   },
 )
+
+watch(
+  () => form.audioCaptureMode,
+  async (mode) => {
+    if (!props.modelValue) return
+    if (mode === 'tab') return
+    await refreshMicrophones()
+  },
+)
+
+async function refreshMicrophones(): Promise<void> {
+  if (loadingMicrophones.value) return
+  loadingMicrophones.value = true
+  try {
+    if (!navigator.mediaDevices?.getUserMedia || !navigator.mediaDevices?.enumerateDevices) {
+      ElMessage.warning('当前浏览器不支持麦克风设备枚举')
+      microphones.value = []
+      return
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    stream.getTracks().forEach((track) => track.stop())
+
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    microphones.value = devices.filter((d) => d.kind === 'audioinput')
+
+    if (form.micDeviceId && !microphones.value.some((mic) => mic.deviceId === form.micDeviceId)) {
+      form.micDeviceId = ''
+    }
+  } catch (error) {
+    console.error('获取麦克风列表失败:', error)
+    microphones.value = []
+  } finally {
+    loadingMicrophones.value = false
+  }
+}
 
 function buildSegmentationConfigPayload() {
   return {
@@ -298,6 +532,14 @@ async function syncSegmentationConfig(): Promise<boolean> {
   }
 }
 
+async function syncBackendConfig(): Promise<boolean> {
+  const synced = await updateBackendConfig(backendForm)
+  if (synced) {
+    Object.assign(backendForm, backendConfig.value)
+  }
+  return synced
+}
+
 const onSave = async () => {
   const errors = validateSettings(form)
   if (errors.length > 0) {
@@ -305,11 +547,16 @@ const onSave = async () => {
     return
   }
   updateSettings(form)
-  const synced = await syncSegmentationConfig()
-  if (synced) {
+  const segmentationSynced = await syncSegmentationConfig()
+  const backendSynced = await syncBackendConfig()
+  if (segmentationSynced && backendSynced) {
     ElMessage.success('设置已保存')
-  } else {
+  } else if (!segmentationSynced && !backendSynced) {
+    ElMessage.warning('设置已保存，但语句拆分与服务配置同步失败')
+  } else if (!segmentationSynced) {
     ElMessage.warning('设置已保存，但语句拆分设置同步失败')
+  } else {
+    ElMessage.warning('设置已保存，但服务配置同步失败')
   }
   visibleProxy.value = false
 }
@@ -337,6 +584,9 @@ const onReset = async () => {
       console.error('语句拆分配置重置失败:', error)
       ElMessage.warning('已恢复默认值，但语句拆分设置重置失败')
     }
+
+    await refreshBackendConfig()
+    Object.assign(backendForm, backendConfig.value)
   } catch {
     // 用户取消
   }
@@ -448,10 +698,20 @@ const onReset = async () => {
   box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
 }
 
+.pane-block + .pane-block {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
 .pane-title {
   font-size: 15px;
   font-weight: 700;
   color: var(--ink-900);
+}
+
+.section-title {
+  margin-top: 18px;
 }
 
 .pane-subtitle {

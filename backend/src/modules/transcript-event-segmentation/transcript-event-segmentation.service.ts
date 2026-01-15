@@ -7,6 +7,7 @@ import { DebugErrorService } from '../debug-error/debug-error.service'
 import { TranscriptEventSegmentationGlmClient } from './transcript-event-segmentation.glm-client'
 import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
 import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
+import { AppConfigService } from '../app-config/app-config.service'
 import { buildTranscriptEventSegmentationPrompt } from './transcript-event-segmentation.prompt'
 import { parseTranscriptEventSegmentJson } from './transcript-event-segmentation.validation'
 import {
@@ -84,7 +85,8 @@ export class TranscriptEventSegmentationService {
     private readonly glmClient: TranscriptEventSegmentationGlmClient,
     private readonly debugErrorService: DebugErrorService,
     private readonly configService: TranscriptEventSegmentationConfigService,
-    private readonly glmRateLimiter: GlmRateLimiter
+    private readonly glmRateLimiter: GlmRateLimiter,
+    private readonly appConfigService: AppConfigService
   ) {}
 
   setOnSegmentUpdate(handler?: TranscriptEventSegmentUpdateHandler | null): void {
@@ -371,13 +373,10 @@ export class TranscriptEventSegmentationService {
     let persistError: string | undefined = undefined
     let llmRaw: string | undefined
     let llmRetryRaw: string | undefined
-    const allowDegradeOnStrictFailure = (() => {
-      const raw = (process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL || '')
-        .trim()
-        .toLowerCase()
-      if (!raw) return false
-      return raw === '1' || raw === 'true'
-    })()
+    const allowDegradeOnStrictFailure = this.appConfigService.getBoolean(
+      'GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL',
+      false
+    )
 
     const shouldRejectShortPrefix = (value: string): boolean => {
       if (!value) return false

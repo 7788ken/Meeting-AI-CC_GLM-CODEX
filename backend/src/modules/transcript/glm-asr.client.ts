@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
+import { AppConfigService } from '../app-config/app-config.service'
 import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
 import { randomUUID } from 'crypto'
@@ -23,24 +23,19 @@ export class GlmAsrClient {
   private readonly logger = new Logger(GlmAsrClient.name)
   private readonly endpoint = 'https://open.bigmodel.cn/api/paas/v4/audio/transcriptions'
   private readonly model = 'glm-asr-2512'
-  private readonly apiKey: string
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly appConfigService: AppConfigService,
     private readonly httpService: HttpService,
     private readonly glmRateLimiter: GlmRateLimiter
-  ) {
-    this.apiKey = (this.configService.get<string>('GLM_API_KEY') || '').trim()
-    if (!this.apiKey) {
-      this.logger.warn('GLM_API_KEY not configured')
-    }
-  }
+  ) {}
 
   async *transcribeStream(
     audioBuffer: Buffer,
     options?: GlmAsrOptions
   ): AsyncIterable<TranscriptChunk> {
-    if (!this.apiKey) {
+    const apiKey = this.readApiKey()
+    if (!apiKey) {
       throw new Error('GLM_API_KEY not configured')
     }
 
@@ -56,7 +51,7 @@ export class GlmAsrClient {
     const requestBody = this.buildMultipartBody(wavBuffer, options)
 
     const headers = {
-      Authorization: `Bearer ${getGlmAuthorizationToken(this.apiKey)}`,
+      Authorization: `Bearer ${getGlmAuthorizationToken(apiKey)}`,
       Accept: 'text/event-stream',
       'Content-Type': `multipart/form-data; boundary=${requestBody.boundary}`,
       'Content-Length': String(requestBody.body.length),
@@ -128,6 +123,14 @@ export class GlmAsrClient {
       )
       throw error instanceof Error ? error : new Error(String(error))
     }
+  }
+
+  private readApiKey(): string {
+    const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
+    if (!apiKey) {
+      this.logger.warn('GLM_API_KEY not configured')
+    }
+    return apiKey
   }
 
   private buildMultipartBody(

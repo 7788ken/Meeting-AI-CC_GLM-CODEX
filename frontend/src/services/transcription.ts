@@ -3,7 +3,7 @@
  * 整合音频捕获和 WebSocket，处理实时转写
  */
 
-import { AudioCaptureService, audioCapture, type AudioDataCallback } from './audioCapture'
+import { AudioCaptureService, audioCapture, type AudioConfig, type AudioDataCallback } from './audioCapture'
 import { websocket, type ConnectionStatus, type LegacyTranscriptData, type TranscriptMessage } from './websocket'
 import type { Speech } from './api'
 import type { AsrConfig } from '../types'
@@ -12,6 +12,7 @@ export interface TranscriptionConfig {
   sessionId: string
   language?: string
   asrConfig?: Partial<AsrConfig>
+  audio?: AudioConfig
   onTranscript?: (transcript: Speech) => void
   onError?: (error: Error) => void
   onStatusChange?: (status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error') => void
@@ -92,6 +93,7 @@ export class TranscriptionService {
   private isSendingAudio = false // 控制是否发送音频到 WebSocket
   private currentSessionId = ''
   private status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error' = 'idle'
+  private audioConfig?: AudioConfig
 
   private segmentCounter = 0
   private activeSegment: { id: string; startTime: string } | null = null
@@ -123,6 +125,7 @@ export class TranscriptionService {
     this.onErrorCallback = config.onError
     this.onStatusChangeCallback = config.onStatusChange
     this.onConnectionStatusChangeCallback = config.onConnectionStatusChange
+    this.audioConfig = config.audio
 
     try {
       this.setStatus('connecting')
@@ -140,14 +143,20 @@ export class TranscriptionService {
         asrConfig: resolveAsrConfig(config),
       })
 
+      this.isPaused = false
+      this.isSendingAudio = true
+
       // 开始音频捕获
       await this.startAudioCapture()
 
       this.isRecording = true
-      this.isPaused = false
-      this.isSendingAudio = true
       this.setStatus('recording')
     } catch (error) {
+      this.isRecording = false
+      this.isPaused = false
+      this.isSendingAudio = false
+      this.audioConfig = undefined
+      audioCapture.stopCapture()
       this.setStatus('error')
       this.handleError(error instanceof Error ? error : new Error('转写启动失败'))
       throw error
@@ -162,6 +171,7 @@ export class TranscriptionService {
 
     this.isPaused = true
     this.isSendingAudio = false
+    audioCapture.stopCapture()
     this.setStatus('paused')
   }
 
@@ -174,6 +184,7 @@ export class TranscriptionService {
     try {
       this.isSendingAudio = true
       this.isPaused = false
+      await this.startAudioCapture()
       this.setStatus('recording')
     } catch (error) {
       this.handleError(error instanceof Error ? error : new Error('转写恢复失败'))
@@ -189,6 +200,7 @@ export class TranscriptionService {
     this.isRecording = false
     this.isPaused = false
     this.isSendingAudio = false
+    this.audioConfig = undefined
     audioCapture.stopCapture()
     websocket.stopTranscribe()
     this.setStatus('idle')
@@ -270,7 +282,7 @@ export class TranscriptionService {
       }
 
       audioCapture
-        .startCapture(onAudioData, (error) => this.handleError(error))
+        .startCapture(onAudioData, (error) => this.handleError(error), this.audioConfig)
         .then(resolve)
         .catch(reject)
     })

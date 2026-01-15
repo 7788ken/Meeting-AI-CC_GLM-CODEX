@@ -32,3 +32,14 @@ enum SessionStatus {
   ENDED      // 已结束
   ARCHIVED   // 已存档
 }
+
+// 应用配置（用于存储可动态更新的环境配置）
+model AppConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("app_configs")
+}

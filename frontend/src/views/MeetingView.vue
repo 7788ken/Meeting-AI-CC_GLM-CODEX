@@ -372,6 +372,7 @@ import { sessionApi, speechApi, transcriptAnalysisApi, transcriptEventSegmentati
 import { getApiBaseUrl } from '@/services/http'
 import { transcription } from '@/services/transcription'
 import { websocket, type ConnectionStatus, type TranscriptEventSegmentationProgressData } from '@/services/websocket'
+import { useAppSettings } from '@/composables/useAppSettings'
 import { useTranscriptStreamStore } from '@/stores/transcriptStream'
 import { useTranscriptEventSegmentationStore } from '@/stores/transcriptEventSegmentation'
 import MainLayout from '@/components/MainLayout.vue'
@@ -417,6 +418,7 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	const appBottomInsetStyle = computed(() => `${actionBarInsetPx.value}px`)
 	const transcriptStreamStore = useTranscriptStreamStore()
 	const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
+  const { settings: appSettings } = useAppSettings()
 
 	// 分析总结状态
 	const analysisScrollRef = ref<HTMLElement | null>(null)
@@ -959,9 +961,21 @@ async function startRecording() {
 
     recordingStatus.value = 'connecting'
 
+    const buildAudioConfig = () => {
+      const mode = appSettings.value.audioCaptureMode
+      if (mode === 'tab') return { captureMode: 'tab' as const }
+      if (mode === 'mix') {
+        return appSettings.value.micDeviceId
+          ? { captureMode: 'mix' as const, deviceId: appSettings.value.micDeviceId }
+          : { captureMode: 'mix' as const }
+      }
+      return appSettings.value.micDeviceId ? { captureMode: 'mic' as const, deviceId: appSettings.value.micDeviceId } : { captureMode: 'mic' as const }
+    }
+
     // 设置转写服务回调
     await transcription.start({
       sessionId: sessionId.value,
+      audio: buildAudioConfig(),
       onTranscript: (transcript: Speech) => {
         const index = speeches.value.findIndex((item) => item.id === transcript.id)
         if (index >= 0) {

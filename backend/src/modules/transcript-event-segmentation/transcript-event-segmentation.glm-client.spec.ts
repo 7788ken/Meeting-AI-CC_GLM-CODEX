@@ -1,14 +1,14 @@
 import { TranscriptEventSegmentationGlmClient } from './transcript-event-segmentation.glm-client'
 import { of, throwError } from 'rxjs'
-import type { ConfigService } from '@nestjs/config'
 import type { HttpService } from '@nestjs/axios'
+import type { AppConfigService } from '../app-config/app-config.service'
 
 describe('TranscriptEventSegmentationGlmClient', () => {
   const originalEnv = process.env
   const defaultBumpMaxTokensTo = 4096
   const testModel = 'test-model'
 
-  let configService: jest.Mocked<ConfigService>
+  let appConfigService: jest.Mocked<AppConfigService>
   let httpService: jest.Mocked<HttpService>
   let segmentationConfigService: { getConfig: jest.Mock }
   let glmRateLimiter: { schedule: jest.Mock; onRateLimit: jest.Mock; isInCooldown: jest.Mock }
@@ -23,12 +23,21 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     delete process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS
     delete process.env.GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS
 
-    configService = {
-      get: jest.fn((key: string) => {
+    appConfigService = {
+      getString: jest.fn((key: string, fallback = '') => {
         if (key === 'GLM_API_KEY') return 'test-key'
         if (key === 'GLM_ENDPOINT') return ''
-        return null
+        return fallback
       }),
+      getNumber: jest.fn((key: string, fallback = Number.NaN) => {
+        const raw = process.env[key]
+        if (raw == null || raw === '') return fallback
+        const value = Number(raw)
+        return Number.isFinite(value) ? value : fallback
+      }),
+      getBoolean: jest.fn((_: string, fallback = false) => fallback),
+      setValue: jest.fn(),
+      setMany: jest.fn(),
     } as any
 
     httpService = {
@@ -76,7 +85,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     )
 
     const client = new TranscriptEventSegmentationGlmClient(
-      configService,
+      appConfigService,
       httpService,
       segmentationConfigService as any,
       glmRateLimiter as any
@@ -109,7 +118,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     )
 
     const client = new TranscriptEventSegmentationGlmClient(
-      configService,
+      appConfigService,
       httpService,
       segmentationConfigService as any,
       glmRateLimiter as any
@@ -137,7 +146,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     )
 
     const client = new TranscriptEventSegmentationGlmClient(
-      configService,
+      appConfigService,
       httpService,
       segmentationConfigService as any,
       glmRateLimiter as any
@@ -165,7 +174,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     )
 
     const client = new TranscriptEventSegmentationGlmClient(
-      configService,
+      appConfigService,
       httpService,
       segmentationConfigService as any,
       glmRateLimiter as any
@@ -207,7 +216,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       )
 
     const client = new TranscriptEventSegmentationGlmClient(
-      configService,
+      appConfigService,
       httpService,
       segmentationConfigService as any,
       glmRateLimiter as any
@@ -262,7 +271,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       )
 
     const client = new TranscriptEventSegmentationGlmClient(
-      configService,
+      appConfigService,
       httpService,
       segmentationConfigService as any,
       glmRateLimiter as any
@@ -294,7 +303,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     )
 
     const client = new TranscriptEventSegmentationGlmClient(
-      configService,
+      appConfigService,
       httpService,
       segmentationConfigService as any,
       glmRateLimiter as any
@@ -336,7 +345,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       )
 
     const client = new TranscriptEventSegmentationGlmClient(
-      configService,
+      appConfigService,
       httpService,
       segmentationConfigService as any,
       glmRateLimiter as any
@@ -379,7 +388,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
     )
 
     const client = new TranscriptEventSegmentationGlmClient(
-      configService,
+      appConfigService,
       httpService,
       segmentationConfigService as any,
       glmRateLimiter as any

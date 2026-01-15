@@ -21,6 +21,7 @@
       <div class="right">
         <el-button
           size="small"
+          :type="recordingStatus === 'recording' ? 'warning' : 'success'"
           :disabled="disabled"
           :icon="recordButtonIcon"
           @click="emit('toggle-recording')"

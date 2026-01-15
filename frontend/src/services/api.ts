@@ -84,6 +84,21 @@ export interface TranscriptEventSegmentationConfig {
   jsonMode: boolean
 }
 
+export interface BackendConfig {
+  glmApiKey: string
+  glmEndpoint: string
+  glmGlobalConcurrency: number
+  glmGlobalMinIntervalMs: number
+  glmGlobalRateLimitCooldownMs: number
+  glmGlobalRateLimitMaxMs: number
+  glmTranscriptSummaryModel: string
+  glmTranscriptSummaryMaxTokens: number
+  glmTranscriptSummaryThinking: boolean
+  glmTranscriptSummaryRetryMax: number
+  glmTranscriptSummaryRetryBaseMs: number
+  glmTranscriptSummaryRetryMaxMs: number
+}
+
 // ==================== 全文分析总结（Markdown） ====================
 
 export interface TranscriptSummary {
@@ -234,6 +249,13 @@ export const transcriptEventSegmentationConfigApi = {
       '/transcript-event-segmentation/config',
       data
     ),
+}
+
+export const appConfigApi = {
+  get: () =>
+    get<ApiResponse<BackendConfig>>('/app-config'),
+  update: (data: Partial<BackendConfig>) =>
+    put<ApiResponse<BackendConfig>>('/app-config', data),
 }
 
 export const transcriptAnalysisApi = {

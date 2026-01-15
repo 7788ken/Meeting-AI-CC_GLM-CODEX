@@ -14,6 +14,7 @@ import { TranscriptEventSegmentationModule } from './modules/transcript-event-se
 import { TranscriptAnalysisModule } from './modules/transcript-analysis/transcript-analysis.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { DebugErrorModule } from './modules/debug-error/debug-error.module'
+import { AppConfigModule } from './modules/app-config/app-config.module'
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
 import { TransformInterceptor } from './common/interceptors/transform.interceptor'
 import { AppController } from './app.controller'
@@ -29,6 +30,7 @@ import { AppService } from './app.service'
     LlmModule,
     PrismaModule,
     MongoDBModule,
+    AppConfigModule,
     AuthModule,
     SessionModule,
     SpeechModule,

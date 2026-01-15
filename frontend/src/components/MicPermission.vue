@@ -133,15 +133,7 @@ async function checkPermission(): Promise<PermissionStatus> {
 async function requestPermission(): Promise<boolean> {
   requesting.value = true
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        sampleRate: 16000,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    })
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 
     // 立即停止流，只是检查权限
     stream.getTracks().forEach((track) => track.stop())

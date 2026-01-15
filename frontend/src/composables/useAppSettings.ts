@@ -5,9 +5,12 @@ import { websocket } from '@/services/websocket'
 import { transcriptEventSegmentationConfigApi } from '@/services/api'
 
 export type AsrModel = 'glm'
+export type AudioCaptureMode = 'mic' | 'tab' | 'mix'
 
 export interface AppSettings {
   asrModel: AsrModel
+  micDeviceId: string
+  audioCaptureMode: AudioCaptureMode
   vadStartTh: number
   vadStopTh: number
   vadGapMs: number
@@ -50,6 +53,8 @@ const buildDefaultSettings = (): AppSettings => {
   const vad = getVadConfig()
   return {
     asrModel: 'glm',
+    micDeviceId: '',
+    audioCaptureMode: 'mic',
     vadStartTh: vad.startThreshold,
     vadStopTh: vad.stopThreshold,
     vadGapMs: vad.gapMs,
@@ -130,8 +135,16 @@ function normalizeText(value: unknown, fallback: string): string {
 }
 
 function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppSettings {
+  const audioCaptureModeRaw = typeof (input as any).audioCaptureMode === 'string' ? String((input as any).audioCaptureMode).trim() : ''
+  const audioCaptureMode: AudioCaptureMode =
+    audioCaptureModeRaw === 'tab' || audioCaptureModeRaw === 'mix' || audioCaptureModeRaw === 'mic'
+      ? (audioCaptureModeRaw as AudioCaptureMode)
+      : base.audioCaptureMode
+
   const next: AppSettings = {
     asrModel: 'glm',
+    micDeviceId: typeof (input as any).micDeviceId === 'string' ? (input as any).micDeviceId.trim() : base.micDeviceId,
+    audioCaptureMode,
     vadStartTh: normalizeNumber(input.vadStartTh, base.vadStartTh, 0),
     vadStopTh: normalizeNumber(input.vadStopTh, base.vadStopTh, 0),
     vadGapMs: normalizeNumber(input.vadGapMs, base.vadGapMs, 0),
@@ -191,6 +204,7 @@ function validateSettings(input: Partial<AppSettings> | AppSettings): string[] {
   const merged = normalizeSettings(input, settings.value)
   const errors: string[] = []
 
+  if (!merged.audioCaptureMode) errors.push('录音来源不能为空')
   if (merged.vadStartTh <= 0) errors.push('起始能量阈值必须大于 0')
   if (merged.vadStopTh < 0) errors.push('停止阈值不能为负数')
   if (merged.vadGapMs < 0) errors.push('静音间隔必须为非负数')

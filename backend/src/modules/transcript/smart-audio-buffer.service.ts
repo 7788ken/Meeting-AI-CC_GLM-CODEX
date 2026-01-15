@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import type { AsrConfigDto } from './dto/transcript.dto'
+import { AppConfigService } from '../app-config/app-config.service'
 
 interface SmartBufferState {
   config: AsrConfigDto
@@ -32,7 +32,7 @@ export class SmartAudioBufferService {
   private readonly DEFAULT_HARD_MAX_BUFFER_DURATION_MS = 50000
   private readonly DEFAULT_MIN_SPEECH_DURATION_MS = 200
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly appConfigService: AppConfigService) {}
 
   getConfig(clientId: string): AsrConfigDto {
     return { ...this.ensureState(clientId).config }
@@ -334,19 +334,19 @@ export class SmartAudioBufferService {
   }
 
   private readSoftMaxDurationMs(): number {
-    const raw =
-      this.configService.get<string>('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS') ||
-      process.env.TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS
-    const value = Number(raw)
+    const value = this.appConfigService.getNumber(
+      'TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS',
+      Number.NaN
+    )
     if (!Number.isFinite(value)) return this.DEFAULT_SOFT_MAX_BUFFER_DURATION_MS
     return this.clampNumber(value, 5000, 59000, this.DEFAULT_SOFT_MAX_BUFFER_DURATION_MS)
   }
 
   private readHardMaxDurationMs(softMaxMs: number): number {
-    const raw =
-      this.configService.get<string>('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS') ||
-      process.env.TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS
-    const value = Number(raw)
+    const value = this.appConfigService.getNumber(
+      'TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS',
+      Number.NaN
+    )
     if (!Number.isFinite(value)) {
       return Math.max(softMaxMs, this.DEFAULT_HARD_MAX_BUFFER_DURATION_MS)
     }
