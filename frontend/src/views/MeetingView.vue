@@ -348,7 +348,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -504,9 +504,23 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	// 针对性分析状态
 	const analysisMode = ref<'general' | 'target'>('general')
 	const targetSegment = ref<TranscriptEventSegment | null>(null)
-	const targetAnalysisResult = ref<string>('')
-	const isTargetAnalyzing = ref(false)
-	const targetAnalysisError = ref<string>('')
+	type TargetAnalysisCacheEntry = { markdown: string; sourceRevision: number }
+	const targetAnalysisCache = reactive(new Map<string, TargetAnalysisCacheEntry>())
+	const targetAnalysisErrors = reactive(new Map<string, string>())
+	const targetAnalysisInFlight = reactive(new Set<string>())
+
+	// 全局防抖：避免重复点击触发多个分析/重拆任务
+	const globalActionDebounceMs = 800
+	let lastGlobalActionAt = 0
+	const canTriggerGlobalAction = (): boolean => {
+	  const now = Date.now()
+	  if (now - lastGlobalActionAt < globalActionDebounceMs) {
+	    ElMessage.warning('操作过于频繁，请稍后再试')
+	    return false
+	  }
+	  lastGlobalActionAt = now
+	  return true
+	}
 
 	const ACTION_BAR_BOTTOM_OFFSET_PX = 12
 	let actionBarResizeObserver: ResizeObserver | null = null
@@ -964,8 +978,9 @@ async function loadSpeeches() {
 	}
 
 		async function rebuildTranscriptSegments(): Promise<void> {
-		  if (!sessionId.value) return
-		  if (rebuildingTranscriptSegments.value) return
+		if (!sessionId.value) return
+		if (rebuildingTranscriptSegments.value) return
+		if (!canTriggerGlobalAction()) return
 
 	  try {
 	    await ElMessageBox.confirm(
@@ -1187,9 +1202,30 @@ const renderedAnalysisResult = computed(() => {
 const hasAnalysisContent = computed(() => !!analysisResult.value)
 
 // 针对性分析相关
+const activeTargetAnalysis = computed(() => {
+  const seg = targetSegment.value
+  if (!seg?.id) return null
+  const cached = targetAnalysisCache.get(seg.id)
+  if (!cached) return null
+  if (cached.sourceRevision !== seg.sourceRevision) return null
+  return cached
+})
+
+const targetAnalysisMarkdown = computed(() => activeTargetAnalysis.value?.markdown ?? '')
+
+const isTargetAnalyzing = computed(() => {
+  const segId = targetSegment.value?.id
+  return !!segId && targetAnalysisInFlight.has(segId)
+})
+
+const targetAnalysisError = computed(() => {
+  const segId = targetSegment.value?.id
+  return segId ? targetAnalysisErrors.get(segId) ?? '' : ''
+})
+
 const renderedTargetAnalysisResult = computed(() => {
-  if (!targetAnalysisResult.value) return ''
-  const rawHtml = marked.parse(normalizeMarkdown(targetAnalysisResult.value), {
+  if (!targetAnalysisMarkdown.value) return ''
+  const rawHtml = marked.parse(normalizeMarkdown(targetAnalysisMarkdown.value), {
     async: false,
     gfm: true,
     breaks: true,
@@ -1197,7 +1233,7 @@ const renderedTargetAnalysisResult = computed(() => {
   return DOMPurify.sanitize(rawHtml)
 })
 
-const hasTargetAnalysisContent = computed(() => !!targetAnalysisResult.value)
+const hasTargetAnalysisContent = computed(() => !!targetAnalysisMarkdown.value)
 
 const analysisPanelTitle = computed(() => {
   if (analysisMode.value === 'target' && targetSegment.value) {
@@ -1216,6 +1252,9 @@ async function startAnalysis(): Promise<void> {
     ElMessage.warning('暂无原文内容，请先开始录音/转写')
     return
   }
+
+  if (isAnalyzing.value) return
+  if (!canTriggerGlobalAction()) return
 
   if (analysisEventSource) {
     analysisEventSource.close()
@@ -1458,13 +1497,28 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
     return
   }
 
+  const seg = targetSegment.value
+  const segId = seg.id
+  if (!segId) {
+    ElMessage.warning('语句缺少标识，无法分析')
+    return
+  }
+
+  const force = options?.force === true
+
+  const cached = targetAnalysisCache.get(segId)
+  if (!force && cached && cached.sourceRevision === seg.sourceRevision) {
+    targetAnalysisErrors.delete(segId)
+    return
+  }
+
+  if (targetAnalysisInFlight.has(segId)) return
+
+  targetAnalysisErrors.delete(segId)
+  targetAnalysisInFlight.add(segId)
+  const activeSessionId = sessionId.value
+
   try {
-    isTargetAnalyzing.value = true
-    targetAnalysisError.value = ''
-
-    const seg = targetSegment.value
-    const force = options?.force === true
-
     if (!force) {
       try {
         const stored = await transcriptAnalysisApi.getStoredSegmentAnalysis(sessionId.value, seg.id)
@@ -1475,7 +1529,13 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
           payload.markdown.trim() &&
           payload.sourceRevision === seg.sourceRevision
         ) {
-          targetAnalysisResult.value = payload.markdown
+          if (activeSessionId === sessionId.value) {
+            targetAnalysisCache.set(segId, {
+              markdown: payload.markdown,
+              sourceRevision: payload.sourceRevision,
+            })
+            targetAnalysisErrors.delete(segId)
+          }
           return
         }
       } catch (error) {
@@ -1483,26 +1543,35 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
       }
     }
 
+    if (!canTriggerGlobalAction()) return
+
     const response = await transcriptAnalysisApi.generateSegmentAnalysis(sessionId.value, seg.id)
     const markdown = response?.data?.markdown
     if (!markdown) {
       throw new Error('分析服务返回为空')
     }
-    targetAnalysisResult.value = markdown
+    if (activeSessionId === sessionId.value) {
+      targetAnalysisCache.set(segId, { markdown, sourceRevision: seg.sourceRevision })
+      targetAnalysisErrors.delete(segId)
+    }
 
-    ElMessage.success('针对性分析完成')
+    ElMessage.success(`针对性分析完成 - @${seg.sequence}`)
   } catch (error) {
     console.error('针对性分析失败:', error)
-    targetAnalysisError.value = error instanceof Error ? error.message : '分析失败'
-    ElMessage.error('针对性分析失败')
+    const message = error instanceof Error ? error.message : '分析失败'
+    if (activeSessionId === sessionId.value) {
+      targetAnalysisErrors.set(segId, message)
+      ElMessage.error('针对性分析失败')
+    }
   } finally {
-    isTargetAnalyzing.value = false
+    targetAnalysisInFlight.delete(segId)
   }
 }
 
 function clearTargetAnalysis(): void {
-  targetAnalysisResult.value = ''
-  targetAnalysisError.value = ''
+  targetAnalysisCache.clear()
+  targetAnalysisErrors.clear()
+  targetAnalysisInFlight.clear()
 }
 </script>
 
