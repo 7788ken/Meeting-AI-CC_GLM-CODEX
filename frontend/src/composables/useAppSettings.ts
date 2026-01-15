@@ -13,11 +13,16 @@ export interface AppSettings {
   vadStartTh: number
   vadStopTh: number
   vadGapMs: number
+  transcriptFontSize: number
+  segmentFontSize: number
+  analysisFontSize: number
   apiBaseUrl: string
   wsUrl: string
 }
 
 const STORAGE_KEY = 'meeting-ai.app-settings'
+const FONT_SIZE_MIN = 12
+const FONT_SIZE_MAX = 24
 
 const resolveEnv = <T>(value: T | undefined, fallback: T): T =>
   (value === undefined || value === null || value === '' ? fallback : value)
@@ -31,6 +36,9 @@ const buildDefaultSettings = (): AppSettings => {
     vadStartTh: vad.startThreshold,
     vadStopTh: vad.stopThreshold,
     vadGapMs: vad.gapMs,
+    transcriptFontSize: 13,
+    segmentFontSize: 16,
+    analysisFontSize: 16,
     apiBaseUrl:
       resolveEnv((globalThis as any).__VITE_API_BASE_URL__ as string, '') ||
       resolveEnv(import.meta.env.VITE_API_BASE_URL as string, '/api'),
@@ -116,6 +124,24 @@ function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppS
     vadStartTh: normalizeNumber(input.vadStartTh, base.vadStartTh, 0),
     vadStopTh: normalizeNumber(input.vadStopTh, base.vadStopTh, 0),
     vadGapMs: normalizeNumber(input.vadGapMs, base.vadGapMs, 0),
+    transcriptFontSize: normalizeNumberInRange(
+      input.transcriptFontSize,
+      base.transcriptFontSize,
+      FONT_SIZE_MIN,
+      FONT_SIZE_MAX
+    ),
+    segmentFontSize: normalizeNumberInRange(
+      input.segmentFontSize,
+      base.segmentFontSize,
+      FONT_SIZE_MIN,
+      FONT_SIZE_MAX
+    ),
+    analysisFontSize: normalizeNumberInRange(
+      input.analysisFontSize,
+      base.analysisFontSize,
+      FONT_SIZE_MIN,
+      FONT_SIZE_MAX
+    ),
     apiBaseUrl: input.apiBaseUrl?.trim() || base.apiBaseUrl,
     wsUrl: (input.wsUrl ?? base.wsUrl).trim(),
   }
@@ -135,6 +161,12 @@ function applySettings(next?: AppSettings) {
     stopThreshold: target.vadStopTh,
     gapMs: target.vadGapMs,
   })
+  if (typeof document !== 'undefined') {
+    const root = document.documentElement
+    root.style.setProperty('--app-transcript-font-size', `${target.transcriptFontSize}px`)
+    root.style.setProperty('--app-segment-font-size', `${target.segmentFontSize}px`)
+    root.style.setProperty('--app-analysis-font-size', `${target.analysisFontSize}px`)
+  }
 }
 
 function validateSettings(input: Partial<AppSettings> | AppSettings): string[] {

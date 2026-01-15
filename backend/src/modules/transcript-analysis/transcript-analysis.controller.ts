@@ -1,7 +1,13 @@
-import { BadRequestException, Controller, Get, Header, Param, Post, Sse } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Get, Header, Param, Post, Put, Sse, UseGuards } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Observable } from 'rxjs'
 import { Public } from '../auth/decorators/public.decorator'
+import { SettingsPasswordGuard } from '../app-config/guards/settings-password.guard'
+import {
+  TranscriptAnalysisConfigDto,
+  UpdateTranscriptAnalysisConfigDto,
+} from './dto/transcript-analysis-config.dto'
+import { TranscriptAnalysisConfigService } from './transcript-analysis-config.service'
 import {
   TranscriptAnalysisService,
   type TranscriptSummaryDTO,
@@ -12,7 +18,39 @@ import {
 @ApiTags('transcript-analysis')
 @Controller('transcript-analysis')
 export class TranscriptAnalysisController {
-  constructor(private readonly transcriptAnalysisService: TranscriptAnalysisService) {}
+  constructor(
+    private readonly transcriptAnalysisService: TranscriptAnalysisService,
+    private readonly transcriptAnalysisConfigService: TranscriptAnalysisConfigService
+  ) {}
+
+  @Public()
+  @Get('config')
+  @UseGuards(SettingsPasswordGuard)
+  @ApiOperation({ summary: '获取 AI 分析提示词配置' })
+  @ApiResponse({ status: 200, type: TranscriptAnalysisConfigDto })
+  async getConfig(): Promise<TranscriptAnalysisConfigDto> {
+    return this.transcriptAnalysisConfigService.reloadFromStorage()
+  }
+
+  @Public()
+  @Post('config/reset')
+  @UseGuards(SettingsPasswordGuard)
+  @ApiOperation({ summary: '重置 AI 分析提示词配置为默认值' })
+  @ApiResponse({ status: 200, type: TranscriptAnalysisConfigDto })
+  async resetConfig(): Promise<TranscriptAnalysisConfigDto> {
+    return this.transcriptAnalysisConfigService.resetConfig()
+  }
+
+  @Public()
+  @Put('config')
+  @UseGuards(SettingsPasswordGuard)
+  @ApiOperation({ summary: '更新 AI 分析提示词配置' })
+  @ApiResponse({ status: 200, type: TranscriptAnalysisConfigDto })
+  async updateConfig(
+    @Body() dto: UpdateTranscriptAnalysisConfigDto
+  ): Promise<TranscriptAnalysisConfigDto> {
+    return this.transcriptAnalysisConfigService.updateConfig(dto)
+  }
 
   @Public()
   @Get('session/:sessionId/summary')

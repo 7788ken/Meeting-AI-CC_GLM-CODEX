@@ -96,6 +96,12 @@ export interface TranscriptEventSegmentationConfig {
   maxSegmentsPerRun: number
 }
 
+export interface TranscriptAnalysisConfig {
+  summarySystemPrompt: string
+  chunkSummarySystemPrompt: string
+  segmentAnalysisSystemPrompt: string
+}
+
 export interface BackendConfig {
   glmApiKey: string
   glmEndpoint: string
@@ -287,6 +293,25 @@ export const transcriptEventSegmentationConfigApi = {
   update: (data: Partial<TranscriptEventSegmentationConfig>) =>
     put<ApiResponse<TranscriptEventSegmentationConfig>>(
       '/transcript-event-segmentation/config',
+      data,
+      { headers: getSettingsAuthHeaders() }
+    ),
+}
+
+export const transcriptAnalysisConfigApi = {
+  get: () =>
+    get<ApiResponse<TranscriptAnalysisConfig>>('/transcript-analysis/config', {
+      headers: getSettingsAuthHeaders(),
+    }),
+  reset: () =>
+    post<ApiResponse<TranscriptAnalysisConfig>>(
+      '/transcript-analysis/config/reset',
+      {},
+      { headers: getSettingsAuthHeaders() }
+    ),
+  update: (data: Partial<TranscriptAnalysisConfig>) =>
+    put<ApiResponse<TranscriptAnalysisConfig>>(
+      '/transcript-analysis/config',
       data,
       { headers: getSettingsAuthHeaders() }
     ),

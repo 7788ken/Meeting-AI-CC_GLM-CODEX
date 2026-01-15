@@ -1760,7 +1760,7 @@ function clearTargetAnalysis(): void {
   justify-content: center;
   height: 100%;
   color: #999;
-  font-size: 13px;
+  font-size: var(--app-transcript-font-size, 13px);
 }
 
 .realtime-stream-scroll {
@@ -1771,7 +1771,7 @@ function clearTargetAnalysis(): void {
 
 .realtime-event-item {
   display: inline;
-  font-size: 13px;
+  font-size: var(--app-transcript-font-size, 13px);
   line-height: 1.8;
   animation: rise-in 220ms var(--ease-out) both;
   animation-delay: calc(var(--stagger, 0) * 20ms);
@@ -2220,11 +2220,12 @@ function clearTargetAnalysis(): void {
 .analysis-result {
   padding: 0 12px;
   color: var(--ink-900);
+  font-size: var(--app-analysis-font-size, 16px);
   line-height: 1.7;
 }
 
 .analysis-result:deep(h1) {
-  font-size: 20px;
+  font-size: calc(var(--app-analysis-font-size, 16px) + 4px);
   font-weight: 650;
   margin: 0 0 16px;
   padding-bottom: 12px;
@@ -2232,13 +2233,13 @@ function clearTargetAnalysis(): void {
 }
 
 .analysis-result:deep(h2) {
-  font-size: 17px;
+  font-size: calc(var(--app-analysis-font-size, 16px) + 1px);
   font-weight: 600;
   margin: 20px 0 12px;
 }
 
 .analysis-result:deep(h3) {
-  font-size: 15px;
+  font-size: calc(var(--app-analysis-font-size, 16px) - 1px);
   font-weight: 600;
   margin: 16px 0 8px;
 }
@@ -2246,7 +2247,7 @@ function clearTargetAnalysis(): void {
 .analysis-result:deep(h4),
 .analysis-result:deep(h5),
 .analysis-result:deep(h6) {
-  font-size: 14px;
+  font-size: calc(var(--app-analysis-font-size, 16px) - 2px);
   font-weight: 600;
   margin: 14px 0 6px;
 }
@@ -2270,7 +2271,7 @@ function clearTargetAnalysis(): void {
   border-radius: 4px;
   background: rgba(15, 23, 42, 0.08);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
+  font-size: calc(var(--app-analysis-font-size, 16px) - 3px);
 }
 
 .analysis-result:deep(pre) {

@@ -4,7 +4,7 @@ AI会议助手 - 轻量级Web智能应用，提供实时语音转写和AI分析�
 
 ## 项目结构
 
-```
+```file
 team2/
 ├── frontend/          # Vue 3 + Vite + TypeScript
 ├── backend/           # NestJS + Prisma + PostgreSQL + MongoDB
@@ -16,11 +16,13 @@ team2/
 ## 快速开始
 
 ### 安装依赖
+
 ```bash
 pnpm install
 ```
 
 ### 启动开发服务器
+
 ```bash
 # 前端开发服务器
 pnpm dev:frontend
@@ -30,6 +32,7 @@ pnpm dev:backend
 ```
 
 ### 构建
+
 ```bash
 # 构建前端
 pnpm build:frontend
@@ -41,6 +44,7 @@ pnpm build:backend
 ## 技术栈
 
 ### 前端
+
 - Vue 3.4.x - 响应式框架
 - TypeScript 5.x - 类型安全
 - Vite 5.x - 构建工具
@@ -50,6 +54,7 @@ pnpm build:backend
 - Axios - HTTP客户端
 
 ### 后端
+
 - NestJS 10.x - Node.js框架
 - Prisma - ORM
 - PostgreSQL - 关系型数据库

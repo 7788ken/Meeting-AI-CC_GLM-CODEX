@@ -396,6 +396,7 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
   white-space: pre-wrap;
   line-height: 1.5;
   color: var(--ink-900);
+  font-size: var(--app-segment-font-size, 16px);
 }
 
 /* 高亮当前正在分析的语句 */

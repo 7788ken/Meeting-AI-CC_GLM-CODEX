@@ -7,6 +7,7 @@ import {
   TranscriptEventSegmentSchema,
 } from '../transcript-event-segmentation/schemas/transcript-event-segment.schema'
 import { TranscriptAnalysisController } from './transcript-analysis.controller'
+import { TranscriptAnalysisConfigService } from './transcript-analysis-config.service'
 import { TranscriptAnalysisGlmClient } from './transcript-analysis.glm-client'
 import { TranscriptAnalysisService } from './transcript-analysis.service'
 import {
@@ -32,6 +33,6 @@ import {
     ]),
   ],
   controllers: [TranscriptAnalysisController],
-  providers: [TranscriptAnalysisService, TranscriptAnalysisGlmClient],
+  providers: [TranscriptAnalysisService, TranscriptAnalysisConfigService, TranscriptAnalysisGlmClient],
 })
 export class TranscriptAnalysisModule {}

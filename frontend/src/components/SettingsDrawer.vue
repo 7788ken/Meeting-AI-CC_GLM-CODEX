@@ -12,7 +12,7 @@
       <header class="drawer-header">
         <div class="title-block">
           <div class="title">设置</div>
-          <div class="subtitle">多数设置仅影响本地客户端；语句拆分与服务配置会同步到后端</div>
+          <div class="subtitle">多数设置仅影响本地客户端；语句拆分、AI 分析与系统配置会同步到后端</div>
         </div>
         <div class="header-actions">
           <el-button size="small" class="icon-button" @click="visibleProxy = false">
@@ -34,11 +34,11 @@
 
       <div class="drawer-body">
         <el-tabs v-model="activeSection" tab-position="left" class="settings-tabs">
-          <el-tab-pane name="asr">
+          <el-tab-pane name="models">
             <template #label>
               <span class="tab-label">
-                <el-icon><Microphone /></el-icon>
-                ASR
+                <el-icon><Cpu /></el-icon>
+                AI 模型
               </span>
             </template>
             <section class="pane">
@@ -61,101 +61,160 @@
               </div>
 
               <div class="pane-block">
-                <div class="pane-title">录音来源</div>
-                <div class="pane-subtitle">决定采集“麦克风 / 标签页音频 / 混合”。</div>
+                <div class="pane-title">GLM 连接</div>
+                <div class="pane-subtitle">用于模型调用鉴权与请求地址配置。</div>
 
-                <el-radio-group v-model="form.audioCaptureMode" class="choice-grid">
-                  <el-radio
-                    v-for="item in audioCaptureModes"
-                    :key="item.value"
-                    :label="item.value"
-                    border
-                    class="choice-card"
-                  >
-                    <div class="choice-title">{{ item.label }}</div>
-                    <div class="choice-desc">{{ item.desc }}</div>
-                  </el-radio>
-                </el-radio-group>
-
-                <div class="hint">
-                  选择“标签页音频/混合”后，开始录音会弹出共享对话框；请选音頻播放的網頁标签页并勾选“共享音频”。
-                </div>
-
-                <el-form
-                  v-if="form.audioCaptureMode !== 'tab'"
-                  label-position="top"
-                  :model="form"
-                  class="pane-form"
-                >
-                  <el-form-item label="麦克风设备">
-                    <div class="grid two-col">
-                      <el-select v-model="form.micDeviceId" placeholder="系统默认" style="width: 100%">
-                        <el-option label="系统默认" value="" />
-                        <el-option
-                          v-for="mic in microphones"
-                          :key="mic.deviceId"
-                          :label="mic.label || `麦克风 ${mic.deviceId}`"
-                          :value="mic.deviceId"
-                        />
-                      </el-select>
-                      <el-button size="small" :loading="loadingMicrophones" @click="refreshMicrophones">
-                        刷新设备
-                      </el-button>
+                <el-form label-position="top" :model="backendForm" class="pane-form">
+                  <el-form-item label="GLM API Key">
+                    <el-input
+                      v-model="backendForm.glmApiKey"
+                      show-password
+                      placeholder="如 apiKey 或 apiKey.secret"
+                    />
+                    <div v-if="getRemark('GLM_API_KEY')" class="hint">
+                      {{ getRemark('GLM_API_KEY') }}
                     </div>
-                    <div class="hint">若设备列表为空，请先允许麦克风权限；“系统默认”会跟随系统输入设备。</div>
+                  </el-form-item>
+                  <el-form-item label="GLM Endpoint">
+                    <el-input
+                      v-model="backendForm.glmEndpoint"
+                      placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions"
+                    />
+                    <div v-if="getRemark('GLM_ENDPOINT')" class="hint">
+                      {{ getRemark('GLM_ENDPOINT') }}
+                    </div>
+                  </el-form-item>
+                </el-form>
+              </div>
+
+              <div class="pane-block">
+                <div class="pane-title">语句拆分模型</div>
+                <div class="pane-subtitle">语句拆分任务使用的 LLM 模型名称。</div>
+
+                <el-form label-position="top" :model="segmentationForm" class="pane-form">
+                  <el-form-item label="GLM 模型">
+                    <el-input v-model="segmentationForm.model" placeholder="如 GLM-4X" />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') }}
+                    </div>
+                  </el-form-item>
+                </el-form>
+              </div>
+
+              <div class="pane-block">
+                <div class="pane-title">会议总结模型</div>
+                <div class="pane-subtitle">用于 AI 分析与针对性分析的 LLM 模型。</div>
+
+                <el-form label-position="top" :model="backendForm" class="pane-form">
+                  <el-form-item label="会议总结模型">
+                    <el-input v-model="backendForm.glmTranscriptSummaryModel" placeholder="如 GLM-4.6V-Flash" />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_MODEL')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_MODEL') }}
+                    </div>
                   </el-form-item>
                 </el-form>
               </div>
             </section>
           </el-tab-pane>
 
-          <el-tab-pane name="vad">
+          <el-tab-pane name="transcription">
             <template #label>
               <span class="tab-label">
-                <el-icon><TrendCharts /></el-icon>
-                VAD
+                <el-icon><Microphone /></el-icon>
+                转写设置
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">VAD 参数</div>
-              <div class="pane-subtitle">能量阈值与静音窗口，决定分句敏感度</div>
+              <div class="pane-block">
+                <div class="pane-title">VAD 参数</div>
+                <div class="pane-subtitle">能量阈值与静音窗口，决定分句敏感度</div>
 
-              <div class="mono-preview">{{ vadPreview }}</div>
+                <div class="mono-preview">{{ vadPreview }}</div>
 
-              <el-form label-position="top" :model="form" class="pane-form">
-                <div class="grid two-col">
-                  <el-form-item label="起始阈值 (start_th)">
-                    <el-input-number
-                      v-model="form.vadStartTh"
-                      :step="0.001"
-                      :precision="3"
-                      :min="0"
-                      controls-position="right"
-                      class="mono-input"
-                    />
-                  </el-form-item>
-                  <el-form-item label="停止阈值 (stop_th)">
-                    <el-input-number
-                      v-model="form.vadStopTh"
-                      :step="0.001"
-                      :precision="3"
-                      :min="0"
-                      controls-position="right"
-                      class="mono-input"
-                    />
-                  </el-form-item>
-                  <el-form-item label="静音间隔 (gap_ms)">
-                    <el-input-number
-                      v-model="form.vadGapMs"
-                      :step="50"
-                      :min="0"
-                      controls-position="right"
-                      class="mono-input"
-                    />
-                  </el-form-item>
-                </div>
-                <div class="hint">建议：start ≥ stop；gap 过小会导致频繁分段。</div>
-              </el-form>
+                <el-form label-position="top" :model="form" class="pane-form">
+                  <div class="grid two-col">
+                    <el-form-item label="起始阈值 (start_th)">
+                      <el-input-number
+                        v-model="form.vadStartTh"
+                        :step="0.001"
+                        :precision="3"
+                        :min="0"
+                        controls-position="right"
+                        class="mono-input"
+                      />
+                    </el-form-item>
+                    <el-form-item label="停止阈值 (stop_th)">
+                      <el-input-number
+                        v-model="form.vadStopTh"
+                        :step="0.001"
+                        :precision="3"
+                        :min="0"
+                        controls-position="right"
+                        class="mono-input"
+                      />
+                    </el-form-item>
+                    <el-form-item label="静音间隔 (gap_ms)">
+                      <el-input-number
+                        v-model="form.vadGapMs"
+                        :step="50"
+                        :min="0"
+                        controls-position="right"
+                        class="mono-input"
+                      />
+                    </el-form-item>
+                  </div>
+                  <div class="hint">建议：start ≥ stop；gap 过小会导致频繁分段。</div>
+                </el-form>
+              </div>
+
+              <div class="pane-block">
+                <div class="pane-title">转写与音频</div>
+                <div class="pane-subtitle">影响实时转写的自动切分与音频 buffer 触发策略。</div>
+
+                <el-form label-position="top" :model="backendForm" class="pane-form">
+                  <div class="grid two-col">
+                    <el-form-item label="自动切分间隔 (ms)">
+                      <el-input-number
+                        v-model="backendForm.transcriptAutoSplitGapMs"
+                        :min="0"
+                        :max="600000"
+                        :step="100"
+                        controls-position="right"
+                        class="mono-input"
+                      />
+                      <div v-if="getRemark('TRANSCRIPT_AUTO_SPLIT_GAP_MS')" class="hint">
+                        {{ getRemark('TRANSCRIPT_AUTO_SPLIT_GAP_MS') }}
+                      </div>
+                    </el-form-item>
+                    <el-form-item label="音频 buffer 软上限 (ms)">
+                      <el-input-number
+                        v-model="backendForm.transcriptMaxBufferDurationSoftMs"
+                        :min="5000"
+                        :max="59000"
+                        :step="500"
+                        controls-position="right"
+                        class="mono-input"
+                      />
+                      <div v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS')" class="hint">
+                        {{ getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS') }}
+                      </div>
+                    </el-form-item>
+                    <el-form-item label="音频 buffer 硬上限 (ms)">
+                      <el-input-number
+                        v-model="backendForm.transcriptMaxBufferDurationHardMs"
+                        :min="backendForm.transcriptMaxBufferDurationSoftMs"
+                        :max="59000"
+                        :step="500"
+                        controls-position="right"
+                        class="mono-input"
+                      />
+                      <div v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS')" class="hint">
+                        {{ getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS') }}
+                      </div>
+                    </el-form-item>
+                  </div>
+                </el-form>
+              </div>
             </section>
           </el-tab-pane>
 
@@ -163,12 +222,13 @@
             <template #label>
               <span class="tab-label">
                 <el-icon><Document /></el-icon>
-                语句拆分提示设置
+                语句拆分设置
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">语句拆分提示设置</div>
+              <div class="pane-title">语句拆分设置</div>
               <div class="pane-subtitle">配置语句拆分的系统提示词与上下文窗口等参数。</div>
+              <div class="hint">拆分模型在“AI 模型”中配置。</div>
 
               <el-form label-position="top" :model="segmentationForm" class="pane-form">
                 <el-form-item label="系统提示词">
@@ -228,12 +288,6 @@
                     />
                     <div v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS')" class="hint">
                       {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS') }}
-                    </div>
-                  </el-form-item>
-                  <el-form-item label="GLM 模型">
-                    <el-input v-model="segmentationForm.model" placeholder="如 GLM-4X" />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') }}
                     </div>
                   </el-form-item>
                   <el-form-item label="最大输出 tokens">
@@ -369,45 +423,53 @@
             </section>
           </el-tab-pane>
 
-          <el-tab-pane name="backend">
+          <el-tab-pane name="analysis">
             <template #label>
               <span class="tab-label">
-                <el-icon><Setting /></el-icon>
-                AI 服务
+                <el-icon><MagicStick /></el-icon>
+                AI 分析设置
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">AI 服务配置</div>
-              <div class="pane-subtitle">保存后写入后端数据库，用于 GLM 调用与限流。</div>
+              <div class="pane-title">AI 分析设置</div>
+              <div class="pane-subtitle">影响会议总结与针对性分析输出。</div>
+
+              <el-form label-position="top" :model="analysisConfigForm" class="pane-form">
+                <el-form-item label="会议总结系统提示词">
+                  <el-input
+                    v-model="analysisConfigForm.summarySystemPrompt"
+                    type="textarea"
+                    :autosize="{ minRows: 8, maxRows: 18 }"
+                    placeholder="用于会议总结的系统提示词"
+                  />
+                  <div class="hint">用于控制总结输出结构、风格与重点。</div>
+                  <div
+                    v-if="getRemark('TRANSCRIPT_ANALYSIS_SUMMARY_SYSTEM_PROMPT')"
+                    class="hint"
+                  >
+                    {{ getRemark('TRANSCRIPT_ANALYSIS_SUMMARY_SYSTEM_PROMPT') }}
+                  </div>
+                </el-form-item>
+
+                <el-form-item label="分片总结系统提示词">
+                  <el-input
+                    v-model="analysisConfigForm.chunkSummarySystemPrompt"
+                    type="textarea"
+                    :autosize="{ minRows: 6, maxRows: 16 }"
+                    placeholder="用于长会话分片总结的系统提示词"
+                  />
+                  <div class="hint">用于长会议拆分摘要的提示词。</div>
+                  <div
+                    v-if="getRemark('TRANSCRIPT_ANALYSIS_CHUNK_SUMMARY_SYSTEM_PROMPT')"
+                    class="hint"
+                  >
+                    {{ getRemark('TRANSCRIPT_ANALYSIS_CHUNK_SUMMARY_SYSTEM_PROMPT') }}
+                  </div>
+                </el-form-item>
+              </el-form>
 
               <el-form label-position="top" :model="backendForm" class="pane-form">
-                <el-form-item label="GLM API Key">
-                  <el-input
-                    v-model="backendForm.glmApiKey"
-                    show-password
-                    placeholder="如 apiKey 或 apiKey.secret"
-                  />
-                  <div v-if="getRemark('GLM_API_KEY')" class="hint">
-                    {{ getRemark('GLM_API_KEY') }}
-                  </div>
-                </el-form-item>
-                <el-form-item label="GLM Endpoint">
-                  <el-input
-                    v-model="backendForm.glmEndpoint"
-                    placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions"
-                  />
-                  <div v-if="getRemark('GLM_ENDPOINT')" class="hint">
-                    {{ getRemark('GLM_ENDPOINT') }}
-                  </div>
-                </el-form-item>
-
                 <div class="grid two-col">
-                  <el-form-item label="会议总结模型">
-                    <el-input v-model="backendForm.glmTranscriptSummaryModel" placeholder="如 GLM-4.6V-Flash" />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_MODEL')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_MODEL') }}
-                    </div>
-                  </el-form-item>
                   <el-form-item label="会议总结最大 tokens">
                     <el-input-number
                       v-model="backendForm.glmTranscriptSummaryMaxTokens"
@@ -421,9 +483,6 @@
                       {{ getRemark('GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS') }}
                     </div>
                   </el-form-item>
-                </div>
-
-                <div class="grid two-col">
                   <el-form-item label="会议总结深度思考">
                     <el-switch v-model="backendForm.glmTranscriptSummaryThinking" />
                     <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_THINKING')" class="hint">
@@ -432,8 +491,99 @@
                   </el-form-item>
                 </div>
 
-                <div class="pane-title section-title">限流与重试</div>
-                <div class="pane-subtitle">调整请求节奏与重试策略。</div>
+                <div class="pane-title section-title">重试与退避</div>
+                <div class="pane-subtitle">影响请求失败后的重试策略。</div>
+
+                <div class="grid two-col">
+                  <el-form-item label="重试次数">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptSummaryRetryMax"
+                      :min="0"
+                      :max="10"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="退避基准 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptSummaryRetryBaseMs"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS') }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="退避上限 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptSummaryRetryMaxMs"
+                      :min="0"
+                      :max="120000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS')" class="hint">
+                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS') }}
+                    </div>
+                  </el-form-item>
+                </div>
+              </el-form>
+            </section>
+          </el-tab-pane>
+
+          <el-tab-pane name="target-analysis">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Search /></el-icon>
+                针对性分析设置
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">针对性分析设置</div>
+              <div class="pane-subtitle">用于单句/单段的深入分析。</div>
+
+              <el-form label-position="top" :model="analysisConfigForm" class="pane-form">
+                <el-form-item label="针对性分析系统提示词">
+                  <el-input
+                    v-model="analysisConfigForm.segmentAnalysisSystemPrompt"
+                    type="textarea"
+                    :autosize="{ minRows: 8, maxRows: 18 }"
+                    placeholder="用于针对性分析的系统提示词"
+                  />
+                  <div class="hint">用于控制单句分析角度与输出结构。</div>
+                  <div
+                    v-if="getRemark('TRANSCRIPT_ANALYSIS_SEGMENT_SYSTEM_PROMPT')"
+                    class="hint"
+                  >
+                    {{ getRemark('TRANSCRIPT_ANALYSIS_SEGMENT_SYSTEM_PROMPT') }}
+                  </div>
+                </el-form-item>
+              </el-form>
+            </section>
+          </el-tab-pane>
+
+          <el-tab-pane name="system">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Setting /></el-icon>
+                系统设置
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">系统设置</div>
+              <div class="pane-subtitle">保存后写入后端数据库，用于限流与系统级策略。</div>
+
+              <el-form label-position="top" :model="backendForm" class="pane-form">
+                <div class="pane-title section-title">限流与节奏</div>
+                <div class="pane-subtitle">调整请求节奏与限流策略。</div>
 
                 <div class="grid two-col">
                   <el-form-item label="并发上限">
@@ -489,132 +639,101 @@
                     </div>
                   </el-form-item>
                 </div>
+              </el-form>
+            </section>
+          </el-tab-pane>
 
-                <div class="grid two-col">
-                  <el-form-item label="重试次数">
-                    <el-input-number
-                      v-model="backendForm.glmTranscriptSummaryRetryMax"
-                      :min="0"
-                      :max="10"
-                      :step="1"
-                      controls-position="right"
-                      class="mono-input"
-                    />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX') }}
-                    </div>
-                  </el-form-item>
-                  <el-form-item label="退避基准 (ms)">
-                    <el-input-number
-                      v-model="backendForm.glmTranscriptSummaryRetryBaseMs"
-                      :min="0"
-                      :max="60000"
-                      :step="100"
-                      controls-position="right"
-                      class="mono-input"
-                    />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS') }}
-                    </div>
-                  </el-form-item>
-                  <el-form-item label="退避上限 (ms)">
-                    <el-input-number
-                      v-model="backendForm.glmTranscriptSummaryRetryMaxMs"
-                      :min="0"
-                      :max="120000"
-                      :step="100"
-                      controls-position="right"
-                      class="mono-input"
-                    />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS') }}
-                    </div>
-                  </el-form-item>
+          <el-tab-pane name="client">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Monitor /></el-icon>
+                客户端设置
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-block">
+                <div class="pane-title">录音来源</div>
+                <div class="pane-subtitle">决定采集“麦克风 / 标签页音频 / 混合”。</div>
+
+                <el-radio-group v-model="form.audioCaptureMode" class="choice-grid">
+                  <el-radio
+                    v-for="item in audioCaptureModes"
+                    :key="item.value"
+                    :label="item.value"
+                    border
+                    class="choice-card"
+                  >
+                    <div class="choice-title">{{ item.label }}</div>
+                    <div class="choice-desc">{{ item.desc }}</div>
+                  </el-radio>
+                </el-radio-group>
+
+                <div class="hint">
+                  选择“标签页音频/混合”后，开始录音会弹出共享对话框；请选音頻播放的網頁标签页并勾选“共享音频”。
                 </div>
 
-                <div class="pane-title section-title">系统设置</div>
-                <div class="pane-subtitle">设置系统安全密码，启用后打开设置需验证。</div>
-
-                <el-form-item label="当前状态">
-                  <el-tag v-if="securityStatus.enabled" type="success" size="small">已设置</el-tag>
-                  <el-tag v-else type="info" size="small">未设置</el-tag>
-                </el-form-item>
-
-                <el-form-item v-if="securityStatus.enabled" label="当前密码">
-                  <el-input
-                    v-model="securityForm.currentPassword"
-                    show-password
-                    placeholder="请输入当前密码"
-                  />
-                </el-form-item>
-
-                <el-form-item label="新密码">
-                  <el-input
-                    v-model="securityForm.newPassword"
-                    show-password
-                    placeholder="请输入新密码"
-                  />
-                  <div class="hint">该密码用于进入设置与修改服务配置。</div>
-                </el-form-item>
-
-                <el-button size="small" type="primary" @click="updateSecurityPassword">
-                  {{ securityStatus.enabled ? '更新密码' : '初始化密码' }}
-                </el-button>
-
-                <div class="pane-title section-title">转写与音频</div>
-                <div class="pane-subtitle">影响实时转写的自动切分与音频 buffer 触发策略。</div>
-
-                <div class="grid two-col">
-                  <el-form-item label="自动切分间隔 (ms)">
-                    <el-input-number
-                      v-model="backendForm.transcriptAutoSplitGapMs"
-                      :min="0"
-                      :max="600000"
-                      :step="100"
-                      controls-position="right"
-                      class="mono-input"
-                    />
-                    <div v-if="getRemark('TRANSCRIPT_AUTO_SPLIT_GAP_MS')" class="hint">
-                      {{ getRemark('TRANSCRIPT_AUTO_SPLIT_GAP_MS') }}
+                <el-form
+                  v-if="form.audioCaptureMode !== 'tab'"
+                  label-position="top"
+                  :model="form"
+                  class="pane-form"
+                >
+                  <el-form-item label="麦克风设备">
+                    <div class="grid two-col">
+                      <el-select v-model="form.micDeviceId" placeholder="系统默认" style="width: 100%">
+                        <el-option label="系统默认" value="" />
+                        <el-option
+                          v-for="mic in microphones"
+                          :key="mic.deviceId"
+                          :label="mic.label || `麦克风 ${mic.deviceId}`"
+                          :value="mic.deviceId"
+                        />
+                      </el-select>
+                      <el-button size="small" :loading="loadingMicrophones" @click="refreshMicrophones">
+                        刷新设备
+                      </el-button>
                     </div>
+                    <div class="hint">若设备列表为空，请先允许麦克风权限；“系统默认”会跟随系统输入设备。</div>
                   </el-form-item>
-                  <el-form-item label="音频 buffer 软上限 (ms)">
-                    <el-input-number
-                      v-model="backendForm.transcriptMaxBufferDurationSoftMs"
-                      :min="5000"
-                      :max="59000"
-                      :step="500"
-                      controls-position="right"
-                      class="mono-input"
-                    />
-                    <div v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS')" class="hint">
-                      {{ getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS') }}
-                    </div>
-                  </el-form-item>
-                  <el-form-item label="音频 buffer 硬上限 (ms)">
-                    <el-input-number
-                      v-model="backendForm.transcriptMaxBufferDurationHardMs"
-                      :min="backendForm.transcriptMaxBufferDurationSoftMs"
-                      :max="59000"
-                      :step="500"
-                      controls-position="right"
-                      class="mono-input"
-                    />
-                    <div v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS')" class="hint">
-                      {{ getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS') }}
-                    </div>
-                  </el-form-item>
-                  <el-form-item label="调试：打印语句日志">
-                    <el-switch v-model="backendForm.transcriptDebugLogUtterances" />
-                    <div v-if="getRemark('TRANSCRIPT_DEBUG_LOG_UTTERANCES')" class="hint">
-                      {{ getRemark('TRANSCRIPT_DEBUG_LOG_UTTERANCES') }}
-                    </div>
-                  </el-form-item>
-                </div>
+                </el-form>
+              </div>
 
-                <div class="pane-title section-title">语言设置</div>
-                <div class="pane-subtitle">控制语句翻译与 AI 分析输出语言。</div>
+              <div class="pane-block">
+                <div class="pane-title">服务地址</div>
+                <div class="pane-subtitle">覆盖 HTTP / WebSocket 地址（仅前端）</div>
 
+                <el-alert
+                  type="warning"
+                  show-icon
+                  :closable="false"
+                  class="alert"
+                  title="修改地址会影响后续请求/连接；录音中不建议修改。"
+                />
+
+                <el-form label-position="top" :model="form" class="pane-form">
+                  <el-form-item label="API 基础地址">
+                    <el-input v-model="form.apiBaseUrl" placeholder="如 https://host/api 或 /api" />
+                  </el-form-item>
+                  <el-form-item label="WebSocket 地址">
+                    <el-input v-model="form.wsUrl" placeholder="如 wss://host/transcript" />
+                  </el-form-item>
+                </el-form>
+              </div>
+            </section>
+          </el-tab-pane>
+
+          <el-tab-pane name="language">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><ChatLineRound /></el-icon>
+                语言设置
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">语言设置</div>
+              <div class="pane-subtitle">控制语句翻译与 AI 分析输出语言。</div>
+
+              <el-form label-position="top" :model="backendForm" class="pane-form">
                 <div class="grid two-col">
                   <el-form-item label="语句翻译开关">
                     <el-switch v-model="backendForm.transcriptSegmentTranslationEnabled" />
@@ -653,32 +772,115 @@
             </section>
           </el-tab-pane>
 
-          <el-tab-pane name="service">
+          <el-tab-pane name="appearance">
             <template #label>
               <span class="tab-label">
-                <el-icon><Connection /></el-icon>
-                服务
+                <el-icon><Brush /></el-icon>
+                外观设置
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">服务地址</div>
-              <div class="pane-subtitle">覆盖 HTTP / WebSocket 地址（仅前端）</div>
-
-              <el-alert
-                type="warning"
-                show-icon
-                :closable="false"
-                class="alert"
-                title="修改地址会影响后续请求/连接；录音中不建议修改。"
-              />
+              <div class="pane-title">外观设置</div>
+              <div class="pane-subtitle">仅影响本地显示效果。</div>
 
               <el-form label-position="top" :model="form" class="pane-form">
-                <el-form-item label="API 基础地址">
-                  <el-input v-model="form.apiBaseUrl" placeholder="如 https://host/api 或 /api" />
+                <div class="grid two-col">
+                  <el-form-item label="语音转写区字体大小">
+                    <el-input-number
+                      v-model="form.transcriptFontSize"
+                      :min="fontSizeRange.min"
+                      :max="fontSizeRange.max"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="语句拆分区字体大小">
+                    <el-input-number
+                      v-model="form.segmentFontSize"
+                      :min="fontSizeRange.min"
+                      :max="fontSizeRange.max"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                  <el-form-item label="AI 分析区字体大小">
+                    <el-input-number
+                      v-model="form.analysisFontSize"
+                      :min="fontSizeRange.min"
+                      :max="fontSizeRange.max"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                  </el-form-item>
+                </div>
+                <div class="hint">单位 px，建议范围 12~24。</div>
+              </el-form>
+            </section>
+          </el-tab-pane>
+
+          <el-tab-pane name="logging">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><List /></el-icon>
+                日志记录设置
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">日志记录设置</div>
+              <div class="pane-subtitle">建议仅在排障时开启。</div>
+
+              <el-form label-position="top" :model="backendForm" class="pane-form">
+                <el-form-item label="转写调试日志">
+                  <el-switch v-model="backendForm.transcriptDebugLogUtterances" />
+                  <div v-if="getRemark('TRANSCRIPT_DEBUG_LOG_UTTERANCES')" class="hint">
+                    {{ getRemark('TRANSCRIPT_DEBUG_LOG_UTTERANCES') }}
+                  </div>
                 </el-form-item>
-                <el-form-item label="WebSocket 地址">
-                  <el-input v-model="form.wsUrl" placeholder="如 wss://host/transcript" />
+              </el-form>
+              <div class="hint">请求/错误/系统日志的独立配置暂未开放。</div>
+            </section>
+          </el-tab-pane>
+
+          <el-tab-pane name="security">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Lock /></el-icon>
+                安全设置
+              </span>
+            </template>
+            <section class="pane">
+              <div class="pane-title">安全设置</div>
+              <div class="pane-subtitle">设置系统安全密码，启用后打开设置需验证。</div>
+
+              <el-form label-position="top" :model="securityForm" class="pane-form">
+                <el-form-item label="当前状态">
+                  <el-tag v-if="securityStatus.enabled" type="success" size="small">已设置</el-tag>
+                  <el-tag v-else type="info" size="small">未设置</el-tag>
                 </el-form-item>
+
+                <el-form-item v-if="securityStatus.enabled" label="当前密码">
+                  <el-input
+                    v-model="securityForm.currentPassword"
+                    show-password
+                    placeholder="请输入当前密码"
+                  />
+                </el-form-item>
+
+                <el-form-item label="新密码">
+                  <el-input
+                    v-model="securityForm.newPassword"
+                    show-password
+                    placeholder="请输入新密码"
+                  />
+                  <div class="hint">该密码用于进入设置与修改服务配置。</div>
+                </el-form-item>
+
+                <el-button size="small" type="primary" @click="updateSecurityPassword">
+                  {{ securityStatus.enabled ? '更新密码' : '初始化密码' }}
+                </el-button>
               </el-form>
             </section>
           </el-tab-pane>
@@ -693,19 +895,35 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Connection,
-  TrendCharts,
-  Document,
-  Microphone,
-  Refresh,
-  Close,
+  Brush,
+  ChatLineRound,
   Check,
+  Close,
+  Cpu,
+  Document,
+  List,
+  Lock,
+  MagicStick,
+  Microphone,
+  Monitor,
+  Refresh,
+  Search,
   Setting,
 } from '@element-plus/icons-vue'
 import { useAppSettings, type AppSettings, type AsrModel, type AudioCaptureMode } from '@/composables/useAppSettings'
 import { useBackendConfig } from '@/composables/useBackendConfig'
-import { appConfigRemarksApi, appConfigSecurityApi, transcriptEventSegmentationConfigApi } from '@/services/api'
-import type { AppConfigRemark, BackendConfig, TranscriptEventSegmentationConfig } from '@/services/api'
+import {
+  appConfigRemarksApi,
+  appConfigSecurityApi,
+  transcriptAnalysisConfigApi,
+  transcriptEventSegmentationConfigApi,
+} from '@/services/api'
+import type {
+  AppConfigRemark,
+  BackendConfig,
+  TranscriptAnalysisConfig,
+  TranscriptEventSegmentationConfig,
+} from '@/services/api'
 import { setSettingsPassword } from '@/services/settingsSecurity'
 
 const props = defineProps<{
@@ -747,7 +965,24 @@ const segmentationForm = reactive<TranscriptEventSegmentationConfig>({
   degradeOnStrictFail: false,
   maxSegmentsPerRun: 8,
 })
-const activeSection = ref<'asr' | 'vad' | 'segmentation' | 'backend' | 'service'>('asr')
+const analysisConfigForm = reactive<TranscriptAnalysisConfig>({
+  summarySystemPrompt: '',
+  chunkSummarySystemPrompt: '',
+  segmentAnalysisSystemPrompt: '',
+})
+const activeSection = ref<
+  | 'models'
+  | 'transcription'
+  | 'segmentation'
+  | 'analysis'
+  | 'target-analysis'
+  | 'system'
+  | 'client'
+  | 'language'
+  | 'appearance'
+  | 'logging'
+  | 'security'
+>('models')
 const microphones = ref<MediaDeviceInfo[]>([])
 const loadingMicrophones = ref(false)
 const configRemarks = ref<Record<string, string>>({})
@@ -755,6 +990,8 @@ const configRemarks = ref<Record<string, string>>({})
 const asrModels: Array<{ value: AsrModel; label: string; desc: string }> = [
   { value: 'glm', label: 'GLM ASR', desc: '高精度，适合高噪声场景' },
 ]
+
+const fontSizeRange = { min: 12, max: 24 }
 
 const audioCaptureModes: Array<{ value: AudioCaptureMode; label: string; desc: string }> = [
   { value: 'mic', label: '仅麦克风', desc: '默认模式，只采集你的麦克风输入' },
@@ -780,10 +1017,11 @@ watch(
       await refreshBackendConfig()
       await refreshConfigRemarks()
       await refreshSegmentationConfig()
+      await refreshAnalysisConfig()
       await refreshSecurityStatus()
       Object.assign(form, settings.value)
       Object.assign(backendForm, backendConfig.value)
-      activeSection.value = 'asr'
+      activeSection.value = 'models'
       if (form.audioCaptureMode !== 'tab') {
         await refreshMicrophones()
       }
@@ -890,11 +1128,32 @@ function validateSegmentationConfig(input: Partial<TranscriptEventSegmentationCo
   return errors
 }
 
+function validateAnalysisConfig(input: Partial<TranscriptAnalysisConfig>): string[] {
+  const errors: string[] = []
+  if (!String(input.summarySystemPrompt ?? '').trim()) errors.push('会议总结提示词不能为空')
+  if (!String(input.chunkSummarySystemPrompt ?? '').trim()) errors.push('分片总结提示词不能为空')
+  if (!String(input.segmentAnalysisSystemPrompt ?? '').trim()) errors.push('针对性分析提示词不能为空')
+  return errors
+}
+
 async function refreshSegmentationConfig(): Promise<boolean> {
   try {
     const response = await transcriptEventSegmentationConfigApi.get()
     if (response?.data) {
       Object.assign(segmentationForm, response.data)
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+async function refreshAnalysisConfig(): Promise<boolean> {
+  try {
+    const response = await transcriptAnalysisConfigApi.get()
+    if (response?.data) {
+      Object.assign(analysisConfigForm, response.data)
       return true
     }
     return false
@@ -960,12 +1219,30 @@ function buildSegmentationConfigPayload() {
   }
 }
 
+function buildAnalysisConfigPayload() {
+  return {
+    summarySystemPrompt: analysisConfigForm.summarySystemPrompt,
+    chunkSummarySystemPrompt: analysisConfigForm.chunkSummarySystemPrompt,
+    segmentAnalysisSystemPrompt: analysisConfigForm.segmentAnalysisSystemPrompt,
+  }
+}
+
 async function syncSegmentationConfig(): Promise<boolean> {
   try {
     await transcriptEventSegmentationConfigApi.update(buildSegmentationConfigPayload())
     return true
   } catch (error) {
     console.error('语句拆分配置同步失败:', error)
+    return false
+  }
+}
+
+async function syncAnalysisConfig(): Promise<boolean> {
+  try {
+    await transcriptAnalysisConfigApi.update(buildAnalysisConfigPayload())
+    return true
+  } catch (error) {
+    console.error('AI 分析提示词配置同步失败:', error)
     return false
   }
 }
@@ -989,6 +1266,11 @@ const onSave = async () => {
     ElMessage.error(segmentationErrors[0])
     return
   }
+  const analysisErrors = validateAnalysisConfig(analysisConfigForm)
+  if (analysisErrors.length > 0) {
+    ElMessage.error(analysisErrors[0])
+    return
+  }
   const backendErrors = validateBackendConfig(backendForm)
   if (backendErrors.length > 0) {
     ElMessage.error(backendErrors[0])
@@ -996,15 +1278,16 @@ const onSave = async () => {
   }
   updateSettings(form)
   const segmentationSynced = await syncSegmentationConfig()
+  const analysisSynced = await syncAnalysisConfig()
   const backendSynced = await syncBackendConfig()
-  if (segmentationSynced && backendSynced) {
+  const failed: string[] = []
+  if (!segmentationSynced) failed.push('语句拆分设置')
+  if (!analysisSynced) failed.push('AI 分析提示词')
+  if (!backendSynced) failed.push('服务配置')
+  if (failed.length === 0) {
     ElMessage.success('设置已保存')
-  } else if (!segmentationSynced && !backendSynced) {
-    ElMessage.warning('设置已保存，但语句拆分与服务配置同步失败')
-  } else if (!segmentationSynced) {
-    ElMessage.warning('设置已保存，但语句拆分设置同步失败')
   } else {
-    ElMessage.warning('设置已保存，但服务配置同步失败')
+    ElMessage.warning(`设置已保存，但${failed.join('、')}同步失败`)
   }
   visibleProxy.value = false
 }
@@ -1022,6 +1305,14 @@ const onReset = async () => {
     } catch (error) {
       console.error('语句拆分配置重置失败:', error)
       ElMessage.warning('已恢复默认值，但语句拆分设置重置失败')
+    }
+
+    try {
+      const response = await transcriptAnalysisConfigApi.reset()
+      Object.assign(analysisConfigForm, response.data)
+    } catch (error) {
+      console.error('AI 分析提示词配置重置失败:', error)
+      ElMessage.warning('已恢复默认值，但 AI 分析提示词重置失败')
     }
 
     await refreshBackendConfig()
