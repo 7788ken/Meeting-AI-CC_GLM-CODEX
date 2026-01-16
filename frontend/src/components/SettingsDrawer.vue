@@ -12,18 +12,12 @@
       <header class="drawer-header">
         <div class="title-block">
           <div class="title">设置</div>
-          <div class="subtitle">多数设置仅影响本地客户端；语句拆分、AI 分析与系统配置会同步到后端</div>
-        </div>
-        <div class="header-actions">
           <el-button size="small" class="icon-button" @click="visibleProxy = false">
             <el-icon><Close /></el-icon>
           </el-button>
-          <el-button
-            size="small"
-            class="ghost-button"
-            :icon="Refresh"
-            @click="onReset"
-          >
+        </div>
+        <div class="header-actions">
+          <el-button size="small" class="ghost-button" :icon="Refresh" @click="onReset">
             重置
           </el-button>
           <el-button size="small" type="primary" :icon="Check" @click="onSave">
@@ -72,7 +66,7 @@
                       placeholder="如 apiKey 或 apiKey.secret"
                     />
                     <div v-if="getRemark('GLM_API_KEY')" class="hint">
-                      {{ getRemark('GLM_API_KEY') }}
+                      {{ getRemark("GLM_API_KEY") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="GLM Endpoint">
@@ -81,7 +75,7 @@
                       placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions"
                     />
                     <div v-if="getRemark('GLM_ENDPOINT')" class="hint">
-                      {{ getRemark('GLM_ENDPOINT') }}
+                      {{ getRemark("GLM_ENDPOINT") }}
                     </div>
                   </el-form-item>
                 </el-form>
@@ -94,8 +88,11 @@
                 <el-form label-position="top" :model="segmentationForm" class="pane-form">
                   <el-form-item label="GLM 模型">
                     <el-input v-model="segmentationForm.model" placeholder="如 GLM-4X" />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL') }}
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL") }}
                     </div>
                   </el-form-item>
                 </el-form>
@@ -107,9 +104,12 @@
 
                 <el-form label-position="top" :model="backendForm" class="pane-form">
                   <el-form-item label="会议总结模型">
-                    <el-input v-model="backendForm.glmTranscriptSummaryModel" placeholder="如 GLM-4.6V-Flash" />
+                    <el-input
+                      v-model="backendForm.glmTranscriptSummaryModel"
+                      placeholder="如 GLM-4.6V-Flash"
+                    />
                     <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_MODEL')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_MODEL') }}
+                      {{ getRemark("GLM_TRANSCRIPT_SUMMARY_MODEL") }}
                     </div>
                   </el-form-item>
                 </el-form>
@@ -169,7 +169,9 @@
 
               <div class="pane-block">
                 <div class="pane-title">转写与音频</div>
-                <div class="pane-subtitle">影响实时转写的自动切分与音频 buffer 触发策略。</div>
+                <div class="pane-subtitle">
+                  影响实时转写的自动切分与音频 buffer 触发策略。
+                </div>
 
                 <el-form label-position="top" :model="backendForm" class="pane-form">
                   <div class="grid two-col">
@@ -183,7 +185,7 @@
                         class="mono-input"
                       />
                       <div v-if="getRemark('TRANSCRIPT_AUTO_SPLIT_GAP_MS')" class="hint">
-                        {{ getRemark('TRANSCRIPT_AUTO_SPLIT_GAP_MS') }}
+                        {{ getRemark("TRANSCRIPT_AUTO_SPLIT_GAP_MS") }}
                       </div>
                     </el-form-item>
                     <el-form-item label="音频 buffer 软上限 (ms)">
@@ -195,8 +197,11 @@
                         controls-position="right"
                         class="mono-input"
                       />
-                      <div v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS')" class="hint">
-                        {{ getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS') }}
+                      <div
+                        v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS')"
+                        class="hint"
+                      >
+                        {{ getRemark("TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS") }}
                       </div>
                     </el-form-item>
                     <el-form-item label="音频 buffer 硬上限 (ms)">
@@ -208,8 +213,11 @@
                         controls-position="right"
                         class="mono-input"
                       />
-                      <div v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS')" class="hint">
-                        {{ getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS') }}
+                      <div
+                        v-if="getRemark('TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS')"
+                        class="hint"
+                      >
+                        {{ getRemark("TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS") }}
                       </div>
                     </el-form-item>
                   </div>
@@ -227,7 +235,9 @@
             </template>
             <section class="pane">
               <div class="pane-title">语句拆分设置</div>
-              <div class="pane-subtitle">配置语句拆分的系统提示词与上下文窗口等参数。</div>
+              <div class="pane-subtitle">
+                配置语句拆分的系统提示词与上下文窗口等参数。
+              </div>
               <div class="hint">拆分模型在“AI 模型”中配置。</div>
 
               <el-form label-position="top" :model="segmentationForm" class="pane-form">
@@ -243,7 +253,7 @@
                     v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_SYSTEM_PROMPT')"
                     class="hint"
                   >
-                    {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_SYSTEM_PROMPT') }}
+                    {{ getRemark("TRANSCRIPT_EVENTS_SEGMENT_SYSTEM_PROMPT") }}
                   </div>
                 </el-form-item>
 
@@ -254,12 +264,14 @@
                     :autosize="{ minRows: 4, maxRows: 12 }"
                     placeholder="用于严格 JSON 回显校验失败后的兜底策略提示词"
                   />
-                  <div class="hint">主要用于提升 JSON 模式下的输出稳定性；留空将沿用后端当前值。</div>
+                  <div class="hint">
+                    主要用于提升 JSON 模式下的输出稳定性；留空将沿用后端当前值。
+                  </div>
                   <div
                     v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_STRICT_SYSTEM_PROMPT')"
                     class="hint"
                   >
-                    {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_STRICT_SYSTEM_PROMPT') }}
+                    {{ getRemark("TRANSCRIPT_EVENTS_SEGMENT_STRICT_SYSTEM_PROMPT") }}
                   </div>
                 </el-form-item>
 
@@ -273,8 +285,11 @@
                       controls-position="right"
                       class="mono-input"
                     />
-                    <div v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE')" class="hint">
-                      {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE') }}
+                    <div
+                      v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE')"
+                      class="hint"
+                    >
+                      {{ getRemark("TRANSCRIPT_EVENTS_SEGMENT_CHUNK_SIZE") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="拆分触发间隔 (ms)">
@@ -286,8 +301,11 @@
                       controls-position="right"
                       class="mono-input"
                     />
-                    <div v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS')" class="hint">
-                      {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS') }}
+                    <div
+                      v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark("TRANSCRIPT_EVENTS_SEGMENT_INTERVAL_MS") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="最大输出 tokens">
@@ -299,8 +317,11 @@
                       controls-position="right"
                       class="mono-input"
                     />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS') }}
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS") }}
                     </div>
                   </el-form-item>
                 </div>
@@ -308,23 +329,32 @@
                 <div class="grid two-col">
                   <el-form-item label="JSON 模式">
                     <el-switch v-model="segmentationForm.jsonMode" />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE') }}
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="触发条件：stop_transcribe">
                     <el-switch v-model="segmentationForm.triggerOnStopTranscribe" />
                     <div
-                      v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE')"
+                      v-if="
+                        getRemark('TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE')
+                      "
                       class="hint"
                     >
-                      {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE') }}
+                      {{
+                        getRemark("TRANSCRIPT_EVENTS_SEGMENT_TRIGGER_ON_STOP_TRANSCRIBE")
+                      }}
                     </div>
                   </el-form-item>
                 </div>
 
                 <div class="pane-title section-title">高级参数</div>
-                <div class="pane-subtitle">影响单次拆分生成上限、截断补偿、429 退避与严格失败降级。</div>
+                <div class="pane-subtitle">
+                  影响单次拆分生成上限、截断补偿、429 退避与严格失败降级。
+                </div>
 
                 <div class="grid two-col">
                   <el-form-item label="单次最多生成段数">
@@ -340,7 +370,7 @@
                       v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN')"
                       class="hint"
                     >
-                      {{ getRemark('TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN') }}
+                      {{ getRemark("TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="截断补偿 tokens">
@@ -356,7 +386,7 @@
                       v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS')"
                       class="hint"
                     >
-                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS') }}
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS") }}
                     </div>
                   </el-form-item>
                 </div>
@@ -371,8 +401,11 @@
                       controls-position="right"
                       class="mono-input"
                     />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX') }}
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="退避基准 (ms)">
@@ -388,7 +421,7 @@
                       v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS')"
                       class="hint"
                     >
-                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS') }}
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_BASE_MS") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="退避上限 (ms)">
@@ -404,21 +437,28 @@
                       v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS')"
                       class="hint"
                     >
-                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS') }}
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_RETRY_MAX_MS") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="严格失败降级">
                     <el-switch v-model="segmentationForm.degradeOnStrictFail" />
                     <div
-                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL')"
+                      v-if="
+                        getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL')
+                      "
                       class="hint"
                     >
-                      {{ getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL') }}
+                      {{
+                        getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL")
+                      }}
                     </div>
                   </el-form-item>
                 </div>
 
-                <div class="hint">触发间隔为 0 表示每次事件更新都会尝试拆分；修改后可在会议页点击“重拆”立即生效。</div>
+                <div class="hint">
+                  触发间隔为 0
+                  表示每次事件更新都会尝试拆分；修改后可在会议页点击“重拆”立即生效。
+                </div>
               </el-form>
             </section>
           </el-tab-pane>
@@ -431,40 +471,43 @@
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">AI 分析设置</div>
-              <div class="pane-subtitle">影响会议总结与针对性分析输出。</div>
+              <div class="pane-title">会议总结系统提示词</div>
+              <div class="pane-subtitle">用于控制总结输出结构、风格与重点。</div>
 
               <el-form label-position="top" :model="analysisConfigForm" class="pane-form">
-                <el-form-item label="会议总结系统提示词">
-                  <el-input
-                    v-model="analysisConfigForm.summarySystemPrompt"
-                    type="textarea"
-                    :autosize="{ minRows: 8, maxRows: 18 }"
-                    placeholder="用于会议总结的系统提示词"
-                  />
-                  <div class="hint">用于控制总结输出结构、风格与重点。</div>
-                  <div
-                    v-if="getRemark('TRANSCRIPT_ANALYSIS_SUMMARY_SYSTEM_PROMPT')"
-                    class="hint"
+                <el-form-item label="">
+                  <el-select
+                    v-model="analysisConfigForm.summaryPromptId"
+                    placeholder="从提示词库选择"
+                    filterable
+                    class="mono-input"
                   >
-                    {{ getRemark('TRANSCRIPT_ANALYSIS_SUMMARY_SYSTEM_PROMPT') }}
-                  </div>
+                    <el-option
+                      v-for="prompt in summaryPromptOptions"
+                      :key="prompt.id"
+                      :label="formatPromptLabel(prompt)"
+                      :value="prompt.id"
+                    />
+                  </el-select>
+                  <div class="hint"></div>
                 </el-form-item>
 
-                <el-form-item label="分片总结系统提示词">
-                  <el-input
-                    v-model="analysisConfigForm.chunkSummarySystemPrompt"
-                    type="textarea"
-                    :autosize="{ minRows: 6, maxRows: 16 }"
-                    placeholder="用于长会话分片总结的系统提示词"
-                  />
-                  <div class="hint">用于长会议拆分摘要的提示词。</div>
-                  <div
-                    v-if="getRemark('TRANSCRIPT_ANALYSIS_CHUNK_SUMMARY_SYSTEM_PROMPT')"
-                    class="hint"
+                <div class="pane-title">分片总结系统提示词</div>
+                <div class="pane-subtitle">用于长会议拆分摘要的提示词。</div>
+                <el-form-item label="">
+                  <el-select
+                    v-model="analysisConfigForm.chunkSummaryPromptId"
+                    placeholder="从提示词库选择"
+                    filterable
+                    class="mono-input"
                   >
-                    {{ getRemark('TRANSCRIPT_ANALYSIS_CHUNK_SUMMARY_SYSTEM_PROMPT') }}
-                  </div>
+                    <el-option
+                      v-for="prompt in chunkPromptOptions"
+                      :key="prompt.id"
+                      :label="formatPromptLabel(prompt)"
+                      :value="prompt.id"
+                    />
+                  </el-select>
                 </el-form-item>
               </el-form>
 
@@ -479,14 +522,17 @@
                       controls-position="right"
                       class="mono-input"
                     />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS') }}
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="会议总结深度思考">
                     <el-switch v-model="backendForm.glmTranscriptSummaryThinking" />
                     <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_THINKING')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_THINKING') }}
+                      {{ getRemark("GLM_TRANSCRIPT_SUMMARY_THINKING") }}
                     </div>
                   </el-form-item>
                 </div>
@@ -504,8 +550,11 @@
                       controls-position="right"
                       class="mono-input"
                     />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX') }}
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_SUMMARY_RETRY_MAX") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="退避基准 (ms)">
@@ -517,8 +566,11 @@
                       controls-position="right"
                       class="mono-input"
                     />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS') }}
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="退避上限 (ms)">
@@ -530,8 +582,11 @@
                       controls-position="right"
                       class="mono-input"
                     />
-                    <div v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS')" class="hint">
-                      {{ getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS') }}
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS") }}
                     </div>
                   </el-form-item>
                 </div>
@@ -539,34 +594,170 @@
             </section>
           </el-tab-pane>
 
-          <el-tab-pane name="target-analysis">
+          <el-tab-pane name="prompt-library">
             <template #label>
               <span class="tab-label">
-                <el-icon><Search /></el-icon>
-                针对性分析设置
+                <el-icon><ChatLineRound /></el-icon>
+                提示词管理
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">针对性分析设置</div>
-              <div class="pane-subtitle">用于单句/单段的深入分析。</div>
+              <div class="prompt-list-bar">
+                <div>
+                  <div class="pane-title">库内条目</div>
+                  <div class="pane-subtitle">点击编辑可进入编辑模式。</div>
+                </div>
+                <el-button size="small" type="primary" @click="openPromptCreate">
+                  新增提示词
+                </el-button>
+              </div>
 
-              <el-form label-position="top" :model="analysisConfigForm" class="pane-form">
-                <el-form-item label="针对性分析系统提示词">
-                  <el-input
-                    v-model="analysisConfigForm.segmentAnalysisSystemPrompt"
-                    type="textarea"
-                    :autosize="{ minRows: 8, maxRows: 18 }"
-                    placeholder="用于针对性分析的系统提示词"
-                  />
-                  <div class="hint">用于控制单句分析角度与输出结构。</div>
+              <div v-if="isPromptListView" class="prompt-list">
+                <div class="prompt-card-panel" v-loading="promptLibraryLoading">
                   <div
-                    v-if="getRemark('TRANSCRIPT_ANALYSIS_SEGMENT_SYSTEM_PROMPT')"
-                    class="hint"
+                    v-if="!promptLibraryLoading && !promptLibrary.length"
+                    class="prompt-empty"
                   >
-                    {{ getRemark('TRANSCRIPT_ANALYSIS_SEGMENT_SYSTEM_PROMPT') }}
+                    暂无提示词
                   </div>
-                </el-form-item>
-              </el-form>
+                  <div v-else class="prompt-grid">
+                    <article
+                      v-for="prompt in promptLibrary"
+                      :key="prompt.id"
+                      class="prompt-card"
+                      :class="{ 'is-default': prompt.isDefault }"
+                    >
+                      <div class="prompt-card-head">
+                        <div class="prompt-card-badges">
+                          <span class="prompt-type-chip" :class="`type-${prompt.type}`">
+                            {{ promptTypeLabels[prompt.type] || prompt.type }}
+                          </span>
+                          <el-tag v-if="prompt.isDefault" size="small" type="success"
+                            >默认</el-tag
+                          >
+                        </div>
+                        <div class="prompt-card-actions">
+                          <el-button
+                            size="small"
+                            type="success"
+                            plain
+                            :disabled="prompt.isDefault"
+                            @click="setPromptDefault(prompt)"
+                          >
+                            {{ prompt.isDefault ? "默认中" : "设为默认" }}
+                          </el-button>
+                          <el-button
+                            size="small"
+                            :disabled="isSystemDefaultPrompt(prompt)"
+                            @click="openPromptEdit(prompt)"
+                          >
+                            编辑
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="danger"
+                            plain
+                            :disabled="isSystemDefaultPrompt(prompt)"
+                            @click="deletePrompt(prompt)"
+                          >
+                            删除
+                          </el-button>
+                        </div>
+                      </div>
+                      <div class="prompt-card-title">{{ prompt.name }}</div>
+                      <div class="prompt-card-alias">别名：{{ prompt.alias || "-" }}</div>
+                    </article>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="prompt-editor">
+                <div class="prompt-editor-bar">
+                  <div>
+                    <div class="prompt-editor-title">{{ promptEditorTitle }}</div>
+                    <div class="prompt-editor-subtitle">
+                      从提示词库选择后可载入并编辑。
+                    </div>
+                  </div>
+                  <div class="prompt-editor-actions">
+                    <el-button
+                      size="small"
+                      class="ghost-button"
+                      @click="cancelPromptEdit"
+                    >
+                      <el-icon><ArrowLeft /></el-icon>
+                      {{ promptEditorCancelLabel }}
+                    </el-button>
+                  </div>
+                </div>
+
+                <el-form label-position="top" :model="promptForm" class="pane-form">
+                  <el-form-item label="从提示词库选择">
+                    <el-select
+                      v-model="promptPickerId"
+                      placeholder="选择提示词载入"
+                      filterable
+                      clearable
+                      :loading="promptLibraryLoading"
+                      @change="handlePromptPick"
+                    >
+                      <el-option
+                        v-for="prompt in promptLibrary"
+                        :key="prompt.id"
+                        :label="formatPromptOptionLabel(prompt)"
+                        :value="prompt.id"
+                      />
+                    </el-select>
+                    <div class="hint">
+                      选择后会载入内容；新增模式仅复制内容，不会更新原提示词。
+                    </div>
+                  </el-form-item>
+                  <div class="grid two-col">
+                    <el-form-item label="提示词类型">
+                      <el-select
+                        v-model="promptForm.type"
+                        placeholder="选择类型"
+                        :disabled="isEditingPrompt"
+                      >
+                        <el-option
+                          v-for="option in promptTypeOptions"
+                          :key="option.value"
+                          :label="option.label"
+                          :value="option.value"
+                        />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="提示词名称">
+                      <el-input v-model="promptForm.name" placeholder="例如：精简总结" />
+                    </el-form-item>
+                    <el-form-item label="提示词别名">
+                      <el-input
+                        v-model="promptForm.alias"
+                        placeholder="可选，用于快速识别"
+                      />
+                    </el-form-item>
+                    <el-form-item label="设为默认">
+                      <el-switch v-model="promptForm.isDefault" />
+                    </el-form-item>
+                  </div>
+
+                  <el-form-item label="提示词内容">
+                    <el-input
+                      v-model="promptForm.content"
+                      type="textarea"
+                      :autosize="{ minRows: 8, maxRows: 18 }"
+                      placeholder="请输入提示词内容"
+                    />
+                  </el-form-item>
+
+                  <div class="prompt-actions">
+                    <el-button size="small" type="primary" @click="savePrompt">
+                      {{ isEditingPrompt ? "更新提示词" : "创建提示词" }}
+                    </el-button>
+                    <el-button size="small" @click="resetPromptForCreate">清空</el-button>
+                  </div>
+                </el-form>
+              </div>
             </section>
           </el-tab-pane>
 
@@ -579,7 +770,9 @@
             </template>
             <section class="pane">
               <div class="pane-title">系统设置</div>
-              <div class="pane-subtitle">保存后写入后端数据库，用于限流与系统级策略。</div>
+              <div class="pane-subtitle">
+                保存后写入后端数据库，用于限流与系统级策略。
+              </div>
 
               <el-form label-position="top" :model="backendForm" class="pane-form">
                 <div class="pane-title section-title">限流与节奏</div>
@@ -596,7 +789,7 @@
                       class="mono-input"
                     />
                     <div v-if="getRemark('GLM_GLOBAL_CONCURRENCY')" class="hint">
-                      {{ getRemark('GLM_GLOBAL_CONCURRENCY') }}
+                      {{ getRemark("GLM_GLOBAL_CONCURRENCY") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="最小间隔 (ms)">
@@ -609,7 +802,7 @@
                       class="mono-input"
                     />
                     <div v-if="getRemark('GLM_GLOBAL_MIN_INTERVAL_MS')" class="hint">
-                      {{ getRemark('GLM_GLOBAL_MIN_INTERVAL_MS') }}
+                      {{ getRemark("GLM_GLOBAL_MIN_INTERVAL_MS") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="冷却时间 (ms)">
@@ -621,8 +814,11 @@
                       controls-position="right"
                       class="mono-input"
                     />
-                    <div v-if="getRemark('GLM_GLOBAL_RATE_LIMIT_COOLDOWN_MS')" class="hint">
-                      {{ getRemark('GLM_GLOBAL_RATE_LIMIT_COOLDOWN_MS') }}
+                    <div
+                      v-if="getRemark('GLM_GLOBAL_RATE_LIMIT_COOLDOWN_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_GLOBAL_RATE_LIMIT_COOLDOWN_MS") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="冷却上限 (ms)">
@@ -635,7 +831,7 @@
                       class="mono-input"
                     />
                     <div v-if="getRemark('GLM_GLOBAL_RATE_LIMIT_MAX_MS')" class="hint">
-                      {{ getRemark('GLM_GLOBAL_RATE_LIMIT_MAX_MS') }}
+                      {{ getRemark("GLM_GLOBAL_RATE_LIMIT_MAX_MS") }}
                     </div>
                   </el-form-item>
                 </div>
@@ -680,7 +876,11 @@
                 >
                   <el-form-item label="麦克风设备">
                     <div class="grid two-col">
-                      <el-select v-model="form.micDeviceId" placeholder="系统默认" style="width: 100%">
+                      <el-select
+                        v-model="form.micDeviceId"
+                        placeholder="系统默认"
+                        style="width: 100%"
+                      >
                         <el-option label="系统默认" value="" />
                         <el-option
                           v-for="mic in microphones"
@@ -689,11 +889,17 @@
                           :value="mic.deviceId"
                         />
                       </el-select>
-                      <el-button size="small" :loading="loadingMicrophones" @click="refreshMicrophones">
+                      <el-button
+                        size="small"
+                        :loading="loadingMicrophones"
+                        @click="refreshMicrophones"
+                      >
                         刷新设备
                       </el-button>
                     </div>
-                    <div class="hint">若设备列表为空，请先允许麦克风权限；“系统默认”会跟随系统输入设备。</div>
+                    <div class="hint">
+                      若设备列表为空，请先允许麦克风权限；“系统默认”会跟随系统输入设备。
+                    </div>
                   </el-form-item>
                 </el-form>
               </div>
@@ -712,10 +918,16 @@
 
                 <el-form label-position="top" :model="form" class="pane-form">
                   <el-form-item label="API 基础地址">
-                    <el-input v-model="form.apiBaseUrl" placeholder="如 https://host/api 或 /api" />
+                    <el-input
+                      v-model="form.apiBaseUrl"
+                      placeholder="如 https://host/api 或 /api"
+                    />
                   </el-form-item>
                   <el-form-item label="WebSocket 地址">
-                    <el-input v-model="form.wsUrl" placeholder="如 wss://host/transcript" />
+                    <el-input
+                      v-model="form.wsUrl"
+                      placeholder="如 wss://host/transcript"
+                    />
                   </el-form-item>
                 </el-form>
               </div>
@@ -736,9 +948,14 @@
               <el-form label-position="top" :model="backendForm" class="pane-form">
                 <div class="grid two-col">
                   <el-form-item label="语句翻译开关">
-                    <el-switch v-model="backendForm.transcriptSegmentTranslationEnabled" />
-                    <div v-if="getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED')" class="hint">
-                      {{ getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED') }}
+                    <el-switch
+                      v-model="backendForm.transcriptSegmentTranslationEnabled"
+                    />
+                    <div
+                      v-if="getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED')"
+                      class="hint"
+                    >
+                      {{ getRemark("TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="语句翻译目标语言">
@@ -747,14 +964,20 @@
                       placeholder="如 简体中文 / English / 日本語"
                       :disabled="!backendForm.transcriptSegmentTranslationEnabled"
                     />
-                    <div v-if="getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE')" class="hint">
-                      {{ getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE') }}
+                    <div
+                      v-if="getRemark('TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE')"
+                      class="hint"
+                    >
+                      {{ getRemark("TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="AI 分析语言开关">
                     <el-switch v-model="backendForm.transcriptAnalysisLanguageEnabled" />
-                    <div v-if="getRemark('TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED')" class="hint">
-                      {{ getRemark('TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED') }}
+                    <div
+                      v-if="getRemark('TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED')"
+                      class="hint"
+                    >
+                      {{ getRemark("TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED") }}
                     </div>
                   </el-form-item>
                   <el-form-item label="AI 分析目标语言">
@@ -764,7 +987,7 @@
                       :disabled="!backendForm.transcriptAnalysisLanguageEnabled"
                     />
                     <div v-if="getRemark('TRANSCRIPT_ANALYSIS_LANGUAGE')" class="hint">
-                      {{ getRemark('TRANSCRIPT_ANALYSIS_LANGUAGE') }}
+                      {{ getRemark("TRANSCRIPT_ANALYSIS_LANGUAGE") }}
                     </div>
                   </el-form-item>
                 </div>
@@ -836,7 +1059,7 @@
                 <el-form-item label="转写调试日志">
                   <el-switch v-model="backendForm.transcriptDebugLogUtterances" />
                   <div v-if="getRemark('TRANSCRIPT_DEBUG_LOG_UTTERANCES')" class="hint">
-                    {{ getRemark('TRANSCRIPT_DEBUG_LOG_UTTERANCES') }}
+                    {{ getRemark("TRANSCRIPT_DEBUG_LOG_UTTERANCES") }}
                   </div>
                 </el-form-item>
               </el-form>
@@ -857,7 +1080,9 @@
 
               <el-form label-position="top" :model="securityForm" class="pane-form">
                 <el-form-item label="当前状态">
-                  <el-tag v-if="securityStatus.enabled" type="success" size="small">已设置</el-tag>
+                  <el-tag v-if="securityStatus.enabled" type="success" size="small"
+                    >已设置</el-tag
+                  >
                   <el-tag v-else type="info" size="small">未设置</el-tag>
                 </el-form-item>
 
@@ -879,7 +1104,7 @@
                 </el-form-item>
 
                 <el-button size="small" type="primary" @click="updateSecurityPassword">
-                  {{ securityStatus.enabled ? '更新密码' : '初始化密码' }}
+                  {{ securityStatus.enabled ? "更新密码" : "初始化密码" }}
                 </el-button>
               </el-form>
             </section>
@@ -888,13 +1113,13 @@
       </div>
     </div>
   </el-drawer>
-
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  ArrowLeft,
   Brush,
   ChatLineRound,
   Check,
@@ -907,7 +1132,6 @@ import {
   Microphone,
   Monitor,
   Refresh,
-  Search,
   Setting,
 } from '@element-plus/icons-vue'
 import { useAppSettings, type AppSettings, type AsrModel, type AudioCaptureMode } from '@/composables/useAppSettings'
@@ -915,12 +1139,15 @@ import { useBackendConfig } from '@/composables/useBackendConfig'
 import {
   appConfigRemarksApi,
   appConfigSecurityApi,
+  promptLibraryApi,
   transcriptAnalysisConfigApi,
   transcriptEventSegmentationConfigApi,
 } from '@/services/api'
 import type {
   AppConfigRemark,
   BackendConfig,
+  PromptTemplate,
+  PromptTemplateType,
   TranscriptAnalysisConfig,
   TranscriptEventSegmentationConfig,
 } from '@/services/api'
@@ -966,8 +1193,8 @@ const segmentationForm = reactive<TranscriptEventSegmentationConfig>({
   maxSegmentsPerRun: 8,
 })
 const analysisConfigForm = reactive<TranscriptAnalysisConfig>({
-  summarySystemPrompt: '',
-  chunkSummarySystemPrompt: '',
+  summaryPromptId: '',
+  chunkSummaryPromptId: '',
   segmentAnalysisSystemPrompt: '',
 })
 const activeSection = ref<
@@ -975,7 +1202,7 @@ const activeSection = ref<
   | 'transcription'
   | 'segmentation'
   | 'analysis'
-  | 'target-analysis'
+  | 'prompt-library'
   | 'system'
   | 'client'
   | 'language'
@@ -986,6 +1213,49 @@ const activeSection = ref<
 const microphones = ref<MediaDeviceInfo[]>([])
 const loadingMicrophones = ref(false)
 const configRemarks = ref<Record<string, string>>({})
+const promptLibrary = ref<PromptTemplate[]>([])
+const promptLibraryLoading = ref(false)
+const promptPickerId = ref('')
+const promptEditorMode = ref<'list' | 'create' | 'edit'>('list')
+
+const promptTypeOptions: Array<{ value: PromptTemplateType; label: string }> = [
+  { value: 'summary', label: '会议总结' },
+  { value: 'chunk_summary', label: '针对分析' },
+]
+const promptTypeLabels: Record<PromptTemplateType, string> = {
+  summary: '会议总结',
+  chunk_summary: '针对分析',
+}
+const systemDefaultPromptNames = new Set(['会议总结（默认）', '分片总结（默认）'])
+const promptForm = reactive({
+  id: '',
+  type: 'summary' as PromptTemplateType,
+  name: '',
+  alias: '',
+  content: '',
+  isDefault: false,
+})
+const isEditingPrompt = computed(() => promptEditorMode.value === 'edit')
+const isPromptListView = computed(() => promptEditorMode.value === 'list')
+const promptEditorTitle = computed(() =>
+  isEditingPrompt.value ? '编辑提示词' : '新增提示词'
+)
+const promptEditorCancelLabel = computed(() =>
+  isEditingPrompt.value ? '取消编辑' : '取消新增'
+)
+
+const summaryPromptOptions = computed(() =>
+  promptLibrary.value.filter(prompt => prompt.type === 'summary')
+)
+const chunkPromptOptions = computed(() =>
+  promptLibrary.value.filter(prompt => prompt.type === 'chunk_summary')
+)
+const selectedSummaryPrompt = computed(() =>
+  summaryPromptOptions.value.find(prompt => prompt.id === analysisConfigForm.summaryPromptId)
+)
+const selectedChunkPrompt = computed(() =>
+  chunkPromptOptions.value.find(prompt => prompt.id === analysisConfigForm.chunkSummaryPromptId)
+)
 
 const asrModels: Array<{ value: AsrModel; label: string; desc: string }> = [
   { value: 'glm', label: 'GLM ASR', desc: '高精度，适合高噪声场景' },
@@ -1017,10 +1287,14 @@ watch(
       await refreshBackendConfig()
       await refreshConfigRemarks()
       await refreshSegmentationConfig()
+      await refreshPromptLibrary()
       await refreshAnalysisConfig()
+      syncPromptSelections()
       await refreshSecurityStatus()
       Object.assign(form, settings.value)
       Object.assign(backendForm, backendConfig.value)
+      promptEditorMode.value = 'list'
+      resetPromptForm()
       activeSection.value = 'models'
       if (form.audioCaptureMode !== 'tab') {
         await refreshMicrophones()
@@ -1130,10 +1404,237 @@ function validateSegmentationConfig(input: Partial<TranscriptEventSegmentationCo
 
 function validateAnalysisConfig(input: Partial<TranscriptAnalysisConfig>): string[] {
   const errors: string[] = []
-  if (!String(input.summarySystemPrompt ?? '').trim()) errors.push('会议总结提示词不能为空')
-  if (!String(input.chunkSummarySystemPrompt ?? '').trim()) errors.push('分片总结提示词不能为空')
+  if (!String(input.summaryPromptId ?? '').trim()) errors.push('会议总结提示词不能为空')
+  if (!String(input.chunkSummaryPromptId ?? '').trim()) errors.push('分片总结提示词不能为空')
   if (!String(input.segmentAnalysisSystemPrompt ?? '').trim()) errors.push('针对性分析提示词不能为空')
+  if (
+    input.summaryPromptId &&
+    !summaryPromptOptions.value.some(prompt => prompt.id === input.summaryPromptId)
+  ) {
+    errors.push('会议总结提示词不存在')
+  }
+  if (
+    input.chunkSummaryPromptId &&
+    !chunkPromptOptions.value.some(prompt => prompt.id === input.chunkSummaryPromptId)
+  ) {
+    errors.push('分片总结提示词不存在')
+  }
   return errors
+}
+
+function formatPromptLabel(prompt: PromptTemplate): string {
+  const alias = (prompt.alias || '').trim()
+  const baseLabel = alias ? `${prompt.name}（${alias}）` : prompt.name
+  if (prompt.isDefault && !isSystemDefaultPrompt(prompt) && !baseLabel.includes('（默认）')) {
+    return `${baseLabel}（默认）`
+  }
+  return baseLabel
+}
+
+function formatPromptOptionLabel(prompt: PromptTemplate): string {
+  const typeLabel = promptTypeLabels[prompt.type] || prompt.type
+  return `${typeLabel} · ${formatPromptLabel(prompt)}`
+}
+
+function resetPromptForm(): void {
+  promptPickerId.value = ''
+  promptForm.id = ''
+  promptForm.type = 'summary'
+  promptForm.name = ''
+  promptForm.alias = ''
+  promptForm.content = ''
+  promptForm.isDefault = false
+}
+
+function isSystemDefaultPrompt(prompt: PromptTemplate): boolean {
+  return systemDefaultPromptNames.has(prompt.name)
+}
+
+function resetPromptForCreate(): void {
+  resetPromptForm()
+  promptEditorMode.value = 'create'
+}
+
+function loadPromptForEdit(prompt: PromptTemplate): void {
+  promptPickerId.value = prompt.id
+  promptForm.id = prompt.id
+  promptForm.type = prompt.type
+  promptForm.name = prompt.name
+  promptForm.alias = prompt.alias ?? ''
+  promptForm.content = prompt.content
+  promptForm.isDefault = prompt.isDefault
+}
+
+function copyPromptForCreate(prompt: PromptTemplate): void {
+  promptForm.id = ''
+  promptForm.type = prompt.type
+  promptForm.name = prompt.name
+  promptForm.alias = ''
+  promptForm.content = prompt.content
+  promptForm.isDefault = false
+}
+
+function openPromptCreate(): void {
+  resetPromptForCreate()
+}
+
+function openPromptEdit(prompt: PromptTemplate): void {
+  if (isSystemDefaultPrompt(prompt)) {
+    ElMessage.warning('系统自带提示词不允许修改')
+    return
+  }
+  loadPromptForEdit(prompt)
+  promptEditorMode.value = 'edit'
+}
+
+function cancelPromptEdit(): void {
+  resetPromptForm()
+  promptEditorMode.value = 'list'
+}
+
+function handlePromptPick(id: string): void {
+  const normalized = (id || '').trim()
+  if (!normalized) {
+    resetPromptForCreate()
+    return
+  }
+  const prompt = promptLibrary.value.find(item => item.id === normalized)
+  if (!prompt) {
+    ElMessage.warning('选择的提示词不存在')
+    return
+  }
+  if (promptEditorMode.value === 'edit') {
+    if (isSystemDefaultPrompt(prompt)) {
+      ElMessage.warning('系统自带提示词不允许修改')
+      return
+    }
+    loadPromptForEdit(prompt)
+    return
+  }
+  copyPromptForCreate(prompt)
+  promptEditorMode.value = 'create'
+}
+
+async function deletePrompt(prompt: PromptTemplate): Promise<void> {
+  if (isSystemDefaultPrompt(prompt)) {
+    ElMessage.warning('系统自带提示词不允许修改')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定删除提示词“${prompt.name}”？`,
+      '删除提示词',
+      { type: 'warning' }
+    )
+    await promptLibraryApi.remove(prompt.id)
+    await refreshPromptLibrary()
+    syncPromptSelections()
+    ElMessage.success('提示词已删除')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    if (error instanceof Error && error.message) {
+      ElMessage.error(error.message)
+      return
+    }
+    ElMessage.error('提示词删除失败')
+  }
+}
+
+async function setPromptDefault(prompt: PromptTemplate): Promise<void> {
+  if (prompt.isDefault) return
+  try {
+    await promptLibraryApi.update(prompt.id, { isDefault: true })
+    await refreshPromptLibrary()
+    syncPromptSelections()
+    ElMessage.success(`已设为默认：${prompt.name}`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '设置默认提示词失败')
+  }
+}
+
+async function savePrompt(): Promise<void> {
+  if (isEditingPrompt.value && promptForm.id) {
+    const editingPrompt = promptLibrary.value.find(prompt => prompt.id === promptForm.id)
+    if (editingPrompt && isSystemDefaultPrompt(editingPrompt)) {
+      ElMessage.warning('系统自带提示词不允许修改')
+      return
+    }
+  }
+  const name = promptForm.name.trim()
+  if (!name) {
+    ElMessage.warning('提示词名称不能为空')
+    return
+  }
+  const content = promptForm.content.trim()
+  if (!content) {
+    ElMessage.warning('提示词内容不能为空')
+    return
+  }
+  const alias = promptForm.alias.trim()
+
+  try {
+    if (isEditingPrompt.value && promptForm.id) {
+      await promptLibraryApi.update(promptForm.id, {
+        name,
+        alias: alias || undefined,
+        content,
+        isDefault: promptForm.isDefault,
+      })
+      ElMessage.success('提示词已更新')
+    } else {
+      await promptLibraryApi.create({
+        name,
+        alias: alias || undefined,
+        type: promptForm.type,
+        content,
+        isDefault: promptForm.isDefault,
+      })
+      ElMessage.success('提示词已创建')
+    }
+    await refreshPromptLibrary()
+    syncPromptSelections()
+    cancelPromptEdit()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '提示词保存失败')
+  }
+}
+
+function syncPromptSelections(): void {
+  const summaryDefault =
+    summaryPromptOptions.value.find(prompt => prompt.isDefault) ||
+    summaryPromptOptions.value[0]
+  if (
+    summaryDefault &&
+    !summaryPromptOptions.value.some(prompt => prompt.id === analysisConfigForm.summaryPromptId)
+  ) {
+    analysisConfigForm.summaryPromptId = summaryDefault.id
+  }
+
+  const chunkDefault =
+    chunkPromptOptions.value.find(prompt => prompt.isDefault) ||
+    chunkPromptOptions.value[0]
+  if (
+    chunkDefault &&
+    !chunkPromptOptions.value.some(prompt => prompt.id === analysisConfigForm.chunkSummaryPromptId)
+  ) {
+    analysisConfigForm.chunkSummaryPromptId = chunkDefault.id
+  }
+}
+
+async function refreshPromptLibrary(): Promise<boolean> {
+  promptLibraryLoading.value = true
+  try {
+    const response = await promptLibraryApi.list()
+    promptLibrary.value = Array.isArray(response?.data) ? response.data : []
+    return true
+  } catch (error) {
+    promptLibrary.value = []
+    console.error('提示词库加载失败:', error)
+    ElMessage.error('提示词库加载失败')
+    return false
+  } finally {
+    promptLibraryLoading.value = false
+  }
 }
 
 async function refreshSegmentationConfig(): Promise<boolean> {
@@ -1154,6 +1655,7 @@ async function refreshAnalysisConfig(): Promise<boolean> {
     const response = await transcriptAnalysisConfigApi.get()
     if (response?.data) {
       Object.assign(analysisConfigForm, response.data)
+      syncPromptSelections()
       return true
     }
     return false
@@ -1221,8 +1723,8 @@ function buildSegmentationConfigPayload() {
 
 function buildAnalysisConfigPayload() {
   return {
-    summarySystemPrompt: analysisConfigForm.summarySystemPrompt,
-    chunkSummarySystemPrompt: analysisConfigForm.chunkSummarySystemPrompt,
+    summaryPromptId: analysisConfigForm.summaryPromptId,
+    chunkSummaryPromptId: analysisConfigForm.chunkSummaryPromptId,
     segmentAnalysisSystemPrompt: analysisConfigForm.segmentAnalysisSystemPrompt,
   }
 }
@@ -1310,6 +1812,7 @@ const onReset = async () => {
     try {
       const response = await transcriptAnalysisConfigApi.reset()
       Object.assign(analysisConfigForm, response.data)
+      syncPromptSelections()
     } catch (error) {
       console.error('AI 分析提示词配置重置失败:', error)
       ElMessage.warning('已恢复默认值，但 AI 分析提示词重置失败')
@@ -1327,8 +1830,7 @@ const onReset = async () => {
 .settings-drawer :deep(.el-drawer__body) {
   padding: 0;
   background: var(--paper-50);
-  background-image:
-    linear-gradient(rgba(47, 107, 255, 0.06) 1px, transparent 1px),
+  background-image: linear-gradient(rgba(47, 107, 255, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(47, 107, 255, 0.06) 1px, transparent 1px);
   background-size: 24px 24px;
 }
@@ -1345,9 +1847,16 @@ const onReset = async () => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
+}
+
+.title-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .title-block .title {
@@ -1370,7 +1879,7 @@ const onReset = async () => {
 .drawer-body {
   flex: 1;
   min-height: 0;
-  padding: 14px 16px 16px;
+  padding: 14px 0 16px 16px;
 }
 
 .settings-tabs {
@@ -1395,7 +1904,7 @@ const onReset = async () => {
 }
 
 .settings-tabs :deep(.el-tabs__item.is-active) {
-  background: rgba(47, 107, 255, 0.10);
+  background: rgba(47, 107, 255, 0.1);
   color: var(--brand-700);
 }
 
@@ -1421,9 +1930,9 @@ const onReset = async () => {
 .pane {
   height: 100%;
   overflow: auto;
-  padding: 14px 16px 18px;
+  padding: 0px 10px 0 18px;
   border-radius: 14px;
-  border: 1px solid rgba(47, 107, 255, 0.12);
+  /* border: 1px solid rgba(47, 107, 255, 0.12); */
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
 }
@@ -1452,6 +1961,170 @@ const onReset = async () => {
 
 .pane-form {
   margin-top: 14px;
+}
+
+.prompt-editor-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(47, 107, 255, 0.16);
+  background: rgba(47, 107, 255, 0.04);
+}
+
+.prompt-editor-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.prompt-editor-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.prompt-editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.prompt-editor {
+  margin-top: 12px;
+}
+
+.prompt-list {
+  margin-top: 12px;
+}
+
+.prompt-list-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.prompt-list-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.prompt-list-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.prompt-card-panel {
+  border-radius: 14px;
+  padding: 8px;
+  background: rgba(15, 23, 42, 0.02);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.prompt-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-500);
+}
+
+.prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.prompt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* min-height: 120px; */
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.prompt-card.is-default {
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.12);
+}
+
+.prompt-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(47, 107, 255, 0.35);
+  box-shadow: 0 6px 14px rgba(47, 107, 255, 0.12);
+}
+
+.prompt-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prompt-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.prompt-type-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  color: var(--ink-700);
+  background: rgba(15, 23, 42, 0.08);
+  border: 1px solid transparent;
+}
+
+.prompt-type-chip.type-summary {
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.prompt-type-chip.type-chunk_summary {
+  color: #b45309;
+  background: rgba(234, 179, 8, 0.16);
+  border-color: rgba(234, 179, 8, 0.35);
+}
+
+.prompt-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.prompt-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.prompt-card-alias {
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .grid.two-col {
@@ -1492,7 +2165,7 @@ const onReset = async () => {
 .choice-card.is-checked {
   border-color: rgba(47, 107, 255, 0.55);
   background: rgba(47, 107, 255, 0.06);
-  box-shadow: 0 10px 26px rgba(47, 107, 255, 0.10);
+  box-shadow: 0 10px 26px rgba(47, 107, 255, 0.1);
 }
 
 .choice-card.is-checked .choice-title {
@@ -1512,7 +2185,7 @@ const onReset = async () => {
 
 .icon-button:hover,
 .ghost-button:hover {
-  border-color: rgba(47, 107, 255, 0.40);
+  border-color: rgba(47, 107, 255, 0.4);
   background: rgba(47, 107, 255, 0.06);
 }
 
@@ -1537,25 +2210,14 @@ const onReset = async () => {
   background: rgba(47, 107, 255, 0.04);
   color: var(--ink-700);
   font-size: 12px;
-  font-family:
-    "JetBrains Mono",
-    "SFMono-Regular",
-    ui-monospace,
-    "SF Mono",
-    Menlo,
+  font-family: "JetBrains Mono", "SFMono-Regular", ui-monospace, "SF Mono", Menlo,
     monospace;
   line-height: 1.6;
   word-break: break-word;
 }
 
-
 .mono-input :deep(.el-input__inner) {
-  font-family:
-    "JetBrains Mono",
-    "SFMono-Regular",
-    ui-monospace,
-    "SF Mono",
-    Menlo,
+  font-family: "JetBrains Mono", "SFMono-Regular", ui-monospace, "SF Mono", Menlo,
     monospace;
 }
 

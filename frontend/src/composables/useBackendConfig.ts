@@ -1,5 +1,6 @@
 import { ref } from 'vue'
-import { appConfigApi, type BackendConfig } from '@/services/api'
+import { appConfigApi, appConfigSecurityApi, type BackendConfig } from '@/services/api'
+import { getSettingsPassword } from '@/services/settingsSecurity'
 
 const fallbackDefaults: BackendConfig = {
   glmApiKey: '',
@@ -26,6 +27,17 @@ const fallbackDefaults: BackendConfig = {
 
 const backendConfig = ref<BackendConfig>({ ...fallbackDefaults })
 let defaults: BackendConfig = { ...fallbackDefaults }
+
+async function canAccessBackendConfig(): Promise<boolean> {
+  const password = getSettingsPassword().trim()
+  if (password) return true
+  try {
+    const status = await appConfigSecurityApi.getStatus()
+    return status?.data?.enabled !== true
+  } catch {
+    return false
+  }
+}
 
 function normalizeNumberInRange(
   value: unknown,
@@ -201,6 +213,7 @@ function validateBackendConfig(input: Partial<BackendConfig> | BackendConfig): s
 
 async function refreshBackendConfig(): Promise<boolean> {
   try {
+    if (!(await canAccessBackendConfig())) return false
     const response = await appConfigApi.get()
     const data = response?.data
     if (!data) return false
@@ -215,6 +228,7 @@ async function refreshBackendConfig(): Promise<boolean> {
 
 async function updateBackendConfig(input: Partial<BackendConfig>): Promise<boolean> {
   try {
+    if (!(await canAccessBackendConfig())) return false
     const normalized = normalizeBackendConfig(input, backendConfig.value)
     const response = await appConfigApi.update(normalized)
     const data = response?.data ?? normalized

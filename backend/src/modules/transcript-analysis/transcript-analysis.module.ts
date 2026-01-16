@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { HttpModule } from '@nestjs/axios'
 import { MongooseModule } from '@nestjs/mongoose'
 import { TranscriptStreamModule } from '../transcript-stream/transcript-stream.module'
+import { PromptLibraryModule } from '../prompt-library/prompt-library.module'
 import {
   TranscriptEventSegment,
   TranscriptEventSegmentSchema,
@@ -23,6 +24,7 @@ import {
   imports: [
     HttpModule,
     TranscriptStreamModule,
+    PromptLibraryModule,
     MongooseModule.forFeature([
       { name: TranscriptAnalysisSummary.name, schema: TranscriptAnalysisSummarySchema },
       {

@@ -97,9 +97,37 @@ export interface TranscriptEventSegmentationConfig {
 }
 
 export interface TranscriptAnalysisConfig {
-  summarySystemPrompt: string
-  chunkSummarySystemPrompt: string
+  summaryPromptId: string
+  chunkSummaryPromptId: string
   segmentAnalysisSystemPrompt: string
+}
+
+export type PromptTemplateType = 'summary' | 'chunk_summary'
+
+export interface PromptTemplate {
+  id: string
+  name: string
+  alias?: string
+  type: PromptTemplateType
+  content: string
+  isDefault: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type CreatePromptTemplatePayload = {
+  name: string
+  alias?: string
+  type: PromptTemplateType
+  content: string
+  isDefault?: boolean
+}
+
+export type UpdatePromptTemplatePayload = {
+  name?: string
+  alias?: string
+  content?: string
+  isDefault?: boolean
 }
 
 export interface BackendConfig {
@@ -315,6 +343,25 @@ export const transcriptAnalysisConfigApi = {
       data,
       { headers: getSettingsAuthHeaders() }
     ),
+}
+
+export const promptLibraryApi = {
+  list: () =>
+    get<ApiResponse<PromptTemplate[]>>('/prompt-library', {
+      headers: getSettingsAuthHeaders(),
+    }),
+  create: (data: CreatePromptTemplatePayload) =>
+    post<ApiResponse<PromptTemplate>>('/prompt-library', data, {
+      headers: getSettingsAuthHeaders(),
+    }),
+  update: (id: string, data: UpdatePromptTemplatePayload) =>
+    put<ApiResponse<PromptTemplate>>(`/prompt-library/${id}`, data, {
+      headers: getSettingsAuthHeaders(),
+    }),
+  remove: (id: string) =>
+    del<ApiResponse<{ id: string }>>(`/prompt-library/${id}`, {
+      headers: getSettingsAuthHeaders(),
+    }),
 }
 
 export const appConfigApi = {

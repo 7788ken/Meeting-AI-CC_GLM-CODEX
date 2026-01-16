@@ -7,6 +7,8 @@ import {
 } from '../transcript-stream/transcript-stream.service'
 import { TranscriptAnalysisGlmClient } from './transcript-analysis.glm-client'
 import {
+  DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT,
+  DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT,
   buildTranscriptSummaryUserPrompt,
   buildTranscriptSegmentAnalysisUserPrompt,
 } from './transcript-analysis.prompt'
@@ -24,6 +26,7 @@ import {
 } from '../transcript-event-segmentation/schemas/transcript-event-segment.schema'
 import { AppConfigService } from '../app-config/app-config.service'
 import { TranscriptAnalysisConfigService } from './transcript-analysis-config.service'
+import { PromptLibraryService } from '../prompt-library/prompt-library.service'
 
 export type TranscriptSummaryDTO = {
   sessionId: string
@@ -74,7 +77,8 @@ export class TranscriptAnalysisService {
     private readonly transcriptStreamService: TranscriptStreamService,
     private readonly appConfigService: AppConfigService,
     private readonly glmClient: TranscriptAnalysisGlmClient,
-    private readonly transcriptAnalysisConfigService: TranscriptAnalysisConfigService
+    private readonly transcriptAnalysisConfigService: TranscriptAnalysisConfigService,
+    private readonly promptLibraryService: PromptLibraryService
   ) {}
 
   async getStoredSummary(input: { sessionId: string }): Promise<TranscriptSummaryDTO | null> {
@@ -108,10 +112,18 @@ export class TranscriptAnalysisService {
 
     const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
     const summarySystemPrompt = this.buildAnalysisSystemPrompt(
-      analysisConfig.summarySystemPrompt
+      this.promptLibraryService.resolvePromptContent(
+        analysisConfig.summaryPromptId,
+        'summary',
+        DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT
+      )
     )
     const chunkSummarySystemPrompt = this.buildAnalysisSystemPrompt(
-      analysisConfig.chunkSummarySystemPrompt
+      this.promptLibraryService.resolvePromptContent(
+        analysisConfig.chunkSummaryPromptId,
+        'chunk_summary',
+        DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT
+      )
     )
 
     const events = snapshot.events.filter(e => (e.content || '').trim())
@@ -208,10 +220,18 @@ export class TranscriptAnalysisService {
 
     const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
     const summarySystemPrompt = this.buildAnalysisSystemPrompt(
-      analysisConfig.summarySystemPrompt
+      this.promptLibraryService.resolvePromptContent(
+        analysisConfig.summaryPromptId,
+        'summary',
+        DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT
+      )
     )
     const chunkSummarySystemPrompt = this.buildAnalysisSystemPrompt(
-      analysisConfig.chunkSummarySystemPrompt
+      this.promptLibraryService.resolvePromptContent(
+        analysisConfig.chunkSummaryPromptId,
+        'chunk_summary',
+        DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT
+      )
     )
 
     const events = snapshot.events.filter(e => (e.content || '').trim())
