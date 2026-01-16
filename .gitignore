@@ -50,3 +50,4 @@ frontend/tests/*
 frontend/e2e*.png
 docs/demo/*
 backend/.en-bak
+.tsupgrader/PROGRESS.md
