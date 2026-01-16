@@ -20,6 +20,54 @@ export class AppConfigDto {
   @ApiProperty({ description: 'GLM 冷却时间上限（ms）', minimum: 0, maximum: 300000 })
   glmGlobalRateLimitMaxMs: number
 
+  @ApiProperty({ description: 'GLM ASR 并发上限', minimum: 1, maximum: 50 })
+  glmAsrConcurrency: number
+
+  @ApiProperty({ description: 'GLM ASR 启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  glmAsrMinIntervalMs: number
+
+  @ApiProperty({ description: 'GLM ASR 冷却时间（ms）', minimum: 0, maximum: 120000 })
+  glmAsrRateLimitCooldownMs: number
+
+  @ApiProperty({ description: 'GLM ASR 冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  glmAsrRateLimitMaxMs: number
+
+  @ApiProperty({ description: '语句拆分并发上限', minimum: 1, maximum: 50 })
+  glmTranscriptEventSegmentConcurrency: number
+
+  @ApiProperty({ description: '语句拆分启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  glmTranscriptEventSegmentMinIntervalMs: number
+
+  @ApiProperty({ description: '语句拆分冷却时间（ms）', minimum: 0, maximum: 120000 })
+  glmTranscriptEventSegmentRateLimitCooldownMs: number
+
+  @ApiProperty({ description: '语句拆分冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  glmTranscriptEventSegmentRateLimitMaxMs: number
+
+  @ApiProperty({ description: '语句翻译并发上限', minimum: 1, maximum: 50 })
+  glmTranscriptEventSegmentTranslationConcurrency: number
+
+  @ApiProperty({ description: '语句翻译启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  glmTranscriptEventSegmentTranslationMinIntervalMs: number
+
+  @ApiProperty({ description: '语句翻译冷却时间（ms）', minimum: 0, maximum: 120000 })
+  glmTranscriptEventSegmentTranslationRateLimitCooldownMs: number
+
+  @ApiProperty({ description: '语句翻译冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  glmTranscriptEventSegmentTranslationRateLimitMaxMs: number
+
+  @ApiProperty({ description: 'AI 分析并发上限', minimum: 1, maximum: 50 })
+  glmTranscriptAnalysisConcurrency: number
+
+  @ApiProperty({ description: 'AI 分析启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  glmTranscriptAnalysisMinIntervalMs: number
+
+  @ApiProperty({ description: 'AI 分析冷却时间（ms）', minimum: 0, maximum: 120000 })
+  glmTranscriptAnalysisRateLimitCooldownMs: number
+
+  @ApiProperty({ description: 'AI 分析冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  glmTranscriptAnalysisRateLimitMaxMs: number
+
   @ApiProperty({ description: '转写自动切分间隔（ms）', minimum: 0, maximum: 600000 })
   transcriptAutoSplitGapMs: number
 
@@ -101,6 +149,118 @@ export class UpdateAppConfigDto {
   @Min(0)
   @Max(300000)
   glmGlobalRateLimitMaxMs?: number
+
+  @ApiPropertyOptional({ description: 'GLM ASR 并发上限', minimum: 1, maximum: 50 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  glmAsrConcurrency?: number
+
+  @ApiPropertyOptional({ description: 'GLM ASR 启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60000)
+  glmAsrMinIntervalMs?: number
+
+  @ApiPropertyOptional({ description: 'GLM ASR 冷却时间（ms）', minimum: 0, maximum: 120000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120000)
+  glmAsrRateLimitCooldownMs?: number
+
+  @ApiPropertyOptional({ description: 'GLM ASR 冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(300000)
+  glmAsrRateLimitMaxMs?: number
+
+  @ApiPropertyOptional({ description: '语句拆分并发上限', minimum: 1, maximum: 50 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  glmTranscriptEventSegmentConcurrency?: number
+
+  @ApiPropertyOptional({ description: '语句拆分启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60000)
+  glmTranscriptEventSegmentMinIntervalMs?: number
+
+  @ApiPropertyOptional({ description: '语句拆分冷却时间（ms）', minimum: 0, maximum: 120000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120000)
+  glmTranscriptEventSegmentRateLimitCooldownMs?: number
+
+  @ApiPropertyOptional({ description: '语句拆分冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(300000)
+  glmTranscriptEventSegmentRateLimitMaxMs?: number
+
+  @ApiPropertyOptional({ description: '语句翻译并发上限', minimum: 1, maximum: 50 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  glmTranscriptEventSegmentTranslationConcurrency?: number
+
+  @ApiPropertyOptional({ description: '语句翻译启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60000)
+  glmTranscriptEventSegmentTranslationMinIntervalMs?: number
+
+  @ApiPropertyOptional({ description: '语句翻译冷却时间（ms）', minimum: 0, maximum: 120000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120000)
+  glmTranscriptEventSegmentTranslationRateLimitCooldownMs?: number
+
+  @ApiPropertyOptional({ description: '语句翻译冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(300000)
+  glmTranscriptEventSegmentTranslationRateLimitMaxMs?: number
+
+  @ApiPropertyOptional({ description: 'AI 分析并发上限', minimum: 1, maximum: 50 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  glmTranscriptAnalysisConcurrency?: number
+
+  @ApiPropertyOptional({ description: 'AI 分析启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60000)
+  glmTranscriptAnalysisMinIntervalMs?: number
+
+  @ApiPropertyOptional({ description: 'AI 分析冷却时间（ms）', minimum: 0, maximum: 120000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120000)
+  glmTranscriptAnalysisRateLimitCooldownMs?: number
+
+  @ApiPropertyOptional({ description: 'AI 分析冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(300000)
+  glmTranscriptAnalysisRateLimitMaxMs?: number
 
   @ApiPropertyOptional({ description: '转写自动切分间隔（ms）', minimum: 0, maximum: 600000 })
   @IsOptional()

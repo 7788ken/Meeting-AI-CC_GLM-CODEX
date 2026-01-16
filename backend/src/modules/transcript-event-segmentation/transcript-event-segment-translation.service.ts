@@ -28,6 +28,41 @@ export class TranscriptEventSegmentTranslationService {
     this.onSegmentUpsert = handler ?? undefined
   }
 
+  async translateMissingSegments(sessionId: string, limit = 30): Promise<void> {
+    if (!this.isTranslationEnabled()) return
+    const normalized = typeof sessionId === 'string' ? sessionId.trim() : ''
+    if (!normalized) return
+    const safeLimit = Math.max(0, Math.floor(limit))
+    if (!safeLimit) return
+
+    const candidates = await this.segmentModel
+      .find({
+        sessionId: normalized,
+        $or: [
+          { translatedContent: { $exists: false } },
+          { translatedContent: null },
+          { translatedContent: '' },
+        ],
+      })
+      .sort({ sequence: -1 })
+      .limit(safeLimit)
+      .exec()
+
+    if (!candidates.length) return
+
+    for (const segment of candidates) {
+      const segmentId = segment._id.toString()
+      if (!segmentId) continue
+      if (this.inFlight.has(segmentId)) continue
+      this.inFlight.add(segmentId)
+      try {
+        await this.translateAndPersist(segmentId)
+      } finally {
+        this.inFlight.delete(segmentId)
+      }
+    }
+  }
+
   handleSegmentUpsert(segment: TranscriptEventSegmentDTO): void {
     if (!this.isTranslationEnabled()) return
     const segmentId = typeof segment.id === 'string' ? segment.id.trim() : ''

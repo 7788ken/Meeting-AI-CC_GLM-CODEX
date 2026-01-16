@@ -133,9 +133,19 @@
       <!-- 下左：GLM 拆分后的独立发言 -->
 	      <section class="transcript-panel app-surface">
 	      <div class="panel-header">
-	        <div class="panel-title-row">
-            <h2>语句拆分</h2>
-            <el-tag
+        <div class="panel-title-row">
+          <h2>语句拆分</h2>
+          <el-radio-group
+            v-model="segmentDisplayMode"
+            size="small"
+            class="segment-display-toggle"
+            :disabled="!transcriptSegmentTranslationAvailable"
+            @change="segmentDisplayTouched = true"
+          >
+            <el-radio-button value="source">原文</el-radio-button>
+            <el-radio-button value="translated">翻译</el-radio-button>
+          </el-radio-group>
+          <el-tag
 	            v-if="transcriptEventSegmentationStore.pointerEventIndex != null"
 	            :type="transcriptEventSegmentationStore.isInFlight ? 'warning' : 'info'"
 	            size="small"
@@ -177,14 +187,15 @@
 
 	      <div class="transcript-content">
 	        <TranscriptEventSegmentsPanel
-	          :segments="transcriptEventSegmentationStore.segments"
-	          :order="transcriptSegmentOrder"
-	          :loading="transcriptEventSegmentationStore.isLoadingSnapshot"
-	          :progress="transcriptEventSegmentationStore.progress"
-	          :translation-enabled="transcriptSegmentTranslationEnabled"
-	          :highlighted-segment-id="analysisMode === 'target' ? targetSegment?.id : null"
-	          @select-range="focusRealtimeRange"
-	          @target-analysis="handleTargetAnalysis"
+          :segments="transcriptEventSegmentationStore.segments"
+          :order="transcriptSegmentOrder"
+          :loading="transcriptEventSegmentationStore.isLoadingSnapshot"
+          :progress="transcriptEventSegmentationStore.progress"
+          :translation-enabled="transcriptSegmentTranslationAvailable"
+          :display-mode="segmentDisplayMode"
+          :highlighted-segment-id="analysisMode === 'target' ? targetSegment?.id : null"
+          @select-range="focusRealtimeRange"
+          @target-analysis="handleTargetAnalysis"
 	        />
 	      </div>
 	    </section>
@@ -193,7 +204,7 @@
 	    <section v-show="analysisMode === 'general'" class="analysis-panel app-surface">
 	      <div class="panel-header">
 	        <div class="panel-title-row">
-	          <h2>分析总结</h2>
+	          <h2>{{ analysisPanelTitle }}</h2>
 	          <el-tag v-if="hasAnalysisContent" type="success" size="small">
 	            已分析
 	          </el-tag>
@@ -264,7 +275,7 @@
 	    <section v-show="analysisMode === 'target'" class="target-analysis-panel app-surface">
 	      <div class="panel-header">
 	        <div class="panel-title-row">
-	          <h2>针对性分析 - @{{ targetSegment?.sequence }}</h2>
+	          <h2>{{ targetAnalysisPanelTitle }}</h2>
 	          <el-tag v-if="hasTargetAnalysisContent" type="success" size="small">
 	            已分析
 	          </el-tag>
@@ -301,7 +312,12 @@
 	        </div>
 
 	        <!-- 加载状态 -->
-	        <div v-if="isTargetAnalyzing" class="analysis-loading" role="status" aria-live="polite">
+	        <div
+	          v-if="isTargetAnalyzing && !hasTargetAnalysisContent"
+	          class="analysis-loading"
+	          role="status"
+	          aria-live="polite"
+	        >
 	          <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
 	          <p class="analysis-loading-text">
 	            正在针对性分析中，请稍候
@@ -320,7 +336,7 @@
 	        </div>
 
 	        <!-- 分析结果 -->
-	        <div v-if="hasTargetAnalysisContent && !isTargetAnalyzing" class="analysis-result" v-html="renderedTargetAnalysisResult" />
+	        <div v-if="hasTargetAnalysisContent" class="analysis-result" v-html="renderedTargetAnalysisResult" />
 	      </div>
 	    </section>
       </div>
@@ -436,6 +452,29 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
   const transcriptSegmentTranslationEnabled = computed(
     () => backendConfig.value.transcriptSegmentTranslationEnabled === true
   )
+  const transcriptSegmentTranslationAvailable = computed(() => {
+    if (transcriptSegmentTranslationEnabled.value) return true
+    return transcriptEventSegmentationStore.segments.some(segment => {
+      if (typeof segment.translatedContent !== 'string') return false
+      return segment.translatedContent.trim().length > 0
+    })
+  })
+  const segmentDisplayMode = ref<'source' | 'translated'>('source')
+  const segmentDisplayTouched = ref(false)
+
+  watch(
+    transcriptSegmentTranslationAvailable,
+    available => {
+      if (!available) {
+        segmentDisplayMode.value = 'source'
+        return
+      }
+      if (!segmentDisplayTouched.value) {
+        segmentDisplayMode.value = 'translated'
+      }
+    },
+    { immediate: true }
+  )
 
   async function verifySettingsPassword(password: string): Promise<boolean> {
     try {
@@ -499,12 +538,19 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
 	const isAnalyzing = ref(false)
 	const analysisError = ref<string>('')
 	const analysisProgress = ref<string>('')
+	const summaryPromptName = ref('')
 	let analysisEventSource: EventSource | null = null
+	let targetAnalysisEventSource: EventSource | null = null
+	let targetAnalysisStreamSegmentId: string | null = null
 
 	// 针对性分析状态
 	const analysisMode = ref<'general' | 'target'>('general')
 	const targetSegment = ref<TranscriptEventSegment | null>(null)
-	type TargetAnalysisCacheEntry = { markdown: string; sourceRevision: number }
+	type TargetAnalysisCacheEntry = {
+	  markdown: string
+	  sourceRevision: number
+	  promptName?: string
+	}
 	const targetAnalysisCache = reactive(new Map<string, TargetAnalysisCacheEntry>())
 	const targetAnalysisErrors = reactive(new Map<string, string>())
 	const targetAnalysisInFlight = reactive(new Set<string>())
@@ -910,6 +956,7 @@ onUnmounted(() => {
     analysisEventSource.close()
     analysisEventSource = null
   }
+  stopTargetAnalysisStream()
   transcription.dispose()
   transcriptStreamStore.reset()
   transcriptEventSegmentationStore.reset()
@@ -1235,11 +1282,22 @@ const renderedTargetAnalysisResult = computed(() => {
 
 const hasTargetAnalysisContent = computed(() => !!targetAnalysisMarkdown.value)
 
-const analysisPanelTitle = computed(() => {
-  if (analysisMode.value === 'target' && targetSegment.value) {
-    return `分析总结 - @${targetSegment.value.sequence}`
+const targetAnalysisPromptName = computed(() => {
+  const name = activeTargetAnalysis.value?.promptName?.trim()
+  return name || '针对性分析'
+})
+
+const targetAnalysisPanelTitle = computed(() => {
+  const baseTitle = targetAnalysisPromptName.value || '针对性分析'
+  const sequence = targetSegment.value?.sequence
+  if (Number.isFinite(sequence)) {
+    return `${baseTitle} - @${sequence}`
   }
-  return '分析总结'
+  return baseTitle
+})
+
+const analysisPanelTitle = computed(() => {
+  return summaryPromptName.value || '分析总结'
 })
 
 async function startAnalysis(): Promise<void> {
@@ -1270,10 +1328,14 @@ async function startAnalysis(): Promise<void> {
     try {
       const response = await transcriptAnalysisApi.generateSummary(sessionId.value)
       const markdown = response?.data?.markdown
+      const promptName = response?.data?.promptName
       if (!markdown) {
         throw new Error('分析服务返回为空')
       }
       analysisResult.value = markdown
+      if (typeof promptName === 'string' && promptName.trim()) {
+        summaryPromptName.value = promptName.trim()
+      }
       ElMessage.success('分析完成')
     } catch (error) {
       console.error('分析失败:', error)
@@ -1336,6 +1398,21 @@ async function startAnalysis(): Promise<void> {
     }
   })
 
+  analysisEventSource.addEventListener('meta', (event) => {
+    const raw = (event as MessageEvent).data
+    let data: any = raw
+    if (typeof raw === 'string') {
+      try {
+        data = JSON.parse(raw)
+      } catch {
+        data = {}
+      }
+    }
+    if (typeof data?.promptName === 'string' && data.promptName.trim()) {
+      summaryPromptName.value = data.promptName.trim()
+    }
+  })
+
 	analysisEventSource.addEventListener('delta', (event) => {
 		const el = analysisScrollRef.value
 		const shouldStick = el ? isNearBottom(el, 120) : true
@@ -1369,6 +1446,12 @@ async function startAnalysis(): Promise<void> {
 			const parsed = JSON.parse(raw)
 			const type = parsed?.type
 			const data = parsed?.data
+			if (type === 'meta' && data) {
+				if (typeof data.promptName === 'string' && data.promptName.trim()) {
+					summaryPromptName.value = data.promptName.trim()
+				}
+				return
+			}
 			if (type === 'progress' && typeof data === 'string') {
 				analysisProgress.value = data
 				return
@@ -1453,8 +1536,12 @@ async function loadStoredSummary(): Promise<void> {
   try {
     const response = await transcriptAnalysisApi.getStoredSummary(sessionId.value)
     const markdown = response?.data?.markdown
+    const promptName = response?.data?.promptName
     if (typeof markdown === 'string' && markdown.trim()) {
       analysisResult.value = markdown
+    }
+    if (typeof promptName === 'string' && promptName.trim()) {
+      summaryPromptName.value = promptName.trim()
     }
   } catch (error) {
     console.error('加载已保存分析总结失败:', error)
@@ -1469,6 +1556,17 @@ function clearAnalysis(): void {
   analysisResult.value = ''
   analysisError.value = ''
   analysisProgress.value = ''
+}
+
+function stopTargetAnalysisStream(): void {
+  if (targetAnalysisEventSource) {
+    targetAnalysisEventSource.close()
+    targetAnalysisEventSource = null
+  }
+  if (targetAnalysisStreamSegmentId) {
+    targetAnalysisInFlight.delete(targetAnalysisStreamSegmentId)
+    targetAnalysisStreamSegmentId = null
+  }
 }
 
 // 切换到针对性分析模式
@@ -1514,61 +1612,215 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
 
   if (targetAnalysisInFlight.has(segId)) return
 
+  if (!force) {
+    try {
+      const stored = await transcriptAnalysisApi.getStoredSegmentAnalysis(sessionId.value, seg.id)
+      const payload = stored?.data
+      if (
+        payload &&
+        typeof payload.markdown === 'string' &&
+        payload.markdown.trim() &&
+        payload.sourceRevision === seg.sourceRevision
+      ) {
+        targetAnalysisCache.set(segId, {
+          markdown: payload.markdown,
+          sourceRevision: payload.sourceRevision,
+          promptName:
+            typeof payload.promptName === 'string' ? payload.promptName.trim() : undefined,
+        })
+        targetAnalysisErrors.delete(segId)
+        return
+      }
+    } catch (error) {
+      console.error('加载已保存针对性分析失败:', error)
+    }
+  }
+
+  if (!canTriggerGlobalAction()) return
+
+  if (targetAnalysisEventSource) {
+    targetAnalysisEventSource.close()
+    targetAnalysisEventSource = null
+  }
+
   targetAnalysisErrors.delete(segId)
   targetAnalysisInFlight.add(segId)
   const activeSessionId = sessionId.value
 
-  try {
-    if (!force) {
-      try {
-        const stored = await transcriptAnalysisApi.getStoredSegmentAnalysis(sessionId.value, seg.id)
-        const payload = stored?.data
-        if (
-          payload &&
-          typeof payload.markdown === 'string' &&
-          payload.markdown.trim() &&
-          payload.sourceRevision === seg.sourceRevision
-        ) {
-          if (activeSessionId === sessionId.value) {
-            targetAnalysisCache.set(segId, {
-              markdown: payload.markdown,
-              sourceRevision: payload.sourceRevision,
-            })
-            targetAnalysisErrors.delete(segId)
-          }
-          return
-        }
-      } catch (error) {
-        console.error('加载已保存针对性分析失败:', error)
+  if (typeof EventSource === 'undefined') {
+    try {
+      const response = await transcriptAnalysisApi.generateSegmentAnalysis(sessionId.value, seg.id)
+      const markdown = response?.data?.markdown
+      if (!markdown) {
+        throw new Error('分析服务返回为空')
       }
-    }
+      if (activeSessionId === sessionId.value) {
+        targetAnalysisCache.set(segId, {
+          markdown,
+          sourceRevision: seg.sourceRevision,
+          promptName:
+            typeof response?.data?.promptName === 'string'
+              ? response.data.promptName.trim()
+              : undefined,
+        })
+        targetAnalysisErrors.delete(segId)
+      }
 
-    if (!canTriggerGlobalAction()) return
-
-    const response = await transcriptAnalysisApi.generateSegmentAnalysis(sessionId.value, seg.id)
-    const markdown = response?.data?.markdown
-    if (!markdown) {
-      throw new Error('分析服务返回为空')
+      ElMessage.success(`针对性分析完成 - @${seg.sequence}`)
+    } catch (error) {
+      console.error('针对性分析失败:', error)
+      const message = error instanceof Error ? error.message : '分析失败'
+      if (activeSessionId === sessionId.value) {
+        targetAnalysisErrors.set(segId, message)
+        ElMessage.error('针对性分析失败')
+      }
+    } finally {
+      targetAnalysisInFlight.delete(segId)
     }
-    if (activeSessionId === sessionId.value) {
-      targetAnalysisCache.set(segId, { markdown, sourceRevision: seg.sourceRevision })
-      targetAnalysisErrors.delete(segId)
-    }
+    return
+  }
 
-    ElMessage.success(`针对性分析完成 - @${seg.sequence}`)
-  } catch (error) {
-    console.error('针对性分析失败:', error)
-    const message = error instanceof Error ? error.message : '分析失败'
-    if (activeSessionId === sessionId.value) {
-      targetAnalysisErrors.set(segId, message)
+  const baseUrl = String(getApiBaseUrl() || '/api').replace(/\/+$/, '')
+  const forceParam = force ? '1' : ''
+  const querySuffix = forceParam ? `?force=${forceParam}` : ''
+  const streamUrl = `${baseUrl}/transcript-analysis/session/${encodeURIComponent(
+    sessionId.value
+  )}/segment/${encodeURIComponent(segId)}/analysis/stream${querySuffix}`
+
+  let finished = false
+  let hadAnyDelta = false
+  let markdownBuffer = ''
+  let promptName = ''
+  targetAnalysisEventSource = new EventSource(streamUrl)
+  targetAnalysisStreamSegmentId = segId
+
+  const updateCache = () => {
+    if (activeSessionId !== sessionId.value) return
+    targetAnalysisCache.set(segId, {
+      markdown: markdownBuffer,
+      sourceRevision: seg.sourceRevision,
+      promptName: promptName || undefined,
+    })
+    targetAnalysisErrors.delete(segId)
+  }
+
+  const finishOnce = (payload?: { ok?: boolean; message?: string }) => {
+    if (finished) return
+    finished = true
+    stopTargetAnalysisStream()
+
+    if (payload?.ok) {
+      ElMessage.success(`针对性分析完成 - @${seg.sequence}`)
+      return
+    }
+    if (payload?.message && activeSessionId === sessionId.value) {
+      targetAnalysisErrors.set(segId, payload.message)
       ElMessage.error('针对性分析失败')
     }
-  } finally {
-    targetAnalysisInFlight.delete(segId)
+  }
+
+  targetAnalysisEventSource.addEventListener('meta', (event) => {
+    if (finished) return
+    if (hadAnyDelta && markdownBuffer) {
+      markdownBuffer = ''
+      hadAnyDelta = false
+    }
+    const raw = (event as MessageEvent).data
+    let data: any = raw
+    if (typeof raw === 'string') {
+      try {
+        data = JSON.parse(raw)
+      } catch {
+        data = {}
+      }
+    }
+    if (typeof data?.promptName === 'string') {
+      promptName = data.promptName.trim()
+    }
+    updateCache()
+  })
+
+  targetAnalysisEventSource.addEventListener('delta', (event) => {
+    if (finished) return
+    const text = (event as MessageEvent).data
+    if (typeof text === 'string' && text) {
+      hadAnyDelta = true
+      markdownBuffer += text
+      updateCache()
+    }
+  })
+
+  targetAnalysisEventSource.addEventListener('done', () => {
+    finishOnce({ ok: true })
+  })
+
+  targetAnalysisEventSource.onmessage = (event) => {
+    if (finished) return
+    const raw = (event as MessageEvent).data
+    if (typeof raw !== 'string' || !raw.trim()) return
+
+    if (!raw.trimStart().startsWith('{')) {
+      hadAnyDelta = true
+      markdownBuffer += raw
+      updateCache()
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(raw)
+      const type = parsed?.type
+      const data = parsed?.data
+      if (type === 'meta' && data) {
+        if (hadAnyDelta && markdownBuffer) {
+          markdownBuffer = ''
+          hadAnyDelta = false
+        }
+        if (typeof data.promptName === 'string') {
+          promptName = data.promptName.trim()
+        }
+        updateCache()
+        return
+      }
+      if (type === 'delta' && typeof data === 'string') {
+        hadAnyDelta = true
+        markdownBuffer += data
+        updateCache()
+        return
+      }
+      if (type === 'done') {
+        finishOnce({ ok: true })
+        return
+      }
+      if (type === 'server_error') {
+        const message = data?.message ? String(data.message) : '分析失败'
+        finishOnce({ ok: false, message })
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  targetAnalysisEventSource.addEventListener('server_error', (event) => {
+    if (finished) return
+    const raw = (event as MessageEvent).data
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+      const message = parsed?.message ? String(parsed.message) : '分析失败'
+      finishOnce({ ok: false, message })
+    } catch {
+      finishOnce({ ok: false, message: typeof raw === 'string' ? raw : '分析失败' })
+    }
+  })
+
+  targetAnalysisEventSource.onerror = () => {
+    if (finished) return
+    const suffix = hadAnyDelta ? '（已接收部分内容）' : ''
+    finishOnce({ ok: false, message: `分析连接中断，请重试${suffix}` })
   }
 }
 
 function clearTargetAnalysis(): void {
+  stopTargetAnalysisStream()
   targetAnalysisCache.clear()
   targetAnalysisErrors.clear()
   targetAnalysisInFlight.clear()
@@ -1943,6 +2195,10 @@ function clearTargetAnalysis(): void {
   gap: 8px;
   flex-wrap: nowrap;
   white-space: nowrap;
+}
+
+.segment-display-toggle .el-radio-button__inner {
+  padding: 4px 10px;
 }
 
 .panel-actions {

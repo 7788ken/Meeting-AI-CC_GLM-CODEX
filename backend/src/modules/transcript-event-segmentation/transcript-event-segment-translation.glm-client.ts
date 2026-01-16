@@ -83,10 +83,12 @@ export class TranscriptEventSegmentTranslationGlmClient {
     const delays = [500, 1500, 4500]
     for (let attempt = 0; attempt <= delays.length; attempt += 1) {
       try {
-        return await this.glmRateLimiter.schedule(() =>
-          firstValueFrom(
-            this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
-          )
+        return await this.glmRateLimiter.schedule(
+          () =>
+            firstValueFrom(
+              this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
+            ),
+          { bucket: 'translation', label: 'transcript_event_translation' }
         )
       } catch (error) {
         const status = this.extractStatusCode(error)
@@ -95,7 +97,7 @@ export class TranscriptEventSegmentTranslationGlmClient {
         }
         const delayMs = delays[attempt]!
         this.logger.warn(`GLM rate limited (429), retrying in ${delayMs}ms (attempt ${attempt + 1}/${delays.length})`)
-        this.glmRateLimiter.onRateLimit(delayMs)
+        this.glmRateLimiter.onRateLimit(delayMs, 'translation')
         await this.sleep(delayMs)
       }
     }

@@ -30,6 +30,7 @@ import { PromptLibraryService } from '../prompt-library/prompt-library.service'
 
 export type TranscriptSummaryDTO = {
   sessionId: string
+  promptName?: string
   markdown: string
   model: string
   generatedAt: string
@@ -42,6 +43,7 @@ export type TranscriptSegmentAnalysisDTO = {
   sessionId: string
   segmentId: string
   segmentSequence: number
+  promptName?: string
   markdown: string
   model: string
   generatedAt: string
@@ -49,6 +51,15 @@ export type TranscriptSegmentAnalysisDTO = {
   sourceStartEventIndex: number
   sourceEndEventIndex: number
 }
+
+export type TranscriptSegmentAnalysisStreamEvent =
+  | {
+      type: 'meta'
+      data: Omit<TranscriptSegmentAnalysisDTO, 'markdown' | 'generatedAt'>
+    }
+  | { type: 'delta'; data: string }
+  | { type: 'done'; data: { generatedAt: string } }
+  | { type: 'server_error'; data: { message: string } }
 
 export type TranscriptSummaryStreamEvent =
   | {
@@ -66,6 +77,10 @@ export class TranscriptAnalysisService {
   private readonly maxEvents = 5000
   private readonly maxChunkChars = 28000
   private readonly reduceBatchSize = 8
+  private readonly segmentAnalysisInFlight = new Map<
+    string,
+    Promise<TranscriptSegmentAnalysisDTO>
+  >()
 
   constructor(
     @InjectModel(TranscriptAnalysisSummary.name)
@@ -88,8 +103,12 @@ export class TranscriptAnalysisService {
     const doc = await this.summaryModel.findOne({ sessionId }).exec()
     if (!doc) return null
 
+    const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
+    const promptName = this.resolveSummaryPromptName(analysisConfig.summaryPromptId)
+
     return {
       sessionId: doc.sessionId,
+      promptName,
       markdown: doc.markdown,
       model: doc.model,
       generatedAt: doc.generatedAt,
@@ -111,6 +130,7 @@ export class TranscriptAnalysisService {
     })
 
     const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
+    const promptName = this.resolveSummaryPromptName(analysisConfig.summaryPromptId)
     const summarySystemPrompt = this.buildAnalysisSystemPrompt(
       this.promptLibraryService.resolvePromptContent(
         analysisConfig.summaryPromptId,
@@ -131,6 +151,7 @@ export class TranscriptAnalysisService {
       const now = new Date().toISOString()
       const dto: TranscriptSummaryDTO = {
         sessionId,
+        promptName,
         markdown: `# 会议分析总结\n\n## 一句话结论\n暂无可分析的原文。\n\n## 议题与结论\n- 未明确\n\n## 关键要点\n- 未明确\n\n## 决策\n- 未明确\n\n## 行动项（TODO）\n- 未明确\n\n## 风险与阻塞\n- 未明确\n\n## 待澄清问题\n- 未明确\n\n## 附：原文引用（可选）\n- 无\n`,
         model: this.glmClient.getModelName(),
         generatedAt: now,
@@ -156,6 +177,7 @@ export class TranscriptAnalysisService {
       })
       const dto: TranscriptSummaryDTO = {
         sessionId,
+        promptName,
         markdown,
         model,
         generatedAt: new Date().toISOString(),
@@ -191,6 +213,7 @@ export class TranscriptAnalysisService {
 
     const dto: TranscriptSummaryDTO = {
       sessionId,
+      promptName,
       markdown,
       model,
       generatedAt: new Date().toISOString(),
@@ -219,6 +242,7 @@ export class TranscriptAnalysisService {
     })
 
     const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
+    const promptName = this.resolveSummaryPromptName(analysisConfig.summaryPromptId)
     const summarySystemPrompt = this.buildAnalysisSystemPrompt(
       this.promptLibraryService.resolvePromptContent(
         analysisConfig.summaryPromptId,
@@ -244,6 +268,7 @@ export class TranscriptAnalysisService {
       type: 'meta',
       data: {
         sessionId,
+        promptName,
         model,
         sourceRevision: snapshot.revision,
         sourceEventCount: events.length,
@@ -259,6 +284,7 @@ export class TranscriptAnalysisService {
       const generatedAt = new Date().toISOString()
       await this.persistSummary({
         sessionId,
+        promptName,
         markdown: markdownBuffer,
         model,
         generatedAt,
@@ -289,6 +315,7 @@ export class TranscriptAnalysisService {
       const generatedAt = new Date().toISOString()
       await this.persistSummary({
         sessionId,
+        promptName,
         markdown: markdownBuffer,
         model,
         generatedAt,
@@ -333,6 +360,7 @@ export class TranscriptAnalysisService {
     const generatedAt = new Date().toISOString()
     await this.persistSummary({
       sessionId,
+      promptName,
       markdown: markdownBuffer,
       model,
       generatedAt,
@@ -361,10 +389,14 @@ export class TranscriptAnalysisService {
     const doc = await this.segmentAnalysisModel.findOne({ sessionId, segmentId: objectId }).exec()
     if (!doc) return null
 
+    const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
+    const promptName = this.resolveSegmentPromptName(analysisConfig.chunkSummaryPromptId)
+
     return {
       sessionId: doc.sessionId,
       segmentId: String(doc.segmentId),
       segmentSequence: doc.segmentSequence,
+      promptName,
       markdown: doc.markdown,
       model: doc.model,
       generatedAt: doc.generatedAt,
@@ -400,8 +432,13 @@ export class TranscriptAnalysisService {
     }
 
     const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
+    const promptName = this.resolveSegmentPromptName(analysisConfig.chunkSummaryPromptId)
     const segmentSystemPrompt = this.buildAnalysisSystemPrompt(
-      analysisConfig.segmentAnalysisSystemPrompt
+      this.promptLibraryService.resolvePromptContent(
+        analysisConfig.chunkSummaryPromptId,
+        'chunk_summary',
+        DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT
+      )
     )
 
     const { markdown, model } = await this.glmClient.generateMarkdown({
@@ -420,6 +457,7 @@ export class TranscriptAnalysisService {
       sessionId,
       segmentId: String(segment._id),
       segmentSequence: segment.sequence,
+      promptName,
       markdown,
       model,
       generatedAt: new Date().toISOString(),
@@ -430,6 +468,207 @@ export class TranscriptAnalysisService {
 
     await this.persistSegmentAnalysis(dto)
     return dto
+  }
+
+  async *generateSegmentAnalysisStream(input: {
+    sessionId: string
+    segmentId: string
+    force?: boolean
+  }): AsyncIterable<TranscriptSegmentAnalysisStreamEvent> {
+    const sessionId = (input.sessionId || '').trim()
+    const segmentId = (input.segmentId || '').trim()
+    if (!sessionId) {
+      yield { type: 'server_error', data: { message: 'sessionId is required' } }
+      return
+    }
+    if (!segmentId) {
+      yield { type: 'server_error', data: { message: 'segmentId is required' } }
+      return
+    }
+
+    let objectId: Types.ObjectId
+    try {
+      objectId = new Types.ObjectId(segmentId)
+    } catch {
+      yield { type: 'server_error', data: { message: 'segmentId is invalid' } }
+      return
+    }
+
+    const segment = await this.segmentModel.findOne({ _id: objectId, sessionId }).exec()
+    if (!segment) {
+      yield { type: 'server_error', data: { message: 'segment not found' } }
+      return
+    }
+
+    const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
+    const promptName = this.resolveSegmentPromptName(analysisConfig.chunkSummaryPromptId)
+    const inFlightKey = `${sessionId}:${segmentId}`
+
+    if (!input.force) {
+      const inFlight = this.segmentAnalysisInFlight.get(inFlightKey)
+      if (inFlight) {
+        const dto = await inFlight
+        yield {
+          type: 'meta',
+          data: {
+            sessionId,
+            segmentId: dto.segmentId,
+            segmentSequence: dto.segmentSequence,
+            promptName,
+            model: dto.model,
+            sourceRevision: dto.sourceRevision,
+            sourceStartEventIndex: dto.sourceStartEventIndex,
+            sourceEndEventIndex: dto.sourceEndEventIndex,
+          },
+        }
+        if (dto.markdown) {
+          yield { type: 'delta', data: dto.markdown }
+        }
+        yield { type: 'done', data: { generatedAt: dto.generatedAt } }
+        return
+      }
+
+      const cached = await this.segmentAnalysisModel
+        .findOne({ sessionId, segmentId: objectId })
+        .exec()
+      if (cached && cached.sourceRevision === segment.sourceRevision) {
+        yield {
+          type: 'meta',
+          data: {
+            sessionId,
+            segmentId: String(segment._id),
+            segmentSequence: segment.sequence,
+            promptName,
+            model: cached.model,
+            sourceRevision: segment.sourceRevision,
+            sourceStartEventIndex: segment.sourceStartEventIndex,
+            sourceEndEventIndex: segment.sourceEndEventIndex,
+          },
+        }
+        if (cached.markdown) {
+          yield { type: 'delta', data: cached.markdown }
+        }
+        yield { type: 'done', data: { generatedAt: cached.generatedAt } }
+        return
+      }
+    }
+
+    let resolveInFlight: ((dto: TranscriptSegmentAnalysisDTO) => void) | null = null
+    let rejectInFlight: ((error: unknown) => void) | null = null
+    const pending = new Promise<TranscriptSegmentAnalysisDTO>((resolve, reject) => {
+      resolveInFlight = resolve
+      rejectInFlight = reject
+    })
+    this.segmentAnalysisInFlight.set(inFlightKey, pending)
+
+    const segmentSystemPrompt = this.buildAnalysisSystemPrompt(
+      this.promptLibraryService.resolvePromptContent(
+        analysisConfig.chunkSummaryPromptId,
+        'chunk_summary',
+        DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT
+      )
+    )
+
+    const model = this.glmClient.getModelName()
+    const segmentSequence = segment.sequence
+    const sourceRevision = segment.sourceRevision
+    const sourceStartEventIndex = segment.sourceStartEventIndex
+    const sourceEndEventIndex = segment.sourceEndEventIndex
+
+    yield {
+      type: 'meta',
+      data: {
+        sessionId,
+        segmentId: String(segment._id),
+        segmentSequence,
+        promptName,
+        model,
+        sourceRevision,
+        sourceStartEventIndex,
+        sourceEndEventIndex,
+      },
+    }
+
+    let markdownBuffer = ''
+    try {
+      for await (const chunk of this.glmClient.generateMarkdownStream({
+        system: segmentSystemPrompt,
+        user: buildTranscriptSegmentAnalysisUserPrompt({
+          sessionId,
+          revision: segment.sourceRevision,
+          segmentSequence: segment.sequence,
+          segmentContent: String(segment.content || '').trim(),
+          sourceStartEventIndex: segment.sourceStartEventIndex,
+          sourceEndEventIndex: segment.sourceEndEventIndex,
+        }),
+      })) {
+        if (chunk.type === 'delta') {
+          markdownBuffer += chunk.text
+          yield { type: 'delta', data: chunk.text }
+        }
+      }
+
+      const generatedAt = new Date().toISOString()
+      const dto: TranscriptSegmentAnalysisDTO = {
+        sessionId,
+        segmentId: String(segment._id),
+        segmentSequence,
+        promptName,
+        markdown: markdownBuffer,
+        model,
+        generatedAt,
+        sourceRevision,
+        sourceStartEventIndex,
+        sourceEndEventIndex,
+      }
+
+      await this.persistSegmentAnalysis(dto)
+      resolveInFlight?.(dto)
+      yield { type: 'done', data: { generatedAt } }
+    } catch (error) {
+      rejectInFlight?.(error)
+      throw error
+    } finally {
+      this.segmentAnalysisInFlight.delete(inFlightKey)
+    }
+  }
+
+  private resolveSegmentPromptName(preferredId: string): string {
+    const fallbackId = this.promptLibraryService.getDefaultPromptId('chunk_summary')
+    const preferredName = this.getChunkSummaryPromptName(preferredId)
+    if (preferredName) return preferredName
+    if (preferredId !== fallbackId) {
+      const fallbackName = this.getChunkSummaryPromptName(fallbackId)
+      if (fallbackName) return fallbackName
+    }
+    return ''
+  }
+
+  private resolveSummaryPromptName(preferredId: string): string {
+    const fallbackId = this.promptLibraryService.getDefaultPromptId('summary')
+    const preferredName = this.getSummaryPromptName(preferredId)
+    if (preferredName) return preferredName
+    if (preferredId !== fallbackId) {
+      const fallbackName = this.getSummaryPromptName(fallbackId)
+      if (fallbackName) return fallbackName
+    }
+    return ''
+  }
+
+  private getSummaryPromptName(id: string): string {
+    const prompt = this.promptLibraryService.getPromptById(id)
+    if (prompt && prompt.type === 'summary') {
+      return prompt.name
+    }
+    return ''
+  }
+
+  private getChunkSummaryPromptName(id: string): string {
+    const prompt = this.promptLibraryService.getPromptById(id)
+    if (prompt && prompt.type === 'chunk_summary') {
+      return prompt.name
+    }
+    return ''
   }
 
   private buildAnalysisSystemPrompt(basePrompt: string): string {

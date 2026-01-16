@@ -44,7 +44,7 @@
                   <el-radio
                     v-for="item in asrModels"
                     :key="item.value"
-                    :label="item.value"
+                    :value="item.value"
                     border
                     class="choice-card"
                   >
@@ -241,7 +241,7 @@
               <div class="hint">拆分模型在“AI 模型”中配置。</div>
 
               <el-form label-position="top" :model="segmentationForm" class="pane-form">
-                <el-form-item label="系统提示词">
+                <el-form-item label="系统提示词" class="pane-title">
                   <el-input
                     v-model="segmentationForm.systemPrompt"
                     type="textarea"
@@ -257,7 +257,7 @@
                   </div>
                 </el-form-item>
 
-                <el-form-item label="严格回显提示词">
+                <el-form-item label="严格回显提示词" class="pane-title">
                   <el-input
                     v-model="segmentationForm.strictSystemPrompt"
                     type="textarea"
@@ -471,7 +471,7 @@
               </span>
             </template>
             <section class="pane">
-              <div class="pane-title">会议总结系统提示词</div>
+              <div class="pane-title">会议总结（全文总结）系统提示词</div>
               <div class="pane-subtitle">用于控制总结输出结构、风格与重点。</div>
 
               <el-form label-position="top" :model="analysisConfigForm" class="pane-form">
@@ -492,7 +492,7 @@
                   <div class="hint"></div>
                 </el-form-item>
 
-                <div class="pane-title">分片总结系统提示词</div>
+                <div class="pane-title">针对性总结（分片总结）系统提示词</div>
                 <div class="pane-subtitle">用于长会议拆分摘要的提示词。</div>
                 <el-form-item label="">
                   <el-select
@@ -632,8 +632,11 @@
                           <span class="prompt-type-chip" :class="`type-${prompt.type}`">
                             {{ promptTypeLabels[prompt.type] || prompt.type }}
                           </span>
+                          <el-tag v-if="isSystemDefaultPrompt(prompt)" size="small" type="info"
+                            >内置</el-tag
+                          >
                           <el-tag v-if="prompt.isDefault" size="small" type="success"
-                            >默认</el-tag
+                            >兜底</el-tag
                           >
                         </div>
                         <div class="prompt-card-actions">
@@ -644,7 +647,7 @@
                             :disabled="prompt.isDefault"
                             @click="setPromptDefault(prompt)"
                           >
-                            {{ prompt.isDefault ? "默认中" : "设为默认" }}
+                            {{ prompt.isDefault ? "兜底中" : "设为兜底" }}
                           </el-button>
                           <el-button
                             size="small"
@@ -664,7 +667,7 @@
                           </el-button>
                         </div>
                       </div>
-                      <div class="prompt-card-title">{{ prompt.name }}</div>
+                      <div class="prompt-card-title">{{ formatPromptDisplayName(prompt) }}</div>
                       <div class="prompt-card-alias">别名：{{ prompt.alias || "-" }}</div>
                     </article>
                   </div>
@@ -736,7 +739,7 @@
                         placeholder="可选，用于快速识别"
                       />
                     </el-form-item>
-                    <el-form-item label="设为默认">
+                    <el-form-item label="设为兜底">
                       <el-switch v-model="promptForm.isDefault" />
                     </el-form-item>
                   </div>
@@ -835,15 +838,263 @@
                     </div>
                   </el-form-item>
                 </div>
+
+                <div class="pane-title section-title">分路限流</div>
+                <div class="pane-subtitle">按模块独立控制并发与节奏；未配置时回退全局配置。</div>
+
+                <div class="pane-title section-title">ASR</div>
+                <div class="pane-subtitle">语音转写音频识别请求。</div>
+                <div class="grid two-col">
+                  <el-form-item label="并发上限">
+                    <el-input-number
+                      v-model="backendForm.glmAsrConcurrency"
+                      :min="1"
+                      :max="50"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_ASR_CONCURRENCY')" class="hint">
+                      {{ getRemark("GLM_ASR_CONCURRENCY") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="最小间隔 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmAsrMinIntervalMs"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_ASR_MIN_INTERVAL_MS')" class="hint">
+                      {{ getRemark("GLM_ASR_MIN_INTERVAL_MS") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="冷却时间 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmAsrRateLimitCooldownMs"
+                      :min="0"
+                      :max="120000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_ASR_RATE_LIMIT_COOLDOWN_MS')" class="hint">
+                      {{ getRemark("GLM_ASR_RATE_LIMIT_COOLDOWN_MS") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="冷却上限 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmAsrRateLimitMaxMs"
+                      :min="0"
+                      :max="300000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_ASR_RATE_LIMIT_MAX_MS')" class="hint">
+                      {{ getRemark("GLM_ASR_RATE_LIMIT_MAX_MS") }}
+                    </div>
+                  </el-form-item>
+                </div>
+
+                <div class="pane-title section-title">语句拆分</div>
+                <div class="pane-subtitle">GLM 语句拆分调用。</div>
+                <div class="grid two-col">
+                  <el-form-item label="并发上限">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptEventSegmentConcurrency"
+                      :min="1"
+                      :max="50"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_CONCURRENCY')" class="hint">
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_CONCURRENCY") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="最小间隔 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptEventSegmentMinIntervalMs"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_MIN_INTERVAL_MS')" class="hint">
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_MIN_INTERVAL_MS") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="冷却时间 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptEventSegmentRateLimitCooldownMs"
+                      :min="0"
+                      :max="120000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_COOLDOWN_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_COOLDOWN_MS") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="冷却上限 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptEventSegmentRateLimitMaxMs"
+                      :min="0"
+                      :max="300000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_MAX_MS')" class="hint">
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_MAX_MS") }}
+                    </div>
+                  </el-form-item>
+                </div>
+
+                <div class="pane-title section-title">语句翻译</div>
+                <div class="pane-subtitle">语句拆分后的翻译调用。</div>
+                <div class="grid two-col">
+                  <el-form-item label="并发上限">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptEventSegmentTranslationConcurrency"
+                      :min="1"
+                      :max="50"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_CONCURRENCY')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_CONCURRENCY") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="最小间隔 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptEventSegmentTranslationMinIntervalMs"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_MIN_INTERVAL_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_MIN_INTERVAL_MS") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="冷却时间 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptEventSegmentTranslationRateLimitCooldownMs"
+                      :min="0"
+                      :max="120000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_RATE_LIMIT_COOLDOWN_MS')"
+                      class="hint"
+                    >
+                      {{
+                        getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_RATE_LIMIT_COOLDOWN_MS")
+                      }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="冷却上限 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptEventSegmentTranslationRateLimitMaxMs"
+                      :min="0"
+                      :max="300000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_RATE_LIMIT_MAX_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_RATE_LIMIT_MAX_MS") }}
+                    </div>
+                  </el-form-item>
+                </div>
+
+                <div class="pane-title section-title">AI 分析</div>
+                <div class="pane-subtitle">会议总结与针对性分析调用。</div>
+                <div class="grid two-col">
+                  <el-form-item label="并发上限">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptAnalysisConcurrency"
+                      :min="1"
+                      :max="50"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_ANALYSIS_CONCURRENCY')" class="hint">
+                      {{ getRemark("GLM_TRANSCRIPT_ANALYSIS_CONCURRENCY") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="最小间隔 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptAnalysisMinIntervalMs"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_ANALYSIS_MIN_INTERVAL_MS')" class="hint">
+                      {{ getRemark("GLM_TRANSCRIPT_ANALYSIS_MIN_INTERVAL_MS") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="冷却时间 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptAnalysisRateLimitCooldownMs"
+                      :min="0"
+                      :max="120000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_ANALYSIS_RATE_LIMIT_COOLDOWN_MS')" class="hint">
+                      {{ getRemark("GLM_TRANSCRIPT_ANALYSIS_RATE_LIMIT_COOLDOWN_MS") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="冷却上限 (ms)">
+                    <el-input-number
+                      v-model="backendForm.glmTranscriptAnalysisRateLimitMaxMs"
+                      :min="0"
+                      :max="300000"
+                      :step="100"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div v-if="getRemark('GLM_TRANSCRIPT_ANALYSIS_RATE_LIMIT_MAX_MS')" class="hint">
+                      {{ getRemark("GLM_TRANSCRIPT_ANALYSIS_RATE_LIMIT_MAX_MS") }}
+                    </div>
+                  </el-form-item>
+                </div>
               </el-form>
             </section>
           </el-tab-pane>
 
-          <el-tab-pane name="client">
+          <el-tab-pane name="audio-source">
             <template #label>
               <span class="tab-label">
-                <el-icon><Monitor /></el-icon>
-                客户端设置
+                <el-icon><Microphone /></el-icon>
+                录音来源
               </span>
             </template>
             <section class="pane">
@@ -855,7 +1106,7 @@
                   <el-radio
                     v-for="item in audioCaptureModes"
                     :key="item.value"
-                    :label="item.value"
+                    :value="item.value"
                     border
                     class="choice-card"
                   >
@@ -903,7 +1154,17 @@
                   </el-form-item>
                 </el-form>
               </div>
+            </section>
+          </el-tab-pane>
 
+          <el-tab-pane name="service-endpoint">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Monitor /></el-icon>
+                服务地址
+              </span>
+            </template>
+            <section class="pane">
               <div class="pane-block">
                 <div class="pane-title">服务地址</div>
                 <div class="pane-subtitle">覆盖 HTTP / WebSocket 地址（仅前端）</div>
@@ -1204,7 +1465,8 @@ const activeSection = ref<
   | 'analysis'
   | 'prompt-library'
   | 'system'
-  | 'client'
+  | 'audio-source'
+  | 'service-endpoint'
   | 'language'
   | 'appearance'
   | 'logging'
@@ -1258,7 +1520,7 @@ const selectedChunkPrompt = computed(() =>
 )
 
 const asrModels: Array<{ value: AsrModel; label: string; desc: string }> = [
-  { value: 'glm', label: 'GLM ASR', desc: '高精度，适合高噪声场景' },
+  { value: 'glm', label: 'GLM ASR(内置)', desc: '高精度，适合高噪声场景，成本约 ¥1/小时' },
 ]
 
 const fontSizeRange = { min: 12, max: 24 }
@@ -1422,11 +1684,19 @@ function validateAnalysisConfig(input: Partial<TranscriptAnalysisConfig>): strin
   return errors
 }
 
+function formatPromptDisplayName(prompt: PromptTemplate): string {
+  if (!isSystemDefaultPrompt(prompt)) {
+    return prompt.name
+  }
+  return prompt.name.replace('（默认）', '（内置）')
+}
+
 function formatPromptLabel(prompt: PromptTemplate): string {
   const alias = (prompt.alias || '').trim()
-  const baseLabel = alias ? `${prompt.name}（${alias}）` : prompt.name
-  if (prompt.isDefault && !isSystemDefaultPrompt(prompt) && !baseLabel.includes('（默认）')) {
-    return `${baseLabel}（默认）`
+  const displayName = formatPromptDisplayName(prompt)
+  const baseLabel = alias ? `${displayName}（${alias}）` : displayName
+  if (prompt.isDefault && !baseLabel.includes('（兜底）')) {
+    return `${baseLabel}（兜底）`
   }
   return baseLabel
 }
@@ -1480,7 +1750,7 @@ function openPromptCreate(): void {
 
 function openPromptEdit(prompt: PromptTemplate): void {
   if (isSystemDefaultPrompt(prompt)) {
-    ElMessage.warning('系统自带提示词不允许修改')
+    ElMessage.warning('内置提示词不允许修改')
     return
   }
   loadPromptForEdit(prompt)
@@ -1505,7 +1775,7 @@ function handlePromptPick(id: string): void {
   }
   if (promptEditorMode.value === 'edit') {
     if (isSystemDefaultPrompt(prompt)) {
-      ElMessage.warning('系统自带提示词不允许修改')
+      ElMessage.warning('内置提示词不允许修改')
       return
     }
     loadPromptForEdit(prompt)
@@ -1517,7 +1787,7 @@ function handlePromptPick(id: string): void {
 
 async function deletePrompt(prompt: PromptTemplate): Promise<void> {
   if (isSystemDefaultPrompt(prompt)) {
-    ElMessage.warning('系统自带提示词不允许修改')
+    ElMessage.warning('内置提示词不允许修改')
     return
   }
   try {
@@ -1546,9 +1816,9 @@ async function setPromptDefault(prompt: PromptTemplate): Promise<void> {
     await promptLibraryApi.update(prompt.id, { isDefault: true })
     await refreshPromptLibrary()
     syncPromptSelections()
-    ElMessage.success(`已设为默认：${prompt.name}`)
+    ElMessage.success(`已设为兜底：${formatPromptDisplayName(prompt)}`)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '设置默认提示词失败')
+    ElMessage.error(error instanceof Error ? error.message : '设置兜底提示词失败')
   }
 }
 
@@ -1556,7 +1826,7 @@ async function savePrompt(): Promise<void> {
   if (isEditingPrompt.value && promptForm.id) {
     const editingPrompt = promptLibrary.value.find(prompt => prompt.id === promptForm.id)
     if (editingPrompt && isSystemDefaultPrompt(editingPrompt)) {
-      ElMessage.warning('系统自带提示词不允许修改')
+      ElMessage.warning('内置提示词不允许修改')
       return
     }
   }
@@ -2150,7 +2420,7 @@ const onReset = async () => {
 
 .choice-card {
   width: 100%;
-  align-items: flex-start;
+  align-items: center;
   height: auto;
   min-height: 56px;
   margin: 0;
@@ -2160,6 +2430,12 @@ const onReset = async () => {
   background: rgba(255, 255, 255, 0.7);
   transition: all 0.15s ease;
   white-space: normal;
+}
+
+.choice-card :deep(.el-radio__label) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .choice-card.is-checked {

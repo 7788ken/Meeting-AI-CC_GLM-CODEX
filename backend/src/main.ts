@@ -11,6 +11,7 @@ import { GlmAsrClient } from './modules/transcript/glm-asr.client'
 import type { AsrConfigDto } from './modules/transcript/dto/transcript.dto'
 import { TranscriptStreamService } from './modules/transcript-stream/transcript-stream.service'
 import { DebugErrorService } from './modules/debug-error/debug-error.service'
+import { GlmRateLimiter } from './common/llm/glm-rate-limiter'
 import {
   TranscriptEventSegmentationService,
   TranscriptEventSegmentDTO,
@@ -101,6 +102,7 @@ async function bootstrap() {
   const speechService = app.get(SpeechService)
   const transcriptStreamService = app.get(TranscriptStreamService)
   const debugErrorService = app.get(DebugErrorService)
+  const glmRateLimiter = app.get(GlmRateLimiter)
   const transcriptEventSegmentationService = app.get(TranscriptEventSegmentationService)
   const transcriptEventSegmentationConfigService = app.get(TranscriptEventSegmentationConfigService)
   const transcriptEventSegmentTranslationService = app.get(TranscriptEventSegmentTranslationService)
@@ -454,6 +456,8 @@ async function bootstrap() {
       .slice(2, 10)}`
     let segmentKey: string | undefined
 
+    let durationPending = Number.isFinite(audioDurationMs) && audioDurationMs > 0
+
     for await (const chunk of glmAsrClient.transcribeStream(audioBuffer, {
       language: config.language,
       hotwords: config.hotwords,
@@ -477,12 +481,17 @@ async function bootstrap() {
         segmentKey,
       })
 
+      const durationForEvent = durationPending ? audioDurationMs : undefined
+      if (durationPending) {
+        durationPending = false
+      }
+
       await persistAndBroadcastTranscriptEvent(sessionId, clientId, {
         content: chunk.text,
         isFinal: chunk.isFinal,
         segmentKey,
         asrTimestampMs: Date.now(),
-        audioDurationMs: chunk.isFinal ? audioDurationMs : undefined,
+        audioDurationMs: durationForEvent,
       })
     }
   }
@@ -939,6 +948,12 @@ async function bootstrap() {
     }
     if (transcriptEventSegmentationInFlight.has(sessionId)) {
       transcriptEventSegmentationPending.add(sessionId)
+      return
+    }
+
+    const cooldownMs = glmRateLimiter.getCooldownRemainingMs('segmentation')
+    if (cooldownMs > 0) {
+      scheduleTranscriptEventSegmentationAfter(sessionId, cooldownMs, `cooldown_${input.reason}`)
       return
     }
 

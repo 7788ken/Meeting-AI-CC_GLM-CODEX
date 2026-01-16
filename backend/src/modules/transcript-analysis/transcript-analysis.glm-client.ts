@@ -142,7 +142,7 @@ export class TranscriptAnalysisGlmClient {
     })
 
     if (response.status === 429) {
-      this.glmRateLimiter.onRateLimit(this.readRetryAfterMsFromHeaders(response.headers))
+      this.glmRateLimiter.onRateLimit(this.readRetryAfterMsFromHeaders(response.headers), 'analysis')
     }
 
     if (response.status >= 400) {
@@ -183,10 +183,12 @@ export class TranscriptAnalysisGlmClient {
     let attempt = 0
     while (true) {
       try {
-        return await this.glmRateLimiter.schedule(() =>
-          firstValueFrom(
-            this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
-          )
+        return await this.glmRateLimiter.schedule(
+          () =>
+            firstValueFrom(
+              this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
+            ),
+          { bucket: 'analysis', label: 'transcript_analysis' }
         )
       } catch (error) {
         const status = this.extractStatusCode(error)
@@ -196,7 +198,7 @@ export class TranscriptAnalysisGlmClient {
 
         const retryAfterMs = this.readRetryAfterMs(error)
         const delayMs = this.resolveRetryDelayMs(error, attempt)
-        this.glmRateLimiter.onRateLimit(retryAfterMs ?? delayMs)
+        this.glmRateLimiter.onRateLimit(retryAfterMs ?? delayMs, 'analysis')
         if (attempt >= maxRetries) {
           throw error
         }
@@ -219,14 +221,16 @@ export class TranscriptAnalysisGlmClient {
     let attempt = 0
     while (true) {
       try {
-        return await this.glmRateLimiter.schedule(() =>
-          firstValueFrom(
-            this.httpService.post(input.endpoint, input.requestBody, {
-              headers: input.headers,
-              responseType: 'stream',
-              validateStatus: () => true,
-            })
-          )
+        return await this.glmRateLimiter.schedule(
+          () =>
+            firstValueFrom(
+              this.httpService.post(input.endpoint, input.requestBody, {
+                headers: input.headers,
+                responseType: 'stream',
+                validateStatus: () => true,
+              })
+            ),
+          { bucket: 'analysis', label: 'transcript_analysis_stream' }
         )
       } catch (error) {
         const status = this.extractStatusCode(error)
@@ -236,7 +240,7 @@ export class TranscriptAnalysisGlmClient {
 
         const retryAfterMs = this.readRetryAfterMs(error)
         const delayMs = this.resolveRetryDelayMs(error, attempt)
-        this.glmRateLimiter.onRateLimit(retryAfterMs ?? delayMs)
+        this.glmRateLimiter.onRateLimit(retryAfterMs ?? delayMs, 'analysis')
         if (attempt >= maxRetries) {
           throw error
         }

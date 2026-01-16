@@ -9,6 +9,22 @@ const fallbackDefaults: BackendConfig = {
   glmGlobalMinIntervalMs: 500,
   glmGlobalRateLimitCooldownMs: 2000,
   glmGlobalRateLimitMaxMs: 15000,
+  glmAsrConcurrency: 1,
+  glmAsrMinIntervalMs: 500,
+  glmAsrRateLimitCooldownMs: 2000,
+  glmAsrRateLimitMaxMs: 15000,
+  glmTranscriptEventSegmentConcurrency: 1,
+  glmTranscriptEventSegmentMinIntervalMs: 500,
+  glmTranscriptEventSegmentRateLimitCooldownMs: 2000,
+  glmTranscriptEventSegmentRateLimitMaxMs: 15000,
+  glmTranscriptEventSegmentTranslationConcurrency: 1,
+  glmTranscriptEventSegmentTranslationMinIntervalMs: 500,
+  glmTranscriptEventSegmentTranslationRateLimitCooldownMs: 2000,
+  glmTranscriptEventSegmentTranslationRateLimitMaxMs: 15000,
+  glmTranscriptAnalysisConcurrency: 1,
+  glmTranscriptAnalysisMinIntervalMs: 500,
+  glmTranscriptAnalysisRateLimitCooldownMs: 2000,
+  glmTranscriptAnalysisRateLimitMaxMs: 15000,
   transcriptAutoSplitGapMs: 2500,
   transcriptMaxBufferDurationSoftMs: 30000,
   transcriptMaxBufferDurationHardMs: 50000,
@@ -102,6 +118,102 @@ function normalizeBackendConfig(
     glmGlobalRateLimitMaxMs: normalizeNumberInRange(
       input.glmGlobalRateLimitMaxMs,
       base.glmGlobalRateLimitMaxMs,
+      0,
+      300000
+    ),
+    glmAsrConcurrency: normalizeNumberInRange(
+      input.glmAsrConcurrency,
+      base.glmAsrConcurrency,
+      1,
+      50
+    ),
+    glmAsrMinIntervalMs: normalizeNumberInRange(
+      input.glmAsrMinIntervalMs,
+      base.glmAsrMinIntervalMs,
+      0,
+      60000
+    ),
+    glmAsrRateLimitCooldownMs: normalizeNumberInRange(
+      input.glmAsrRateLimitCooldownMs,
+      base.glmAsrRateLimitCooldownMs,
+      0,
+      120000
+    ),
+    glmAsrRateLimitMaxMs: normalizeNumberInRange(
+      input.glmAsrRateLimitMaxMs,
+      base.glmAsrRateLimitMaxMs,
+      0,
+      300000
+    ),
+    glmTranscriptEventSegmentConcurrency: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentConcurrency,
+      base.glmTranscriptEventSegmentConcurrency,
+      1,
+      50
+    ),
+    glmTranscriptEventSegmentMinIntervalMs: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentMinIntervalMs,
+      base.glmTranscriptEventSegmentMinIntervalMs,
+      0,
+      60000
+    ),
+    glmTranscriptEventSegmentRateLimitCooldownMs: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentRateLimitCooldownMs,
+      base.glmTranscriptEventSegmentRateLimitCooldownMs,
+      0,
+      120000
+    ),
+    glmTranscriptEventSegmentRateLimitMaxMs: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentRateLimitMaxMs,
+      base.glmTranscriptEventSegmentRateLimitMaxMs,
+      0,
+      300000
+    ),
+    glmTranscriptEventSegmentTranslationConcurrency: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentTranslationConcurrency,
+      base.glmTranscriptEventSegmentTranslationConcurrency,
+      1,
+      50
+    ),
+    glmTranscriptEventSegmentTranslationMinIntervalMs: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentTranslationMinIntervalMs,
+      base.glmTranscriptEventSegmentTranslationMinIntervalMs,
+      0,
+      60000
+    ),
+    glmTranscriptEventSegmentTranslationRateLimitCooldownMs: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentTranslationRateLimitCooldownMs,
+      base.glmTranscriptEventSegmentTranslationRateLimitCooldownMs,
+      0,
+      120000
+    ),
+    glmTranscriptEventSegmentTranslationRateLimitMaxMs: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentTranslationRateLimitMaxMs,
+      base.glmTranscriptEventSegmentTranslationRateLimitMaxMs,
+      0,
+      300000
+    ),
+    glmTranscriptAnalysisConcurrency: normalizeNumberInRange(
+      input.glmTranscriptAnalysisConcurrency,
+      base.glmTranscriptAnalysisConcurrency,
+      1,
+      50
+    ),
+    glmTranscriptAnalysisMinIntervalMs: normalizeNumberInRange(
+      input.glmTranscriptAnalysisMinIntervalMs,
+      base.glmTranscriptAnalysisMinIntervalMs,
+      0,
+      60000
+    ),
+    glmTranscriptAnalysisRateLimitCooldownMs: normalizeNumberInRange(
+      input.glmTranscriptAnalysisRateLimitCooldownMs,
+      base.glmTranscriptAnalysisRateLimitCooldownMs,
+      0,
+      120000
+    ),
+    glmTranscriptAnalysisRateLimitMaxMs: normalizeNumberInRange(
+      input.glmTranscriptAnalysisRateLimitMaxMs,
+      base.glmTranscriptAnalysisRateLimitMaxMs,
       0,
       300000
     ),

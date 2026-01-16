@@ -80,6 +80,7 @@ const props = defineProps<{
   progress?: TranscriptEventSegmentationProgressData | null
   highlightedSegmentId?: string | null
   translationEnabled?: boolean
+  displayMode?: 'source' | 'translated'
 }>()
 
 const emit = defineEmits<{
@@ -103,7 +104,8 @@ const isSegmentHighlighted = (segment: TranscriptEventSegment): boolean => {
 
 function getDisplayContent(segment: TranscriptEventSegment): string {
   const translationEnabled = props.translationEnabled === true
-  if (!translationEnabled) return segment.content
+  const displayMode = props.displayMode ?? (translationEnabled ? 'translated' : 'source')
+  if (!translationEnabled || displayMode !== 'translated') return segment.content
   const translated = typeof segment.translatedContent === 'string' ? segment.translatedContent.trim() : ''
   return translated ? translated : segment.content
 }

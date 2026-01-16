@@ -199,10 +199,12 @@ export class TranscriptEventSegmentationGlmClient {
     let attempt = 0
     while (true) {
       try {
-        return await this.glmRateLimiter.schedule(() =>
-          firstValueFrom(
-            this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
-          )
+        return await this.glmRateLimiter.schedule(
+          () =>
+            firstValueFrom(
+              this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
+            ),
+          { bucket: 'segmentation', label: 'transcript_event_segmentation' }
         )
       } catch (error) {
         const status = this.extractStatusCode(error)
@@ -212,7 +214,7 @@ export class TranscriptEventSegmentationGlmClient {
 
         const retryAfterMs = this.readRetryAfterMs(error)
         const delayMs = this.resolveRetryDelayMs(error, attempt)
-        this.glmRateLimiter.onRateLimit(retryAfterMs ?? delayMs)
+        this.glmRateLimiter.onRateLimit(retryAfterMs ?? delayMs, 'segmentation')
         if (attempt >= maxRetries) {
           throw error
         }

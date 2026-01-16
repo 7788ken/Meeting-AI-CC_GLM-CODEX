@@ -1,4 +1,16 @@
-import { BadRequestException, Body, Controller, Get, Header, Param, Post, Put, Sse, UseGuards } from '@nestjs/common'
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Header,
+  Param,
+  Post,
+  Put,
+  Query,
+  Sse,
+  UseGuards,
+} from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Observable } from 'rxjs'
 import { Public } from '../auth/decorators/public.decorator'
@@ -12,6 +24,7 @@ import {
   TranscriptAnalysisService,
   type TranscriptSummaryDTO,
   type TranscriptSegmentAnalysisDTO,
+  type TranscriptSegmentAnalysisStreamEvent,
   type TranscriptSummaryStreamEvent,
 } from './transcript-analysis.service'
 
@@ -143,6 +156,52 @@ export class TranscriptAnalysisController {
         try {
           for await (const evt of this.transcriptAnalysisService.generateSummaryStream({
             sessionId: normalized,
+          })) {
+            subscriber.next({ type: evt.type, data: evt.data })
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          subscriber.next({ type: 'server_error', data: { message } })
+        } finally {
+          clearInterval(heartbeat)
+          subscriber.complete()
+        }
+      })()
+    })
+  }
+
+  @Public()
+  @Sse('session/:sessionId/segment/:segmentId/analysis/stream')
+  @Header('Cache-Control', 'no-cache')
+  @Header('X-Accel-Buffering', 'no')
+  @ApiOperation({ summary: '对会话指定语句生成 Markdown 针对性分析（SSE 流式）' })
+  @ApiResponse({ status: 200 })
+  generateSegmentAnalysisStream(
+    @Param('sessionId') sessionId: string,
+    @Param('segmentId') segmentId: string,
+    @Query('force') force?: string
+  ): Observable<{ type?: string; data: TranscriptSegmentAnalysisStreamEvent['data'] }> {
+    const normalizedSessionId = sessionId?.trim()
+    const normalizedSegmentId = segmentId?.trim()
+    if (!normalizedSessionId) {
+      throw new BadRequestException('sessionId is required')
+    }
+    if (!normalizedSegmentId) {
+      throw new BadRequestException('segmentId is required')
+    }
+
+    return new Observable(subscriber => {
+      const heartbeat = setInterval(() => {
+        subscriber.next({ type: 'ping', data: '' })
+      }, 15_000)
+
+      void (async () => {
+        try {
+          const forceReload = typeof force === 'string' && ['1', 'true', 'yes'].includes(force)
+          for await (const evt of this.transcriptAnalysisService.generateSegmentAnalysisStream({
+            sessionId: normalizedSessionId,
+            segmentId: normalizedSegmentId,
+            force: forceReload,
           })) {
             subscriber.next({ type: evt.type, data: evt.data })
           }

@@ -68,16 +68,18 @@ export class GlmAsrClient {
     let response: { data: NodeJS.ReadableStream; status: number; headers: Record<string, any> }
 
     try {
-      response = await this.glmRateLimiter.schedule(() =>
-        firstValueFrom(
-          this.httpService.post(this.endpoint, requestBody.body, {
-            headers,
-            responseType: 'stream',
-            maxBodyLength: Infinity,
-            maxContentLength: Infinity,
-            validateStatus: () => true,
-          })
-        )
+      response = await this.glmRateLimiter.schedule(
+        () =>
+          firstValueFrom(
+            this.httpService.post(this.endpoint, requestBody.body, {
+              headers,
+              responseType: 'stream',
+              maxBodyLength: Infinity,
+              maxContentLength: Infinity,
+              validateStatus: () => true,
+            })
+          ),
+        { bucket: 'asr', label: 'glm_asr' }
       )
     } catch (error) {
       this.logger.error(
@@ -90,7 +92,7 @@ export class GlmAsrClient {
     }
 
     if (response.status === 429) {
-      this.glmRateLimiter.onRateLimit(this.readRetryAfterMs(response.headers))
+      this.glmRateLimiter.onRateLimit(this.readRetryAfterMs(response.headers), 'asr')
     }
 
     if (response.status >= 400) {

@@ -63,6 +63,11 @@ export type TranscriptEventSegmentUpsertData = {
   sessionId: string
   sequence: number
   content: string
+  translatedContent?: string
+  translationStatus?: 'completed' | 'failed'
+  translationError?: string
+  translationModel?: string
+  translationGeneratedAt?: string
   sourceStartEventIndex: number
   sourceEndEventIndex: number
   sourceStartEventIndexExact?: number

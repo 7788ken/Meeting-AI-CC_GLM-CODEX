@@ -11,13 +11,15 @@ import {
   TranscriptEventSegmentationService,
   TranscriptEventSegmentsSnapshotDTO,
 } from './transcript-event-segmentation.service'
+import { TranscriptEventSegmentTranslationService } from './transcript-event-segment-translation.service'
 
 @ApiTags('transcript-event-segmentation')
 @Controller('transcript-event-segmentation')
 export class TranscriptEventSegmentationController {
   constructor(
     private readonly transcriptEventSegmentationService: TranscriptEventSegmentationService,
-    private readonly transcriptEventSegmentationConfigService: TranscriptEventSegmentationConfigService
+    private readonly transcriptEventSegmentationConfigService: TranscriptEventSegmentationConfigService,
+    private readonly transcriptEventSegmentTranslationService: TranscriptEventSegmentTranslationService
   ) {}
 
   @Public()
@@ -31,7 +33,9 @@ export class TranscriptEventSegmentationController {
     if (!normalized) {
       throw new BadRequestException('sessionId is required')
     }
-    return this.transcriptEventSegmentationService.getSnapshot(normalized)
+    const snapshot = await this.transcriptEventSegmentationService.getSnapshot(normalized)
+    void this.transcriptEventSegmentTranslationService.translateMissingSegments(normalized)
+    return snapshot
   }
 
   @Public()

@@ -137,6 +137,22 @@ export interface BackendConfig {
   glmGlobalMinIntervalMs: number
   glmGlobalRateLimitCooldownMs: number
   glmGlobalRateLimitMaxMs: number
+  glmAsrConcurrency: number
+  glmAsrMinIntervalMs: number
+  glmAsrRateLimitCooldownMs: number
+  glmAsrRateLimitMaxMs: number
+  glmTranscriptEventSegmentConcurrency: number
+  glmTranscriptEventSegmentMinIntervalMs: number
+  glmTranscriptEventSegmentRateLimitCooldownMs: number
+  glmTranscriptEventSegmentRateLimitMaxMs: number
+  glmTranscriptEventSegmentTranslationConcurrency: number
+  glmTranscriptEventSegmentTranslationMinIntervalMs: number
+  glmTranscriptEventSegmentTranslationRateLimitCooldownMs: number
+  glmTranscriptEventSegmentTranslationRateLimitMaxMs: number
+  glmTranscriptAnalysisConcurrency: number
+  glmTranscriptAnalysisMinIntervalMs: number
+  glmTranscriptAnalysisRateLimitCooldownMs: number
+  glmTranscriptAnalysisRateLimitMaxMs: number
   transcriptAutoSplitGapMs: number
   transcriptMaxBufferDurationSoftMs: number
   transcriptMaxBufferDurationHardMs: number
@@ -174,6 +190,7 @@ export interface AppConfigRemark {
 
 export interface TranscriptSummary {
   sessionId: string
+  promptName?: string
   markdown: string
   model: string
   generatedAt: string
@@ -188,6 +205,7 @@ export interface TranscriptSegmentAnalysis {
   sessionId: string
   segmentId: string
   segmentSequence: number
+  promptName?: string
   markdown: string
   model: string
   generatedAt: string

@@ -30,17 +30,17 @@
 
           <el-form-item label="音频质量">
             <el-radio-group v-model="audioQuality">
-              <el-radio-button label="low">低</el-radio-button>
-              <el-radio-button label="medium">中</el-radio-button>
-              <el-radio-button label="high">高</el-radio-button>
+              <el-radio-button value="low">低</el-radio-button>
+              <el-radio-button value="medium">中</el-radio-button>
+              <el-radio-button value="high">高</el-radio-button>
             </el-radio-group>
           </el-form-item>
 
           <el-form-item label="录音来源">
             <el-radio-group v-model="audioCaptureModeProxy">
-              <el-radio-button label="mic">仅麦克风</el-radio-button>
-              <el-radio-button label="tab">仅标签页音频</el-radio-button>
-              <el-radio-button label="mix">麦克风+标签页音频</el-radio-button>
+              <el-radio-button value="mic">仅麦克风</el-radio-button>
+              <el-radio-button value="tab">仅标签页音频</el-radio-button>
+              <el-radio-button value="mix">麦克风+标签页音频</el-radio-button>
             </el-radio-group>
           </el-form-item>
         </el-form>
@@ -151,9 +151,9 @@
         <el-form label-width="120px">
           <el-form-item label="主题">
             <el-radio-group v-model="theme">
-              <el-radio-button label="light">浅色</el-radio-button>
-              <el-radio-button label="dark">深色</el-radio-button>
-              <el-radio-button label="auto">跟随系统</el-radio-button>
+              <el-radio-button value="light">浅色</el-radio-button>
+              <el-radio-button value="dark">深色</el-radio-button>
+              <el-radio-button value="auto">跟随系统</el-radio-button>
             </el-radio-group>
           </el-form-item>
 

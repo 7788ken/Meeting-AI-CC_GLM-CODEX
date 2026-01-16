@@ -413,153 +413,64 @@ export class TranscriptEventSegmentationService {
     const promptSystemForLog = truncateForLog(prompt.system)
     const promptUserForLog = truncateForLog(prompt.user)
 
-    if (this.glmRateLimiter.isInCooldown()) {
-      const reason = 'GLM 限流冷却中，跳过调用'
-      emitProgress('failed', reason)
-      void this.debugErrorService.recordError({
-        sessionId: input.sessionId,
-        level: 'warn',
-        message: `Transcript event segmentation failed: ${reason}`,
-        source: 'glm-api',
-        category: 'transcript-event-segmentation',
-        error: new Error(reason),
-        context: {
-          model: input.modelName,
-          promptLength,
-          revision: input.sourceRevision,
+    try {
+      const raw = await this.glmClient.generateStructuredJson(prompt)
+      llmRaw = raw
+      emitProgress('parsing')
+      const parsed = parseTranscriptEventSegmentJson(raw)
+
+      const candidate = typeof parsed.nextSentence === 'string' ? parsed.nextSentence.trim() : ''
+      const normalizedCandidate = normalizeForPunctuationOnlyCompare(candidate)
+      const normalizedExtracted = normalizeForPunctuationOnlyCompare(extractedText)
+
+      if (
+        candidate &&
+        normalizedCandidate &&
+        normalizedExtracted.startsWith(normalizedCandidate) &&
+        !shouldRejectShortPrefix(candidate)
+      ) {
+        nextSentence = candidate
+      } else {
+        const retryPrompt = buildTranscriptEventSegmentationPrompt({
+          sessionId: input.sessionId,
+          previousSentence: input.previousSentence,
           startEventIndex: input.sourceStartEventIndex,
           endEventIndex: input.sourceEndEventIndex,
-          extractedText: extractedTrimmed,
-          promptSystem: promptSystemForLog,
-          promptUser: promptUserForLog,
-        },
-        occurredAt: new Date(),
-      })
-      return null
-    } else {
-      try {
-        const raw = await this.glmClient.generateStructuredJson(prompt)
-        llmRaw = raw
-        emitProgress('parsing')
-        const parsed = parseTranscriptEventSegmentJson(raw)
+          events: input.events,
+          extractedText,
+          strictEcho: true,
+          systemPrompt: this.configService.getConfig().systemPrompt,
+          strictSystemPrompt: this.configService.getConfig().strictSystemPrompt,
+        })
+        const retryRaw = await this.glmClient.generateStructuredJson(retryPrompt)
+        llmRetryRaw = retryRaw
+        const retryParsed = parseTranscriptEventSegmentJson(retryRaw)
+        const retryCandidate =
+          typeof retryParsed.nextSentence === 'string' ? retryParsed.nextSentence.trim() : ''
 
-        const candidate = typeof parsed.nextSentence === 'string' ? parsed.nextSentence.trim() : ''
-        const normalizedCandidate = normalizeForPunctuationOnlyCompare(candidate)
-        const normalizedExtracted = normalizeForPunctuationOnlyCompare(extractedText)
-
+        const normalizedRetryCandidate = normalizeForPunctuationOnlyCompare(retryCandidate)
         if (
-          candidate &&
-          normalizedCandidate &&
-          normalizedExtracted.startsWith(normalizedCandidate) &&
-          !shouldRejectShortPrefix(candidate)
+          retryCandidate &&
+          normalizedRetryCandidate &&
+          normalizeForPunctuationOnlyCompare(extractedTrimmed).startsWith(
+            normalizedRetryCandidate
+          ) &&
+          !shouldRejectShortPrefix(retryCandidate)
         ) {
-          nextSentence = candidate
+          nextSentence = retryCandidate
         } else {
-          const retryPrompt = buildTranscriptEventSegmentationPrompt({
-            sessionId: input.sessionId,
-            previousSentence: input.previousSentence,
-            startEventIndex: input.sourceStartEventIndex,
-            endEventIndex: input.sourceEndEventIndex,
-            events: input.events,
-            extractedText,
-            strictEcho: true,
-            systemPrompt: this.configService.getConfig().systemPrompt,
-            strictSystemPrompt: this.configService.getConfig().strictSystemPrompt,
-          })
-          if (this.glmRateLimiter.isInCooldown()) {
-            const reason = 'GLM 限流冷却中，跳过严格重试'
+          const reason = 'LLM 输出未能满足约束'
+          if (!allowDegradeOnStrictFailure) {
             emitProgress('failed', reason)
-            void this.debugErrorService.recordError({
-              sessionId: input.sessionId,
-              level: 'warn',
-              message: 'Transcript event segmentation failed: rate limited cooldown',
-              source: 'glm-api',
-              category: 'transcript-event-segmentation',
-              error: new Error(reason),
-              context: {
-                model: input.modelName,
-                promptLength,
-                revision: input.sourceRevision,
-                startEventIndex: input.sourceStartEventIndex,
-                endEventIndex: input.sourceEndEventIndex,
-                extractedText: extractedTrimmed,
-                llmCandidate: candidate,
-                promptSystem: promptSystemForLog,
-                promptUser: promptUserForLog,
-              },
-              occurredAt: new Date(),
-            })
-            return null
-          } else {
-            const retryRaw = await this.glmClient.generateStructuredJson(retryPrompt)
-            llmRetryRaw = retryRaw
-            const retryParsed = parseTranscriptEventSegmentJson(retryRaw)
-            const retryCandidate =
-              typeof retryParsed.nextSentence === 'string' ? retryParsed.nextSentence.trim() : ''
-
-            const normalizedRetryCandidate = normalizeForPunctuationOnlyCompare(retryCandidate)
-            if (
-              retryCandidate &&
-              normalizedRetryCandidate &&
-              normalizeForPunctuationOnlyCompare(extractedTrimmed).startsWith(
-                normalizedRetryCandidate
-              ) &&
-              !shouldRejectShortPrefix(retryCandidate)
-            ) {
-              nextSentence = retryCandidate
-            } else {
-              const reason = 'LLM 输出未能满足约束'
-              if (!allowDegradeOnStrictFailure) {
-                emitProgress('failed', reason)
-              }
-
-              void this.debugErrorService.recordError({
-                sessionId: input.sessionId,
-                level: 'warn',
-                message: 'Transcript event segmentation failed: LLM output mismatch',
-                source: 'glm-api',
-                category: 'transcript-event-segmentation',
-                error: new Error('LLM 输出未能满足“只加标点不改字/逐字一致”的约束'),
-                context: {
-                  model: input.modelName,
-                  promptLength,
-                  revision: input.sourceRevision,
-                  startEventIndex: input.sourceStartEventIndex,
-                  endEventIndex: input.sourceEndEventIndex,
-                  extractedText: extractedTrimmed,
-                  llmCandidate: candidate,
-                  llmRaw: truncateForLog(llmRaw),
-                  llmRetryCandidate: retryCandidate,
-                  llmRetryRaw: truncateForLog(llmRetryRaw),
-                  promptSystem: promptSystemForLog,
-                  promptUser: promptUserForLog,
-                },
-                occurredAt: new Date(),
-              })
-              if (!allowDegradeOnStrictFailure) {
-                return null
-              }
-
-              persistStatus = 'failed'
-              persistError = 'LLM 输出未能满足约束，已降级使用 extractedText'
-              nextSentence = extractedTrimmed
-              emitProgress('persisting', '已降级')
-            }
           }
-        }
-      } catch (error) {
-        const glmErrorContext = this.buildGlmErrorContext(error)
-        const status = glmErrorContext?.status
-        if (status === 429) {
-          const reason = 'GLM 请求过多(429)'
-          emitProgress('failed', reason)
+
           void this.debugErrorService.recordError({
             sessionId: input.sessionId,
             level: 'warn',
-            message: `Transcript event segmentation failed: ${reason}`,
+            message: 'Transcript event segmentation failed: LLM output mismatch',
             source: 'glm-api',
             category: 'transcript-event-segmentation',
-            error: error instanceof Error ? error : new Error(reason),
+            error: new Error('LLM 输出未能满足“只加标点不改字/逐字一致”的约束'),
             context: {
               model: input.modelName,
               promptLength,
@@ -567,41 +478,79 @@ export class TranscriptEventSegmentationService {
               startEventIndex: input.sourceStartEventIndex,
               endEventIndex: input.sourceEndEventIndex,
               extractedText: extractedTrimmed,
+              llmCandidate: candidate,
+              llmRaw: truncateForLog(llmRaw),
+              llmRetryCandidate: retryCandidate,
+              llmRetryRaw: truncateForLog(llmRetryRaw),
               promptSystem: promptSystemForLog,
               promptUser: promptUserForLog,
-              ...(glmErrorContext ? { glm: glmErrorContext } : {}),
             },
             occurredAt: new Date(),
           })
-          return null
-        } else {
-          const message = error instanceof Error ? error.message : String(error)
-          this.logger.warn(
-            `Transcript event segmentation failed, sessionId=${input.sessionId}: ${message}`
-          )
-          emitProgress('failed', message)
-          void this.debugErrorService.recordError({
-            sessionId: input.sessionId,
-            level: 'error',
-            message: `Transcript event segmentation failed: ${message}`,
-            source: 'glm-api',
-            category: 'transcript-event-segmentation',
-            error,
-            context: {
-              model: input.modelName,
-              promptLength,
-              revision: input.sourceRevision,
-              startEventIndex: input.sourceStartEventIndex,
-              endEventIndex: input.sourceEndEventIndex,
-              extractedText: extractedTrimmed,
-              promptSystem: promptSystemForLog,
-              promptUser: promptUserForLog,
-              ...(glmErrorContext ? { glm: glmErrorContext } : {}),
-            },
-            occurredAt: new Date(),
-          })
-          return null
+          if (!allowDegradeOnStrictFailure) {
+            return null
+          }
+
+          persistStatus = 'failed'
+          persistError = 'LLM 输出未能满足约束，已降级使用 extractedText'
+          nextSentence = extractedTrimmed
+          emitProgress('persisting', '已降级')
         }
+      }
+    } catch (error) {
+      const glmErrorContext = this.buildGlmErrorContext(error)
+      const status = glmErrorContext?.status
+      if (status === 429) {
+        const reason = 'GLM 请求过多(429)'
+        emitProgress('failed', reason)
+        void this.debugErrorService.recordError({
+          sessionId: input.sessionId,
+          level: 'warn',
+          message: `Transcript event segmentation failed: ${reason}`,
+          source: 'glm-api',
+          category: 'transcript-event-segmentation',
+          error: error instanceof Error ? error : new Error(reason),
+          context: {
+            model: input.modelName,
+            promptLength,
+            revision: input.sourceRevision,
+            startEventIndex: input.sourceStartEventIndex,
+            endEventIndex: input.sourceEndEventIndex,
+            extractedText: extractedTrimmed,
+            promptSystem: promptSystemForLog,
+            promptUser: promptUserForLog,
+            ...(glmErrorContext ? { glm: glmErrorContext } : {}),
+          },
+          occurredAt: new Date(),
+        })
+        return null
+      } else {
+        const message = error instanceof Error ? error.message : String(error)
+        this.logger.warn(
+          `Transcript event segmentation failed, sessionId=${input.sessionId}: ${message}`
+        )
+        emitProgress('failed', message)
+        void this.debugErrorService.recordError({
+          sessionId: input.sessionId,
+          level: 'error',
+          message: `Transcript event segmentation failed: ${message}`,
+          source: 'glm-api',
+          category: 'transcript-event-segmentation',
+          error,
+          context: {
+            model: input.modelName,
+            promptLength,
+            revision: input.sourceRevision,
+            startEventIndex: input.sourceStartEventIndex,
+            endEventIndex: input.sourceEndEventIndex,
+            extractedText: extractedTrimmed,
+            promptSystem: promptSystemForLog,
+            promptUser: promptUserForLog,
+            ...(glmErrorContext ? { glm: glmErrorContext } : {}),
+          },
+          occurredAt: new Date(),
+        })
+        return null
       }
     }
 
