@@ -172,10 +172,42 @@ async function bootstrap() {
 
   const transcriptEventSegmentationTimerBySession = new Map<string, ReturnType<typeof setTimeout>>()
   const transcriptEventSegmentationInFlight = new Set<string>()
-  const transcriptEventSegmentationPending = new Set<string>()
   const transcriptEventSegmentationLastRunAtBySession = new Map<string, number>()
+  const transcriptEventSegmentationLatestRevisionBySession = new Map<string, number>()
+  const transcriptEventSegmentationPendingBySession = new Map<
+    string,
+    {
+      sessionId: string
+      revision: number
+      enqueuedAt: number
+      reason: string
+      force: boolean
+    }
+  >()
+  const transcriptEventSegmentationQueue: string[] = []
+  const transcriptEventSegmentationQueuedSessions = new Set<string>()
+  let transcriptEventSegmentationGlobalInFlight = 0
+  let transcriptEventSegmentationCooldownTimer: ReturnType<typeof setTimeout> | null = null
   const getSegmentationConfig = () => transcriptEventSegmentationConfigService.getConfig()
   const getSegmentationIntervalMs = () => getSegmentationConfig().intervalMs
+  const getSegmentationMaxStalenessMs = () =>
+    readNumberFromConfig(
+      'TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS',
+      20000,
+      value => value >= 1000 && value <= 300000
+    )
+  const getSegmentationMaxPendingSessions = () =>
+    readNumberFromConfig(
+      'TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS',
+      300,
+      value => value >= 1 && value <= 5000
+    )
+  const getSegmentationConcurrency = () =>
+    readNumberFromConfig(
+      'GLM_TRANSCRIPT_EVENT_SEGMENT_CONCURRENCY',
+      1,
+      value => value >= 1 && value <= 50
+    )
   const shouldTriggerEventSegmentationOnStopTranscribe = () =>
     getSegmentationConfig().triggerOnStopTranscribe
   const shouldDebugLogUtterances = () =>
@@ -848,6 +880,8 @@ async function bootstrap() {
         },
       })
 
+      transcriptEventSegmentationLatestRevisionBySession.set(sessionId, result.revision)
+
       if (shouldDebugLogUtterances() && input.isFinal) {
         wsLogger.debug(
           `[TranscriptEvent] sessionId=${sessionId}, clientId=${clientId}, eventIndex=${result.event.eventIndex}, ` +
@@ -873,6 +907,160 @@ async function bootstrap() {
     }
   }
 
+  function enqueueTranscriptEventSegmentation(input: {
+    sessionId: string
+    reason: string
+    force: boolean
+    revision?: number
+  }): void {
+    const sessionId = input.sessionId.trim()
+    if (!sessionId) return
+    if (!rawEventStreamEnabled) return
+    if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) return
+
+    const revision =
+      typeof input.revision === 'number'
+        ? Math.max(0, Math.floor(input.revision))
+        : transcriptEventSegmentationLatestRevisionBySession.get(sessionId) ?? 0
+
+    const existing = transcriptEventSegmentationPendingBySession.get(sessionId)
+    const shouldUpdateMeta = !existing || input.force || revision >= existing.revision
+    const next = {
+      sessionId,
+      revision: existing ? Math.max(existing.revision, revision) : revision,
+      enqueuedAt: shouldUpdateMeta ? Date.now() : existing!.enqueuedAt,
+      reason: shouldUpdateMeta ? input.reason : existing!.reason,
+      force: existing ? existing.force || input.force : input.force,
+    }
+
+    transcriptEventSegmentationPendingBySession.set(sessionId, next)
+
+    if (
+      !transcriptEventSegmentationInFlight.has(sessionId) &&
+      !transcriptEventSegmentationQueuedSessions.has(sessionId)
+    ) {
+      transcriptEventSegmentationQueue.push(sessionId)
+      transcriptEventSegmentationQueuedSessions.add(sessionId)
+    }
+
+    enforceSegmentationQueueLimit()
+    pumpTranscriptEventSegmentationQueue()
+  }
+
+  function enforceSegmentationQueueLimit(): void {
+    const maxPending = getSegmentationMaxPendingSessions()
+    if (transcriptEventSegmentationPendingBySession.size <= maxPending) return
+
+    let dropped: string | null = null
+    while (transcriptEventSegmentationQueue.length) {
+      const candidate = transcriptEventSegmentationQueue.shift()!
+      transcriptEventSegmentationQueuedSessions.delete(candidate)
+      if (!transcriptEventSegmentationPendingBySession.has(candidate)) continue
+      transcriptEventSegmentationPendingBySession.delete(candidate)
+      dropped = candidate
+      break
+    }
+
+    if (!dropped) {
+      const iterator = transcriptEventSegmentationPendingBySession.keys()
+      const fallback = iterator.next().value as string | undefined
+      if (fallback) {
+        transcriptEventSegmentationPendingBySession.delete(fallback)
+        transcriptEventSegmentationQueuedSessions.delete(fallback)
+        dropped = fallback
+      }
+    }
+
+    if (dropped) {
+      wsLogger.warn(
+        `Transcript event segmentation pending overflow, dropped sessionId=${dropped}`
+      )
+    }
+  }
+
+  function scheduleSegmentationCooldown(delayMs: number): void {
+    const delay = Math.max(0, Math.floor(delayMs))
+    if (transcriptEventSegmentationCooldownTimer) {
+      clearTimeout(transcriptEventSegmentationCooldownTimer)
+    }
+    transcriptEventSegmentationCooldownTimer = setTimeout(() => {
+      transcriptEventSegmentationCooldownTimer = null
+      pumpTranscriptEventSegmentationQueue()
+    }, delay)
+  }
+
+  function dequeueTranscriptEventSegmentationSession(): string | null {
+    while (transcriptEventSegmentationQueue.length) {
+      const sessionId = transcriptEventSegmentationQueue.shift()!
+      transcriptEventSegmentationQueuedSessions.delete(sessionId)
+      if (transcriptEventSegmentationPendingBySession.has(sessionId)) {
+        return sessionId
+      }
+    }
+    return null
+  }
+
+  function pumpTranscriptEventSegmentationQueue(): void {
+    if (transcriptEventSegmentationCooldownTimer) return
+    const maxInFlight = getSegmentationConcurrency()
+    if (transcriptEventSegmentationGlobalInFlight >= maxInFlight) return
+
+    const cooldownMs = glmRateLimiter.getCooldownRemainingMs('segmentation')
+    if (cooldownMs > 0) {
+      scheduleSegmentationCooldown(cooldownMs)
+      return
+    }
+
+    while (transcriptEventSegmentationGlobalInFlight < maxInFlight) {
+      const sessionId = dequeueTranscriptEventSegmentationSession()
+      if (!sessionId) return
+      if (transcriptEventSegmentationInFlight.has(sessionId)) {
+        if (!transcriptEventSegmentationQueuedSessions.has(sessionId)) {
+          transcriptEventSegmentationQueue.push(sessionId)
+          transcriptEventSegmentationQueuedSessions.add(sessionId)
+        }
+        return
+      }
+      const pending = transcriptEventSegmentationPendingBySession.get(sessionId)
+      if (!pending) {
+        continue
+      }
+      const maxStalenessMs = getSegmentationMaxStalenessMs()
+      if (maxStalenessMs > 0 && Date.now() - pending.enqueuedAt > maxStalenessMs) {
+        transcriptEventSegmentationPendingBySession.delete(sessionId)
+        wsLogger.warn(
+          `Transcript event segmentation pending stale, dropped sessionId=${sessionId}`
+        )
+        continue
+      }
+      transcriptEventSegmentationPendingBySession.delete(sessionId)
+      startTranscriptEventSegmentation(sessionId, pending)
+    }
+  }
+
+  function startTranscriptEventSegmentation(
+    sessionId: string,
+    input: { force: boolean; reason: string }
+  ): void {
+    transcriptEventSegmentationInFlight.add(sessionId)
+    transcriptEventSegmentationGlobalInFlight += 1
+    void runTranscriptEventSegmentation(sessionId, input).finally(() => {
+      transcriptEventSegmentationInFlight.delete(sessionId)
+      transcriptEventSegmentationGlobalInFlight = Math.max(
+        0,
+        transcriptEventSegmentationGlobalInFlight - 1
+      )
+      if (
+        transcriptEventSegmentationPendingBySession.has(sessionId) &&
+        !transcriptEventSegmentationQueuedSessions.has(sessionId)
+      ) {
+        transcriptEventSegmentationQueue.push(sessionId)
+        transcriptEventSegmentationQueuedSessions.add(sessionId)
+      }
+      pumpTranscriptEventSegmentationQueue()
+    })
+  }
+
   function scheduleTranscriptEventSegmentationAfter(
     sessionId: string,
     delayMs: number,
@@ -889,7 +1077,7 @@ async function bootstrap() {
     const timer = setTimeout(
       () => {
         transcriptEventSegmentationTimerBySession.delete(sessionId)
-        void runTranscriptEventSegmentation(sessionId, { force: false, reason })
+        enqueueTranscriptEventSegmentation({ sessionId, reason, force: false })
       },
       Math.max(0, delayMs)
     )
@@ -902,7 +1090,11 @@ async function bootstrap() {
     if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) return
     const intervalMs = getSegmentationIntervalMs()
     if (!intervalMs || intervalMs <= 0) {
-      void runTranscriptEventSegmentation(sessionId, { force: false, reason: 'interval_disabled' })
+      enqueueTranscriptEventSegmentation({
+        sessionId,
+        reason: 'interval_disabled',
+        force: false,
+      })
       return
     }
 
@@ -930,7 +1122,7 @@ async function bootstrap() {
       transcriptEventSegmentationTimerBySession.delete(sessionId)
     }
 
-    void runTranscriptEventSegmentation(sessionId, { force: true, reason })
+    enqueueTranscriptEventSegmentation({ sessionId, reason, force: true })
   }
 
   function normalizeTranscriptContent(value: string): string | null {
@@ -943,23 +1135,11 @@ async function bootstrap() {
     sessionId: string,
     input: { force: boolean; reason: string }
   ): Promise<void> {
-    if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) {
-      return
-    }
-    if (transcriptEventSegmentationInFlight.has(sessionId)) {
-      transcriptEventSegmentationPending.add(sessionId)
-      return
-    }
-
-    const cooldownMs = glmRateLimiter.getCooldownRemainingMs('segmentation')
-    if (cooldownMs > 0) {
-      scheduleTranscriptEventSegmentationAfter(sessionId, cooldownMs, `cooldown_${input.reason}`)
-      return
-    }
-
-    transcriptEventSegmentationInFlight.add(sessionId)
-    transcriptEventSegmentationLastRunAtBySession.set(sessionId, Date.now())
     try {
+      if (transcriptEventSegmentationService.isRebuildInFlight(sessionId)) {
+        return
+      }
+      transcriptEventSegmentationLastRunAtBySession.set(sessionId, Date.now())
       const maxSegmentsPerRun = readNumberFromConfig(
         'TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN',
         8,
@@ -979,11 +1159,6 @@ async function bootstrap() {
           error instanceof Error ? error.message : String(error)
         }`
       )
-    } finally {
-      transcriptEventSegmentationInFlight.delete(sessionId)
-      if (transcriptEventSegmentationPending.delete(sessionId)) {
-        void runTranscriptEventSegmentation(sessionId, { force: false, reason: 'pending' })
-      }
     }
   }
 

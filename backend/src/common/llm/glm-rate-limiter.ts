@@ -76,32 +76,22 @@ export class GlmRateLimiter {
     options?: { bucket?: GlmRateLimiterBucket; label?: string }
   ): Promise<T> {
     const bucket = options?.bucket ?? 'global'
-    const state = this.getBucketState(bucket)
-    return new Promise<T>((resolve, reject) => {
-      state.queue.push({ run, resolve, reject, enqueuedAt: Date.now(), label: options?.label })
-      this.pump(bucket)
-    })
+    if (bucket === 'global') {
+      return this.scheduleInBucket(bucket, run, options?.label)
+    }
+
+    return this.scheduleInBucket(
+      'global',
+      () => this.scheduleInBucket(bucket, run, options?.label),
+      options?.label ? `global:${options.label}` : undefined
+    )
   }
 
   onRateLimit(retryAfterMs?: number | null, bucket: GlmRateLimiterBucket = 'global'): void {
-    const state = this.getBucketState(bucket)
-    const now = Date.now()
-    const rawCooldown =
-      typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs)
-        ? Math.max(retryAfterMs, this.getCooldownMs(bucket))
-        : this.getCooldownMs(bucket)
-    const cooldown = Math.max(
-      0,
-      Math.min(this.getMaxCooldownMs(bucket), Math.floor(rawCooldown))
-    )
-    const nextBlockedUntil = now + cooldown
-
-    if (nextBlockedUntil > state.blockedUntil) {
-      state.blockedUntil = nextBlockedUntil
-      this.logger.warn(`GLM(${bucket}) cooldown enabled for ${cooldown}ms`)
+    this.applyRateLimit(bucket, retryAfterMs, { log: true })
+    if (bucket !== 'global') {
+      this.applyRateLimit('global', retryAfterMs, { log: false })
     }
-
-    this.scheduleTimer(bucket, nextBlockedUntil - now)
   }
 
   isInCooldown(bucket: GlmRateLimiterBucket = 'global'): boolean {
@@ -125,6 +115,45 @@ export class GlmRateLimiter {
     }
     this.bucketStates.set(bucket, created)
     return created
+  }
+
+  private scheduleInBucket<T>(
+    bucket: GlmRateLimiterBucket,
+    run: () => Promise<T>,
+    label?: string
+  ): Promise<T> {
+    const state = this.getBucketState(bucket)
+    return new Promise<T>((resolve, reject) => {
+      state.queue.push({ run, resolve, reject, enqueuedAt: Date.now(), label })
+      this.pump(bucket)
+    })
+  }
+
+  private applyRateLimit(
+    bucket: GlmRateLimiterBucket,
+    retryAfterMs?: number | null,
+    options?: { log?: boolean }
+  ): void {
+    const state = this.getBucketState(bucket)
+    const now = Date.now()
+    const rawCooldown =
+      typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs)
+        ? Math.max(retryAfterMs, this.getCooldownMs(bucket))
+        : this.getCooldownMs(bucket)
+    const cooldown = Math.max(
+      0,
+      Math.min(this.getMaxCooldownMs(bucket), Math.floor(rawCooldown))
+    )
+    const nextBlockedUntil = now + cooldown
+
+    if (nextBlockedUntil > state.blockedUntil) {
+      state.blockedUntil = nextBlockedUntil
+      if (options?.log !== false) {
+        this.logger.warn(`GLM(${bucket}) cooldown enabled for ${cooldown}ms`)
+      }
+    }
+
+    this.scheduleTimer(bucket, nextBlockedUntil - now)
   }
 
   private pump(bucket: GlmRateLimiterBucket): void {
