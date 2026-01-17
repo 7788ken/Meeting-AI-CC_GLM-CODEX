@@ -127,6 +127,7 @@ export class TranscriptionService {
     this.onConnectionStatusChangeCallback = config.onConnectionStatusChange
     this.audioConfig = config.audio
 
+    let transcribeStarted = false
     try {
       this.setStatus('connecting')
 
@@ -142,6 +143,7 @@ export class TranscriptionService {
       websocket.startTranscribe({
         asrConfig: resolveAsrConfig(config),
       })
+      transcribeStarted = true
 
       this.isPaused = false
       this.isSendingAudio = true
@@ -157,6 +159,9 @@ export class TranscriptionService {
       this.isSendingAudio = false
       this.audioConfig = undefined
       audioCapture.stopCapture()
+      if (transcribeStarted) {
+        websocket.stopTranscribe()
+      }
       this.setStatus('error')
       this.handleError(error instanceof Error ? error : new Error('转写启动失败'))
       throw error

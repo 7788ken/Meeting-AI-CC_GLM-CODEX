@@ -140,7 +140,8 @@ export class WebSocketService {
     const getWsUrl = () => {
       const envUrl = (globalThis as any).__VITE_WS_URL__ || import.meta.env.VITE_WS_URL
       if (envUrl) return envUrl
-      return `ws://${location.host}/transcript`
+      const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
+      return `${protocol}://${location.host}/transcript`
     }
 
     this.url = config?.url || getWsUrl()
