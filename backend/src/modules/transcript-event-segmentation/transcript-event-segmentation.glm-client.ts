@@ -222,7 +222,6 @@ export class TranscriptEventSegmentationGlmClient {
         this.logger.warn(
           `GLM rate limited (429), retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`
         )
-        await this.sleep(delayMs)
         attempt += 1
       }
     }
@@ -305,14 +304,6 @@ export class TranscriptEventSegmentationGlmClient {
   private readNumberFromConfig(key: string): number | null {
     const value = this.appConfigService.getNumber(key, Number.NaN)
     return Number.isFinite(value) ? value : null
-  }
-
-  private async sleep(ms: number): Promise<void> {
-    if (!ms || ms <= 0) {
-      await Promise.resolve()
-      return
-    }
-    await new Promise(resolve => setTimeout(resolve, ms))
   }
 
   private extractStructuredTextFromGlmResponse(data: unknown): {

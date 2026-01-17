@@ -99,6 +99,26 @@
               </div>
 
               <div class="pane-block">
+                <div class="pane-title">语句翻译模型</div>
+                <div class="pane-subtitle">语句拆分后的翻译模型，留空则回退拆分模型。</div>
+
+                <el-form label-position="top" :model="backendForm" class="pane-form">
+                  <el-form-item label="翻译模型">
+                    <el-input
+                      v-model="backendForm.glmTranscriptSegmentTranslationModel"
+                      placeholder="如 GLM-4X"
+                    />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_SEGMENT_TRANSLATION_MODEL')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_SEGMENT_TRANSLATION_MODEL") }}
+                    </div>
+                  </el-form-item>
+                </el-form>
+              </div>
+
+              <div class="pane-block">
                 <div class="pane-title">会议总结模型</div>
                 <div class="pane-subtitle">用于 AI 分析与针对性分析的 LLM 模型。</div>
 
@@ -458,6 +478,46 @@
                 <div class="hint">
                   触发间隔为 0
                   表示每次事件更新都会尝试拆分；修改后可在会议页点击“重拆”立即生效。
+                </div>
+              </el-form>
+
+              <div class="pane-title section-title">调度与队列</div>
+              <div class="pane-subtitle">控制待处理会话上限与过期策略。</div>
+
+              <el-form label-position="top" :model="backendForm" class="pane-form">
+                <div class="grid two-col">
+                  <el-form-item label="最大待处理会话数">
+                    <el-input-number
+                      v-model="backendForm.transcriptEventsSegmentMaxPendingSessions"
+                      :min="1"
+                      :max="5000"
+                      :step="10"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS')"
+                      class="hint"
+                    >
+                      {{ getRemark("TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS") }}
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="最大滞留时间 (ms)">
+                    <el-input-number
+                      v-model="backendForm.transcriptEventsSegmentMaxStalenessMs"
+                      :min="1000"
+                      :max="300000"
+                      :step="1000"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS')"
+                      class="hint"
+                    >
+                      {{ getRemark("TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS") }}
+                    </div>
+                  </el-form-item>
                 </div>
               </el-form>
             </section>

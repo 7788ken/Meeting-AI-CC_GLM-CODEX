@@ -168,6 +168,7 @@ export class TranscriptEventSegmentationService {
         this.logger.warn(
           `Transcript event segmentation skipped: previousSentence out of window, sessionId=${sessionId}, endEventIndex=${endEventIndex}, windowSize=${windowSize}`
         )
+        void this.rebuildFromStart(sessionId)
         return null
       }
     }

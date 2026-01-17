@@ -2,12 +2,14 @@ import { BadRequestException, Body, Controller, Get, Post, Put, UnauthorizedExce
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Public } from '../auth/decorators/public.decorator'
 import { AppConfigService } from './app-config.service'
+import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
 import {
   APP_CONFIG_FIELDS,
   APP_CONFIG_REMARKS,
   APP_CONFIG_SEED_KEYS,
   type AppConfigFieldConfig,
 } from './app-config.constants'
+import { AppConfigQueueStatsDto } from './dto/app-config-queue-stats.dto'
 import { AppConfigDto, UpdateAppConfigDto } from './dto/app-config.dto'
 import {
   AppConfigSecurityStatusDto,
@@ -22,7 +24,10 @@ import { SettingsPasswordGuard } from './guards/settings-password.guard'
 @ApiTags('app-config')
 @Controller('app-config')
 export class AppConfigController {
-  constructor(private readonly appConfigService: AppConfigService) {}
+  constructor(
+    private readonly appConfigService: AppConfigService,
+    private readonly glmRateLimiter: GlmRateLimiter
+  ) {}
 
   @Public()
   @Get()
@@ -124,6 +129,14 @@ export class AppConfigController {
         remark: dbRemark ? dbRemark : APP_CONFIG_REMARKS[key],
       }
     })
+  }
+
+  @Public()
+  @Get('queue-stats')
+  @ApiOperation({ summary: '获取 AI 队列统计' })
+  @ApiResponse({ status: 200, type: AppConfigQueueStatsDto })
+  async getQueueStats(): Promise<AppConfigQueueStatsDto> {
+    return this.glmRateLimiter.getQueueStats()
   }
 
   private buildConfigDto(): AppConfigDto {

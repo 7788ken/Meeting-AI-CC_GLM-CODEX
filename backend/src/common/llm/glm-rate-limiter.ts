@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { randomBytes } from 'crypto'
+import os from 'os'
 import { AppConfigService } from '../../modules/app-config/app-config.service'
 
 export type GlmRateLimiterBucket =
@@ -14,6 +16,7 @@ type QueueTask<T> = {
   reject: (reason?: unknown) => void
   enqueuedAt: number
   label?: string
+  key?: string
 }
 
 type BucketConfigKeys = {
@@ -28,6 +31,9 @@ type BucketState = {
   inFlight: number
   lastStartAt: number
   blockedUntil: number
+  rateLimitCount: number
+  lastRateLimitAt: number
+  durationSamples: number[]
   timer?: NodeJS.Timeout
 }
 
@@ -67,30 +73,27 @@ const BUCKET_CONFIG_KEYS: Record<GlmRateLimiterBucket, BucketConfigKeys> = {
 @Injectable()
 export class GlmRateLimiter {
   private readonly logger = new Logger(GlmRateLimiter.name)
+  private readonly instanceId =
+    process.env.INSTANCE_ID?.trim() ||
+    process.env.HOSTNAME?.trim() ||
+    os.hostname() ||
+    randomBytes(6).toString('hex')
   private bucketStates = new Map<GlmRateLimiterBucket, BucketState>()
 
   constructor(private readonly appConfigService: AppConfigService) {}
 
   schedule<T>(
     run: () => Promise<T>,
-    options?: { bucket?: GlmRateLimiterBucket; label?: string }
+    options?: { bucket?: GlmRateLimiterBucket; label?: string; key?: string }
   ): Promise<T> {
     const bucket = options?.bucket ?? 'global'
-    if (bucket === 'global') {
-      return this.scheduleInBucket(bucket, run, options?.label)
-    }
-
-    return this.scheduleInBucket(
-      'global',
-      () => this.scheduleInBucket(bucket, run, options?.label),
-      options?.label ? `global:${options.label}` : undefined
-    )
+    return this.scheduleInBucket(bucket, run, options?.label, options?.key)
   }
 
   onRateLimit(retryAfterMs?: number | null, bucket: GlmRateLimiterBucket = 'global'): void {
     this.applyRateLimit(bucket, retryAfterMs, { log: true })
     if (bucket !== 'global') {
-      this.applyRateLimit('global', retryAfterMs, { log: false })
+      this.applyRateLimit('global', retryAfterMs, { log: false, count: false })
     }
   }
 
@@ -103,6 +106,64 @@ export class GlmRateLimiter {
     return Math.max(0, Math.floor(remaining))
   }
 
+  getQueueStats(): {
+    totalPending: number
+    instanceId: string
+    buckets: Record<
+      GlmRateLimiterBucket,
+      {
+        queue: number
+        inFlight: number
+        rateLimitCount: number
+        lastRateLimitAt: number
+        durationP50Ms: number | null
+        durationP95Ms: number | null
+      }
+    >
+  } {
+    const buckets = {} as Record<
+      GlmRateLimiterBucket,
+      {
+        queue: number
+        inFlight: number
+        rateLimitCount: number
+        lastRateLimitAt: number
+        durationP50Ms: number | null
+        durationP95Ms: number | null
+      }
+    >
+    const bucketList = Object.keys(BUCKET_CONFIG_KEYS) as GlmRateLimiterBucket[]
+    for (const bucket of bucketList) {
+      const state = this.getBucketState(bucket)
+      buckets[bucket] = {
+        queue: state.queue.length,
+        inFlight: state.inFlight,
+        rateLimitCount: state.rateLimitCount,
+        lastRateLimitAt: state.lastRateLimitAt,
+        durationP50Ms: this.computePercentile(state.durationSamples, 0.5),
+        durationP95Ms: this.computePercentile(state.durationSamples, 0.95),
+      }
+    }
+    const totalQueued = bucketList.reduce((sum, bucket) => sum + buckets[bucket].queue, 0)
+    const totalRateLimitCount = bucketList.reduce(
+      (sum, bucket) => sum + buckets[bucket].rateLimitCount,
+      0
+    )
+    const latestRateLimitAt = bucketList.reduce(
+      (max, bucket) => Math.max(max, buckets[bucket].lastRateLimitAt),
+      0
+    )
+    const global = buckets.global
+    global.queue = totalQueued
+    global.rateLimitCount = totalRateLimitCount
+    global.lastRateLimitAt = latestRateLimitAt
+    return {
+      totalPending: totalQueued + global.inFlight,
+      instanceId: this.instanceId,
+      buckets,
+    }
+  }
+
   private getBucketState(bucket: GlmRateLimiterBucket): BucketState {
     const existing = this.bucketStates.get(bucket)
     if (existing) return existing
@@ -111,6 +172,9 @@ export class GlmRateLimiter {
       inFlight: 0,
       lastStartAt: 0,
       blockedUntil: 0,
+      rateLimitCount: 0,
+      lastRateLimitAt: 0,
+      durationSamples: [],
       timer: undefined,
     }
     this.bucketStates.set(bucket, created)
@@ -120,11 +184,19 @@ export class GlmRateLimiter {
   private scheduleInBucket<T>(
     bucket: GlmRateLimiterBucket,
     run: () => Promise<T>,
-    label?: string
+    label?: string,
+    key?: string
   ): Promise<T> {
     const state = this.getBucketState(bucket)
     return new Promise<T>((resolve, reject) => {
-      state.queue.push({ run, resolve, reject, enqueuedAt: Date.now(), label })
+      if (key) {
+        for (let i = state.queue.length - 1; i >= 0; i -= 1) {
+          if (state.queue[i]?.key !== key) continue
+          const superseded = state.queue.splice(i, 1)[0]
+          superseded?.reject(new Error('Superseded by newer request'))
+        }
+      }
+      state.queue.push({ run, resolve, reject, enqueuedAt: Date.now(), label, key })
       this.pump(bucket)
     })
   }
@@ -132,7 +204,7 @@ export class GlmRateLimiter {
   private applyRateLimit(
     bucket: GlmRateLimiterBucket,
     retryAfterMs?: number | null,
-    options?: { log?: boolean }
+    options?: { log?: boolean; count?: boolean }
   ): void {
     const state = this.getBucketState(bucket)
     const now = Date.now()
@@ -152,26 +224,34 @@ export class GlmRateLimiter {
         this.logger.warn(`GLM(${bucket}) cooldown enabled for ${cooldown}ms`)
       }
     }
+    if (options?.count !== false) {
+      state.rateLimitCount += 1
+      state.lastRateLimitAt = now
+    }
 
     this.scheduleTimer(bucket, nextBlockedUntil - now)
   }
 
   private pump(bucket: GlmRateLimiterBucket): void {
     const state = this.getBucketState(bucket)
-    if (state.inFlight >= this.getMaxConcurrency(bucket)) {
-      return
-    }
-
+    if (state.inFlight >= this.getMaxConcurrency(bucket)) return
     const task = state.queue.shift()
-    if (!task) {
+    if (!task) return
+
+    const globalState = bucket === 'global' ? null : this.getBucketState('global')
+    if (globalState && globalState.inFlight >= this.getMaxConcurrency('global')) {
+      state.queue.unshift(task)
       return
     }
 
     const now = Date.now()
     const earliestStart = Math.max(
       state.blockedUntil,
-      state.lastStartAt + this.getMinIntervalMs(bucket)
+      state.lastStartAt + this.getMinIntervalMs(bucket),
+      globalState ? globalState.blockedUntil : 0,
+      globalState ? globalState.lastStartAt + this.getMinIntervalMs('global') : 0
     )
+
     if (now < earliestStart) {
       state.queue.unshift(task)
       this.scheduleTimer(bucket, earliestStart - now)
@@ -179,19 +259,60 @@ export class GlmRateLimiter {
     }
 
     state.inFlight += 1
-    state.lastStartAt = Date.now()
+    state.lastStartAt = now
+    if (globalState) {
+      globalState.inFlight += 1
+      globalState.lastStartAt = now
+    }
+    const startedAt = now
 
     Promise.resolve()
       .then(task.run)
       .then(task.resolve, task.reject)
       .finally(() => {
+        const durationMs = Math.max(0, Date.now() - startedAt)
+        this.recordDuration(state, durationMs)
+        if (globalState) {
+          this.recordDuration(globalState, durationMs)
+        }
         state.inFlight = Math.max(0, state.inFlight - 1)
+        if (globalState) {
+          globalState.inFlight = Math.max(0, globalState.inFlight - 1)
+        }
         this.pump(bucket)
+        if (globalState) {
+          this.pump('global')
+        }
+        this.pumpAllBuckets()
       })
 
     if (state.inFlight < this.getMaxConcurrency(bucket)) {
       this.pump(bucket)
     }
+  }
+
+  private pumpAllBuckets(): void {
+    const buckets = Object.keys(BUCKET_CONFIG_KEYS) as GlmRateLimiterBucket[]
+    for (const bucket of buckets) {
+      this.pump(bucket)
+    }
+  }
+
+  private recordDuration(state: BucketState, durationMs: number): void {
+    if (!Number.isFinite(durationMs) || durationMs < 0) return
+    state.durationSamples.push(Math.floor(durationMs))
+    const limit = 60
+    if (state.durationSamples.length > limit) {
+      state.durationSamples.splice(0, state.durationSamples.length - limit)
+    }
+  }
+
+  private computePercentile(samples: number[], percentile: number): number | null {
+    if (!samples.length) return null
+    const normalized = Math.min(1, Math.max(0, percentile))
+    const sorted = [...samples].sort((a, b) => a - b)
+    const index = Math.floor((sorted.length - 1) * normalized)
+    return sorted[index] ?? null
   }
 
   private scheduleTimer(bucket: GlmRateLimiterBucket, delayMs: number): void {

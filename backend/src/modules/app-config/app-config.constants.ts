@@ -22,6 +22,7 @@ export const APP_CONFIG_SEED_KEYS = [
   'GLM_TRANSCRIPT_ANALYSIS_RATE_LIMIT_COOLDOWN_MS',
   'GLM_TRANSCRIPT_ANALYSIS_RATE_LIMIT_MAX_MS',
   'GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL',
+  'GLM_TRANSCRIPT_SEGMENT_TRANSLATION_MODEL',
   'GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS',
   'GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS',
   'GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE',
@@ -42,6 +43,8 @@ export const APP_CONFIG_SEED_KEYS = [
   'TRANSCRIPT_EVENTS_SEGMENT_SYSTEM_PROMPT',
   'TRANSCRIPT_EVENTS_SEGMENT_STRICT_SYSTEM_PROMPT',
   'TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN',
+  'TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS',
+  'TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS',
   'TRANSCRIPT_AUTO_SPLIT_GAP_MS',
   'TRANSCRIPT_DEBUG_LOG_UTTERANCES',
   'TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED',
@@ -94,6 +97,8 @@ export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
   GLM_TRANSCRIPT_ANALYSIS_RATE_LIMIT_MAX_MS:
     'AI 分析模块专用 429 冷却上限（ms）；未配置时回退全局冷却上限。',
   GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL: '语句拆分任务使用的 GLM 模型名称；为空会导致语句拆分不可用。',
+  GLM_TRANSCRIPT_SEGMENT_TRANSLATION_MODEL:
+    '语句翻译任务使用的 GLM 模型名称；为空时回退语句拆分模型。',
   GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS: '语句拆分：单次请求的 max_tokens 上限（影响输出长度与成本）。',
   GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS:
     '语句拆分：当 finish_reason=length（截断）时，二次请求提升 max_tokens 的目标值。',
@@ -124,6 +129,10 @@ export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
     '语句拆分：严格回显提示词（用于约束/回显 JSON 输出的提示词）。',
   TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN:
     '单次语句拆分任务最多生成段数（用于限制一次运行的处理量）。',
+  TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS:
+    '语句拆分：待处理会话的最大数量（超过会丢弃最旧会话以防堆积）。',
+  TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS:
+    '语句拆分：待处理任务的最大滞留时间（ms，超过将丢弃）。',
   TRANSCRIPT_AUTO_SPLIT_GAP_MS:
     '实时转写：无 segmentKey 时，相邻 utterance 更新超过该间隔（ms）将强制切分为新 speech。',
   TRANSCRIPT_DEBUG_LOG_UTTERANCES: '转写调试：打印最终 utterance / event（仅用于排障，建议关闭）。',
@@ -321,6 +330,22 @@ export const APP_CONFIG_FIELDS = [
     max: 300000,
   },
   {
+    field: 'transcriptEventsSegmentMaxPendingSessions',
+    key: 'TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS',
+    type: 'number',
+    defaultValue: 300,
+    min: 1,
+    max: 5000,
+  },
+  {
+    field: 'transcriptEventsSegmentMaxStalenessMs',
+    key: 'TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS',
+    type: 'number',
+    defaultValue: 20000,
+    min: 1000,
+    max: 300000,
+  },
+  {
     field: 'transcriptAutoSplitGapMs',
     key: 'TRANSCRIPT_AUTO_SPLIT_GAP_MS',
     type: 'number',
@@ -361,6 +386,12 @@ export const APP_CONFIG_FIELDS = [
     key: 'TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE',
     type: 'string',
     defaultValue: '简体中文',
+  },
+  {
+    field: 'glmTranscriptSegmentTranslationModel',
+    key: 'GLM_TRANSCRIPT_SEGMENT_TRANSLATION_MODEL',
+    type: 'string',
+    defaultValue: '',
   },
   {
     field: 'transcriptAnalysisLanguageEnabled',

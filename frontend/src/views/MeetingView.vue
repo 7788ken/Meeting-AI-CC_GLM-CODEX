@@ -22,6 +22,12 @@
           </span>
         </el-tooltip>
 
+        <el-tooltip :content="aiQueueTooltip" placement="bottom">
+          <el-tag size="small" class="queue-tag" :type="aiQueueTagType">
+            AI 队列: {{ aiQueueDisplay }}
+          </el-tag>
+        </el-tooltip>
+
         <el-tag v-if="wsReconnectTag" :type="wsReconnectTag.type" size="small" class="ws-tag">
           {{ wsReconnectTag.text }}
         </el-tag>
@@ -387,10 +393,12 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import {
   appConfigSecurityApi,
+  appConfigQueueStatsApi,
   sessionApi,
   speechApi,
   transcriptAnalysisApi,
   transcriptEventSegmentationApi,
+  type GlmQueueStats,
   type Session,
   type Speech,
   type TranscriptEventSegment,
@@ -433,6 +441,11 @@ const realtimeStickToBottom = ref(true)
 const endingSession = ref(false)
 const sessionEndedOverride = ref(false)
 const wsConnectionStatus = ref<ConnectionStatus | null>(null)
+const aiQueueStats = ref<GlmQueueStats | null>(null)
+const aiQueueStatus = ref<'idle' | 'ready' | 'unauthorized' | 'error'>('idle')
+const aiQueueError = ref('')
+const aiQueuePollIntervalMs = 2500
+let aiQueueTimer: ReturnType<typeof setInterval> | null = null
 	const debugDrawerVisible = ref(false)
 	const settingsDrawerVisible = ref(false)
   const openingSettingsDrawer = ref(false)
@@ -461,6 +474,40 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
   })
   const segmentDisplayMode = ref<'source' | 'translated'>('source')
   const segmentDisplayTouched = ref(false)
+  const aiQueueDisplay = computed(() => {
+    if (!aiQueueStats.value) return '--'
+    return String(aiQueueStats.value.totalPending)
+  })
+  const aiQueueTagType = computed(() => {
+    if (aiQueueStatus.value === 'ready') return 'info'
+    return 'warning'
+  })
+  const aiQueueTooltip = computed(() => {
+    if (aiQueueStats.value) {
+      const instance = aiQueueStats.value.instanceId || '--'
+      return `口径：global.queue + global.inFlight（单实例）；实例：${instance}；不含上游 pending`
+    }
+    if (aiQueueStatus.value === 'unauthorized') {
+      return '未授权：请先验证系统设置密码'
+    }
+    if (aiQueueError.value) {
+      return `队列统计不可用：${aiQueueError.value}`
+    }
+    return '队列统计不可用'
+  })
+
+  function startAiQueueTimer(): void {
+    if (aiQueueTimer) return
+    aiQueueTimer = setInterval(() => {
+      void refreshAiQueueStats()
+    }, aiQueuePollIntervalMs)
+  }
+
+  function stopAiQueueTimer(): void {
+    if (!aiQueueTimer) return
+    clearInterval(aiQueueTimer)
+    aiQueueTimer = null
+  }
 
   watch(
     transcriptSegmentTranslationAvailable,
@@ -485,6 +532,18 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
     }
   }
 
+  async function initAiQueuePolling(): Promise<void> {
+    void refreshAiQueueStats()
+    startAiQueueTimer()
+  }
+
+  function resumeAiQueuePolling(): void {
+    aiQueueStatus.value = 'idle'
+    aiQueueError.value = ''
+    void refreshAiQueueStats()
+    startAiQueueTimer()
+  }
+
   async function openSettingsDrawer(): Promise<void> {
     if (openingSettingsDrawer.value) return
     openingSettingsDrawer.value = true
@@ -492,6 +551,7 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
       const status = await appConfigSecurityApi.getStatus()
       const enabled = status?.data?.enabled === true
       if (!enabled) {
+        resumeAiQueuePolling()
         settingsDrawerVisible.value = true
         return
       }
@@ -499,6 +559,7 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
       if (cachedPassword) {
         const verified = await verifySettingsPassword(cachedPassword)
         if (verified) {
+          resumeAiQueuePolling()
           settingsDrawerVisible.value = true
           return
         }
@@ -521,6 +582,7 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
           return
         }
         setSettingsPassword(password)
+        resumeAiQueuePolling()
         settingsDrawerVisible.value = true
       } catch {
         // 用户取消
@@ -529,6 +591,33 @@ const wsConnectionStatus = ref<ConnectionStatus | null>(null)
       ElMessage.error(error instanceof Error ? error.message : '获取系统设置状态失败')
     } finally {
       openingSettingsDrawer.value = false
+    }
+  }
+
+  async function refreshAiQueueStats(): Promise<void> {
+    if (aiQueueStatus.value === 'unauthorized' && !getSettingsPassword().trim()) {
+      return
+    }
+    try {
+      const response = await appConfigQueueStatsApi.get()
+      const data = response?.data ?? null
+      aiQueueStats.value = data
+      aiQueueStatus.value = data ? 'ready' : 'error'
+      aiQueueError.value = ''
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '请求失败'
+      const normalized = message.toLowerCase()
+      const isUnauthorized =
+        message.includes('未授权') ||
+        message.includes('Settings password') ||
+        normalized.includes('unauthorized')
+      aiQueueStats.value = null
+      aiQueueError.value = message
+      aiQueueStatus.value = isUnauthorized ? 'unauthorized' : 'error'
+      if (isUnauthorized) {
+        clearSettingsPassword()
+        stopAiQueueTimer()
+      }
     }
   }
 
@@ -915,8 +1004,9 @@ const recordingIndicatorIcon = computed(() => {
 	)
 
 // 初始化
-	onMounted(async () => {
+  onMounted(async () => {
     void refreshBackendConfig()
+    void initAiQueuePolling()
 	  mediaQuery = window.matchMedia('(max-width: 960px)')
 	  updateIsNarrow()
 	  mediaQuery.addEventListener('change', updateIsNarrow)
@@ -947,6 +1037,10 @@ onUnmounted(() => {
   if (mediaQuery) {
     mediaQuery.removeEventListener('change', updateIsNarrow)
     mediaQuery = null
+  }
+  if (aiQueueTimer) {
+    clearInterval(aiQueueTimer)
+    aiQueueTimer = null
   }
   if (actionBarResizeObserver) {
     actionBarResizeObserver.disconnect()
@@ -1855,6 +1949,10 @@ function clearTargetAnalysis(): void {
 
 .header-icon-group :deep(.el-button + .el-button) {
   margin-left: 0;
+}
+
+.queue-tag {
+  white-space: nowrap;
 }
 
 .recording-indicator {

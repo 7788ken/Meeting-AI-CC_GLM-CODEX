@@ -465,6 +465,10 @@ describe('TranscriptionService', () => {
       }
 
       expect(mockCallbacks.onError).toHaveBeenCalled()
+      expect(audioCaptureModule.audioCapture.stopCapture).toHaveBeenCalled()
+      expect(mockWebsocket.stopTranscribe).toHaveBeenCalled()
+      expect(service.getStatus()).toBe('error')
+      expect(service.isActive()).toBe(false)
     })
   })
 

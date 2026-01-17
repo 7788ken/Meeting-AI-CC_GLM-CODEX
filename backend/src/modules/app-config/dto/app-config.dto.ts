@@ -68,6 +68,12 @@ export class AppConfigDto {
   @ApiProperty({ description: 'AI 分析冷却时间上限（ms）', minimum: 0, maximum: 300000 })
   glmTranscriptAnalysisRateLimitMaxMs: number
 
+  @ApiProperty({ description: '语句拆分待处理会话上限', minimum: 1, maximum: 5000 })
+  transcriptEventsSegmentMaxPendingSessions: number
+
+  @ApiProperty({ description: '语句拆分待处理最大滞留时间（ms）', minimum: 1000, maximum: 300000 })
+  transcriptEventsSegmentMaxStalenessMs: number
+
   @ApiProperty({ description: '转写自动切分间隔（ms）', minimum: 0, maximum: 600000 })
   transcriptAutoSplitGapMs: number
 
@@ -85,6 +91,9 @@ export class AppConfigDto {
 
   @ApiProperty({ description: '语句翻译目标语言' })
   transcriptSegmentTranslationLanguage: string
+
+  @ApiProperty({ description: '语句翻译模型（可选）' })
+  glmTranscriptSegmentTranslationModel: string
 
   @ApiProperty({ description: 'AI 分析：是否强制输出指定语言' })
   transcriptAnalysisLanguageEnabled: boolean
@@ -262,6 +271,20 @@ export class UpdateAppConfigDto {
   @Max(300000)
   glmTranscriptAnalysisRateLimitMaxMs?: number
 
+  @ApiPropertyOptional({ description: '语句拆分待处理会话上限', minimum: 1, maximum: 5000 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5000)
+  transcriptEventsSegmentMaxPendingSessions?: number
+
+  @ApiPropertyOptional({ description: '语句拆分待处理最大滞留时间（ms）', minimum: 1000, maximum: 300000 })
+  @IsOptional()
+  @IsInt()
+  @Min(1000)
+  @Max(300000)
+  transcriptEventsSegmentMaxStalenessMs?: number
+
   @ApiPropertyOptional({ description: '转写自动切分间隔（ms）', minimum: 0, maximum: 600000 })
   @IsOptional()
   @IsInt()
@@ -297,6 +320,11 @@ export class UpdateAppConfigDto {
   @IsOptional()
   @IsString()
   transcriptSegmentTranslationLanguage?: string
+
+  @ApiPropertyOptional({ description: '语句翻译模型（可选）' })
+  @IsOptional()
+  @IsString()
+  glmTranscriptSegmentTranslationModel?: string
 
   @ApiPropertyOptional({ description: 'AI 分析：是否强制输出指定语言' })
   @IsOptional()

@@ -153,12 +153,15 @@ export interface BackendConfig {
   glmTranscriptAnalysisMinIntervalMs: number
   glmTranscriptAnalysisRateLimitCooldownMs: number
   glmTranscriptAnalysisRateLimitMaxMs: number
+  transcriptEventsSegmentMaxPendingSessions: number
+  transcriptEventsSegmentMaxStalenessMs: number
   transcriptAutoSplitGapMs: number
   transcriptMaxBufferDurationSoftMs: number
   transcriptMaxBufferDurationHardMs: number
   transcriptDebugLogUtterances: boolean
   transcriptSegmentTranslationEnabled: boolean
   transcriptSegmentTranslationLanguage: string
+  glmTranscriptSegmentTranslationModel: string
   transcriptAnalysisLanguageEnabled: boolean
   transcriptAnalysisLanguage: string
   glmTranscriptSummaryModel: string
@@ -167,6 +170,21 @@ export interface BackendConfig {
   glmTranscriptSummaryRetryMax: number
   glmTranscriptSummaryRetryBaseMs: number
   glmTranscriptSummaryRetryMaxMs: number
+}
+
+export interface GlmQueueStatsBucket {
+  queue: number
+  inFlight: number
+  rateLimitCount?: number
+  lastRateLimitAt?: number
+  durationP50Ms?: number | null
+  durationP95Ms?: number | null
+}
+
+export interface GlmQueueStats {
+  totalPending: number
+  instanceId: string
+  buckets: Record<string, GlmQueueStatsBucket>
 }
 
 export interface AppConfigSecurityStatus {
@@ -387,6 +405,13 @@ export const appConfigApi = {
     get<ApiResponse<BackendConfig>>('/app-config', { headers: getSettingsAuthHeaders() }),
   update: (data: Partial<BackendConfig>) =>
     put<ApiResponse<BackendConfig>>('/app-config', data, { headers: getSettingsAuthHeaders() }),
+}
+
+export const appConfigQueueStatsApi = {
+  get: () =>
+    get<ApiResponse<GlmQueueStats>>('/app-config/queue-stats', {
+      headers: getSettingsAuthHeaders(),
+    }),
 }
 
 export const appConfigSecurityApi = {

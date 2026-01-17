@@ -19,7 +19,7 @@ export class SettingsPasswordGuard implements CanActivate {
     const password = Array.isArray(raw) ? raw[0] : raw
     const normalized = String(password ?? '').trim()
     if (!normalized) {
-      throw new UnauthorizedException('Settings password required')
+      throw new UnauthorizedException('未授权：请先验证系统设置密码')
     }
 
     const isValid = await this.appConfigService.verifySecurityPassword(normalized)

@@ -380,7 +380,21 @@ export class TranscriptionService {
    * 错误处理
    */
   private handleError(error: Error): void {
+    if (this.isRecording || this.isPaused || this.status === 'connecting') {
+      this.rollbackTranscriptionOnError()
+    }
     this.onErrorCallback?.(error)
+  }
+
+  private rollbackTranscriptionOnError(): void {
+    this.isRecording = false
+    this.isPaused = false
+    this.isSendingAudio = false
+    this.audioConfig = undefined
+    this.activeSegment = null
+    audioCapture.stopCapture()
+    websocket.stopTranscribe()
+    this.setStatus('error')
   }
 
   /**

@@ -126,7 +126,9 @@ export class TranscriptEventSegmentTranslationService {
 
     try {
       const targetLanguage = this.resolveTargetLanguage()
-      const { translatedText, model } = await this.glmClient.translate(sourceText, targetLanguage)
+      const { translatedText, model } = await this.glmClient.translate(sourceText, targetLanguage, {
+        scheduleKey: `translation:${existing.sessionId}`,
+      })
       const normalized = translatedText.trim()
       if (!normalized) {
         await this.segmentModel
@@ -161,6 +163,9 @@ export class TranscriptEventSegmentTranslationService {
         .exec()
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      if (message === 'Superseded by newer request') {
+        return
+      }
       const trimmed = message.trim()
       const safeMessage = trimmed.length > 300 ? `${trimmed.slice(0, 300)}…(truncated)` : trimmed
       this.logger.warn(`Segment translation failed, segmentId=${segmentId}: ${safeMessage}`)

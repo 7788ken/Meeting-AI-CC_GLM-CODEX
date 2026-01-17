@@ -174,6 +174,7 @@ export class TranscriptAnalysisService {
           revision: snapshot.revision,
           eventsText: totalText,
         }),
+        scheduleKey: `analysis:${sessionId}`,
       })
       const dto: TranscriptSummaryDTO = {
         sessionId,
@@ -199,16 +200,22 @@ export class TranscriptAnalysisService {
           revision: snapshot.revision,
           eventsText: chunkText,
         }),
+        scheduleKey: `analysis:${sessionId}`,
       })
       partials.push(markdown.trim())
     }
 
-    const reduced = await this.reduceBulletLists(partials, chunkSummarySystemPrompt)
+    const reduced = await this.reduceBulletLists(
+      partials,
+      chunkSummarySystemPrompt,
+      `analysis:${sessionId}`
+    )
     const combinedPartials = reduced.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
 
     const { markdown, model } = await this.glmClient.generateMarkdown({
       system: summarySystemPrompt,
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
+      scheduleKey: `analysis:${sessionId}`,
     })
 
     const dto: TranscriptSummaryDTO = {
@@ -306,6 +313,7 @@ export class TranscriptAnalysisService {
           revision: snapshot.revision,
           eventsText: totalText,
         }),
+        scheduleKey: `analysis:${sessionId}`,
       })) {
         if (chunk.type === 'delta') {
           markdownBuffer += chunk.text
@@ -338,18 +346,24 @@ export class TranscriptAnalysisService {
           revision: snapshot.revision,
           eventsText: chunkText,
         }),
+        scheduleKey: `analysis:${sessionId}`,
       })
       partials.push(markdown.trim())
     }
 
     yield { type: 'progress', data: '正在合并要点…' }
-    const reduced = await this.reduceBulletLists(partials, chunkSummarySystemPrompt)
+    const reduced = await this.reduceBulletLists(
+      partials,
+      chunkSummarySystemPrompt,
+      `analysis:${sessionId}`
+    )
     const combinedPartials = reduced.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
 
     yield { type: 'progress', data: '正在生成最终结构化总结…' }
     for await (const chunk of this.glmClient.generateMarkdownStream({
       system: summarySystemPrompt,
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
+      scheduleKey: `analysis:${sessionId}`,
     })) {
       if (chunk.type === 'delta') {
         markdownBuffer += chunk.text
@@ -451,6 +465,7 @@ export class TranscriptAnalysisService {
         sourceStartEventIndex: segment.sourceStartEventIndex,
         sourceEndEventIndex: segment.sourceEndEventIndex,
       }),
+      scheduleKey: `analysis:${sessionId}`,
     })
 
     const dto: TranscriptSegmentAnalysisDTO = {
@@ -601,6 +616,7 @@ export class TranscriptAnalysisService {
           sourceStartEventIndex: segment.sourceStartEventIndex,
           sourceEndEventIndex: segment.sourceEndEventIndex,
         }),
+        scheduleKey: `analysis:${sessionId}`,
       })) {
         if (chunk.type === 'delta') {
           markdownBuffer += chunk.text
@@ -719,7 +735,8 @@ export class TranscriptAnalysisService {
 
   private async reduceBulletLists(
     partials: string[],
-    chunkSummarySystemPrompt: string
+    chunkSummarySystemPrompt: string,
+    scheduleKey?: string
   ): Promise<string[]> {
     let materials = partials.filter(Boolean)
     if (materials.length <= this.reduceBatchSize) return materials
@@ -732,6 +749,7 @@ export class TranscriptAnalysisService {
         const { markdown } = await this.glmClient.generateMarkdown({
           system: chunkSummarySystemPrompt,
           user: `请合并以下要点列表：去重、合并同类项，输出 Markdown 要点列表（不要标题）。\n\n${mergedInput}`,
+          scheduleKey,
         })
         next.push(markdown.trim())
       }

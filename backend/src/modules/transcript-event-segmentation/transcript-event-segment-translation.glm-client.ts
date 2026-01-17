@@ -28,7 +28,11 @@ export class TranscriptEventSegmentTranslationGlmClient {
     return fallback
   }
 
-  async translate(text: string, targetLanguage: string): Promise<{ translatedText: string; model: string }> {
+  async translate(
+    text: string,
+    targetLanguage: string,
+    options?: { scheduleKey?: string }
+  ): Promise<{ translatedText: string; model: string }> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
       throw new Error('GLM_API_KEY not configured')
@@ -66,7 +70,12 @@ export class TranscriptEventSegmentTranslationGlmClient {
 
     this.logger.debug(`Calling GLM for segment translation, model=${model}`)
 
-    const response = await this.postWithRetry({ endpoint, headers, requestBody })
+    const response = await this.postWithRetry({
+      endpoint,
+      headers,
+      requestBody,
+      scheduleKey: options?.scheduleKey,
+    })
     const extracted = this.extractTextFromGlmResponse(response.data)
     if (!extracted) {
       throw this.buildInvalidResponseError(response)
@@ -79,6 +88,7 @@ export class TranscriptEventSegmentTranslationGlmClient {
     endpoint: string
     headers: Record<string, string>
     requestBody: Record<string, unknown>
+    scheduleKey?: string
   }): Promise<{ data?: unknown; status?: unknown }> {
     const delays = [500, 1500, 4500]
     for (let attempt = 0; attempt <= delays.length; attempt += 1) {
@@ -88,7 +98,11 @@ export class TranscriptEventSegmentTranslationGlmClient {
             firstValueFrom(
               this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
             ),
-          { bucket: 'translation', label: 'transcript_event_translation' }
+          {
+            bucket: 'translation',
+            label: 'transcript_event_translation',
+            key: input.scheduleKey,
+          }
         )
       } catch (error) {
         const status = this.extractStatusCode(error)
@@ -98,7 +112,6 @@ export class TranscriptEventSegmentTranslationGlmClient {
         const delayMs = delays[attempt]!
         this.logger.warn(`GLM rate limited (429), retrying in ${delayMs}ms (attempt ${attempt + 1}/${delays.length})`)
         this.glmRateLimiter.onRateLimit(delayMs, 'translation')
-        await this.sleep(delayMs)
       }
     }
     throw new Error('GLM request failed')
@@ -128,7 +141,4 @@ export class TranscriptEventSegmentTranslationGlmClient {
     return error
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
-  }
 }

@@ -37,6 +37,16 @@ async function bootstrap() {
   const appConfigService = app.get(AppConfigService)
   const logger = new Logger('Bootstrap')
 
+  // 进程级异常兜底，避免未处理异常直接导致服务退出
+  process.on('uncaughtException', error => {
+    const message = error instanceof Error ? error.stack || error.message : String(error)
+    logger.error(`未捕获异常: ${message}`)
+  })
+  process.on('unhandledRejection', reason => {
+    const message = reason instanceof Error ? reason.stack || reason.message : String(reason)
+    logger.error(`未处理的 Promise 拒绝: ${message}`)
+  })
+
   // 全局异常过滤器
   app.useGlobalFilters(new AllExceptionsFilter())
 
@@ -79,6 +89,10 @@ async function bootstrap() {
 
   // 获取底层 HTTP 服务器
   const server = http.createServer()
+  server.on('error', error => {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error(`HTTP Server error: ${message}`)
+  })
   const nestApp = await app.init()
 
   // 将 NestJS 应用挂载到 HTTP 服务器
@@ -86,14 +100,26 @@ async function bootstrap() {
 
   // 创建原生 WebSocket 服务器
   const wss = new WebSocket.Server({ noServer: true, path: '/transcript' })
+  wss.on('error', error => {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error(`WebSocket server error: ${message}`)
+  })
 
   // 处理 WebSocket 升级请求
   server.on('upgrade', (request, socket, head) => {
     if (request.url === '/transcript') {
-      wss.handleUpgrade(request, socket, head, ws => {
-        wss.emit('connection', ws, request)
-      })
+      try {
+        wss.handleUpgrade(request, socket, head, ws => {
+          wss.emit('connection', ws, request)
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        logger.error(`WebSocket upgrade error: ${message}`)
+        socket.destroy()
+      }
+      return
     }
+    socket.destroy()
   })
 
   // 获取 TranscriptService 用于处理音频数据
@@ -186,7 +212,6 @@ async function bootstrap() {
   >()
   const transcriptEventSegmentationQueue: string[] = []
   const transcriptEventSegmentationQueuedSessions = new Set<string>()
-  let transcriptEventSegmentationGlobalInFlight = 0
   let transcriptEventSegmentationCooldownTimer: ReturnType<typeof setTimeout> | null = null
   const getSegmentationConfig = () => transcriptEventSegmentationConfigService.getConfig()
   const getSegmentationIntervalMs = () => getSegmentationConfig().intervalMs
@@ -201,12 +226,6 @@ async function bootstrap() {
       'TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS',
       300,
       value => value >= 1 && value <= 5000
-    )
-  const getSegmentationConcurrency = () =>
-    readNumberFromConfig(
-      'GLM_TRANSCRIPT_EVENT_SEGMENT_CONCURRENCY',
-      1,
-      value => value >= 1 && value <= 50
     )
   const shouldTriggerEventSegmentationOnStopTranscribe = () =>
     getSegmentationConfig().triggerOnStopTranscribe
@@ -567,12 +586,17 @@ async function bootstrap() {
     for (const [ws, id] of clientIds.entries()) {
       if (id !== clientId) continue
       if (ws.readyState !== WebSocket.OPEN) continue
-      ws.send(
-        JSON.stringify({
-          type: 'error',
-          data: { error },
-        })
-      )
+      try {
+        ws.send(
+          JSON.stringify({
+            type: 'error',
+            data: { error },
+          })
+        )
+      } catch (sendError) {
+        const message = sendError instanceof Error ? sendError.message : String(sendError)
+        wsLogger.warn(`WebSocket send error failed, clientId=${clientId}: ${message}`)
+      }
       return
     }
   }
@@ -593,6 +617,7 @@ async function bootstrap() {
     set.delete(ws)
     if (set.size === 0) {
       sessionClients.delete(sessionId)
+      cleanupTranscriptEventSegmentationSession(sessionId, true)
     }
   }
 
@@ -606,7 +631,13 @@ async function bootstrap() {
         set.delete(client)
         continue
       }
-      client.send(message)
+      try {
+        client.send(message)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        wsLogger.warn(`WebSocket send failed, sessionId=${sessionId}: ${message}`)
+        set.delete(client)
+      }
     }
 
     if (set.size === 0) {
@@ -975,6 +1006,7 @@ async function bootstrap() {
       wsLogger.warn(
         `Transcript event segmentation pending overflow, dropped sessionId=${dropped}`
       )
+      cleanupTranscriptEventSegmentationSession(dropped)
     }
   }
 
@@ -1002,8 +1034,6 @@ async function bootstrap() {
 
   function pumpTranscriptEventSegmentationQueue(): void {
     if (transcriptEventSegmentationCooldownTimer) return
-    const maxInFlight = getSegmentationConcurrency()
-    if (transcriptEventSegmentationGlobalInFlight >= maxInFlight) return
 
     const cooldownMs = glmRateLimiter.getCooldownRemainingMs('segmentation')
     if (cooldownMs > 0) {
@@ -1011,7 +1041,7 @@ async function bootstrap() {
       return
     }
 
-    while (transcriptEventSegmentationGlobalInFlight < maxInFlight) {
+    while (true) {
       const sessionId = dequeueTranscriptEventSegmentationSession()
       if (!sessionId) return
       if (transcriptEventSegmentationInFlight.has(sessionId)) {
@@ -1019,7 +1049,7 @@ async function bootstrap() {
           transcriptEventSegmentationQueue.push(sessionId)
           transcriptEventSegmentationQueuedSessions.add(sessionId)
         }
-        return
+        continue
       }
       const pending = transcriptEventSegmentationPendingBySession.get(sessionId)
       if (!pending) {
@@ -1031,6 +1061,7 @@ async function bootstrap() {
         wsLogger.warn(
           `Transcript event segmentation pending stale, dropped sessionId=${sessionId}`
         )
+        cleanupTranscriptEventSegmentationSession(sessionId)
         continue
       }
       transcriptEventSegmentationPendingBySession.delete(sessionId)
@@ -1043,13 +1074,8 @@ async function bootstrap() {
     input: { force: boolean; reason: string }
   ): void {
     transcriptEventSegmentationInFlight.add(sessionId)
-    transcriptEventSegmentationGlobalInFlight += 1
     void runTranscriptEventSegmentation(sessionId, input).finally(() => {
       transcriptEventSegmentationInFlight.delete(sessionId)
-      transcriptEventSegmentationGlobalInFlight = Math.max(
-        0,
-        transcriptEventSegmentationGlobalInFlight - 1
-      )
       if (
         transcriptEventSegmentationPendingBySession.has(sessionId) &&
         !transcriptEventSegmentationQueuedSessions.has(sessionId)
@@ -1058,7 +1084,36 @@ async function bootstrap() {
         transcriptEventSegmentationQueuedSessions.add(sessionId)
       }
       pumpTranscriptEventSegmentationQueue()
+      cleanupTranscriptEventSegmentationSession(sessionId)
     })
+  }
+
+  function cleanupTranscriptEventSegmentationSession(sessionId: string, force = false): void {
+    if (!sessionId) return
+    if (!force && sessionClients.has(sessionId)) return
+    if (transcriptEventSegmentationInFlight.has(sessionId)) return
+    if (!force && transcriptEventSegmentationPendingBySession.has(sessionId)) return
+    if (!force && transcriptEventSegmentationQueuedSessions.has(sessionId)) return
+
+    if (force) {
+      transcriptEventSegmentationPendingBySession.delete(sessionId)
+      transcriptEventSegmentationQueuedSessions.delete(sessionId)
+      if (transcriptEventSegmentationQueue.length > 0) {
+        for (let i = transcriptEventSegmentationQueue.length - 1; i >= 0; i -= 1) {
+          if (transcriptEventSegmentationQueue[i] === sessionId) {
+            transcriptEventSegmentationQueue.splice(i, 1)
+          }
+        }
+      }
+    }
+
+    const timer = transcriptEventSegmentationTimerBySession.get(sessionId)
+    if (timer) {
+      clearTimeout(timer)
+      transcriptEventSegmentationTimerBySession.delete(sessionId)
+    }
+    transcriptEventSegmentationLastRunAtBySession.delete(sessionId)
+    transcriptEventSegmentationLatestRevisionBySession.delete(sessionId)
   }
 
   function scheduleTranscriptEventSegmentationAfter(

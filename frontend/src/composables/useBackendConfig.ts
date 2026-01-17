@@ -25,12 +25,15 @@ const fallbackDefaults: BackendConfig = {
   glmTranscriptAnalysisMinIntervalMs: 500,
   glmTranscriptAnalysisRateLimitCooldownMs: 2000,
   glmTranscriptAnalysisRateLimitMaxMs: 15000,
+  transcriptEventsSegmentMaxPendingSessions: 300,
+  transcriptEventsSegmentMaxStalenessMs: 20000,
   transcriptAutoSplitGapMs: 2500,
   transcriptMaxBufferDurationSoftMs: 30000,
   transcriptMaxBufferDurationHardMs: 50000,
   transcriptDebugLogUtterances: false,
   transcriptSegmentTranslationEnabled: false,
   transcriptSegmentTranslationLanguage: '简体中文',
+  glmTranscriptSegmentTranslationModel: '',
   transcriptAnalysisLanguageEnabled: true,
   transcriptAnalysisLanguage: '简体中文',
   glmTranscriptSummaryModel: '',
@@ -217,6 +220,18 @@ function normalizeBackendConfig(
       0,
       300000
     ),
+    transcriptEventsSegmentMaxPendingSessions: normalizeNumberInRange(
+      input.transcriptEventsSegmentMaxPendingSessions,
+      base.transcriptEventsSegmentMaxPendingSessions,
+      1,
+      5000
+    ),
+    transcriptEventsSegmentMaxStalenessMs: normalizeNumberInRange(
+      input.transcriptEventsSegmentMaxStalenessMs,
+      base.transcriptEventsSegmentMaxStalenessMs,
+      1000,
+      300000
+    ),
     transcriptAutoSplitGapMs: normalizeNumberInRange(
       input.transcriptAutoSplitGapMs,
       base.transcriptAutoSplitGapMs,
@@ -239,6 +254,10 @@ function normalizeBackendConfig(
     transcriptSegmentTranslationLanguage:
       normalizeText(input.transcriptSegmentTranslationLanguage, base.transcriptSegmentTranslationLanguage) ||
       base.transcriptSegmentTranslationLanguage,
+    glmTranscriptSegmentTranslationModel: normalizeText(
+      input.glmTranscriptSegmentTranslationModel,
+      base.glmTranscriptSegmentTranslationModel
+    ),
     transcriptAnalysisLanguageEnabled: normalizeBoolean(
       input.transcriptAnalysisLanguageEnabled,
       base.transcriptAnalysisLanguageEnabled

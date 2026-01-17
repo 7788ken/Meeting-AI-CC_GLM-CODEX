@@ -52,6 +52,7 @@ export class TranscriptAnalysisGlmClient {
   async generateMarkdown(params: {
     system: string
     user: string
+    scheduleKey?: string
   }): Promise<{ markdown: string; model: string }> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
@@ -88,6 +89,7 @@ export class TranscriptAnalysisGlmClient {
       endpoint,
       headers,
       requestBody,
+      scheduleKey: params.scheduleKey,
     })
 
     const extracted = this.extractTextFromGlmResponse(response.data)
@@ -101,6 +103,7 @@ export class TranscriptAnalysisGlmClient {
   async *generateMarkdownStream(params: {
     system: string
     user: string
+    scheduleKey?: string
   }): AsyncIterable<TranscriptSummaryStreamChunk> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
@@ -139,6 +142,7 @@ export class TranscriptAnalysisGlmClient {
       endpoint,
       headers,
       requestBody,
+      scheduleKey: params.scheduleKey,
     })
 
     if (response.status === 429) {
@@ -178,6 +182,7 @@ export class TranscriptAnalysisGlmClient {
     endpoint: string
     headers: Record<string, string>
     requestBody: Record<string, unknown>
+    scheduleKey?: string
   }): Promise<{ data?: unknown; status?: unknown }> {
     const maxRetries = this.readRetryMax()
     let attempt = 0
@@ -188,7 +193,11 @@ export class TranscriptAnalysisGlmClient {
             firstValueFrom(
               this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
             ),
-          { bucket: 'analysis', label: 'transcript_analysis' }
+          {
+            bucket: 'analysis',
+            label: 'transcript_analysis',
+            key: input.scheduleKey,
+          }
         )
       } catch (error) {
         const status = this.extractStatusCode(error)
@@ -206,7 +215,6 @@ export class TranscriptAnalysisGlmClient {
         this.logger.warn(
           `GLM rate limited (429), retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`
         )
-        await this.sleep(delayMs)
         attempt += 1
       }
     }
@@ -216,6 +224,7 @@ export class TranscriptAnalysisGlmClient {
     endpoint: string
     headers: Record<string, string>
     requestBody: Record<string, unknown>
+    scheduleKey?: string
   }): Promise<{ data: NodeJS.ReadableStream; status: number; headers: Record<string, any> }> {
     const maxRetries = this.readRetryMax()
     let attempt = 0
@@ -230,7 +239,11 @@ export class TranscriptAnalysisGlmClient {
                 validateStatus: () => true,
               })
             ),
-          { bucket: 'analysis', label: 'transcript_analysis_stream' }
+          {
+            bucket: 'analysis',
+            label: 'transcript_analysis_stream',
+            key: input.scheduleKey,
+          }
         )
       } catch (error) {
         const status = this.extractStatusCode(error)
@@ -248,7 +261,6 @@ export class TranscriptAnalysisGlmClient {
         this.logger.warn(
           `GLM rate limited (429), retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`
         )
-        await this.sleep(delayMs)
         attempt += 1
       }
     }
@@ -420,11 +432,4 @@ export class TranscriptAnalysisGlmClient {
     return Math.max(0, Math.floor(delay))
   }
 
-  private async sleep(ms: number): Promise<void> {
-    if (!ms || ms <= 0) {
-      await Promise.resolve()
-      return
-    }
-    await new Promise(resolve => setTimeout(resolve, ms))
-  }
 }
