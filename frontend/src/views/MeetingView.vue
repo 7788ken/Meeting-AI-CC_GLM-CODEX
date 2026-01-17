@@ -31,6 +31,17 @@
         <el-tag v-if="wsReconnectTag" :type="wsReconnectTag.type" size="small" class="ws-tag">
           {{ wsReconnectTag.text }}
         </el-tag>
+        <el-button
+          v-if="wsRetryVisible"
+          size="small"
+          type="warning"
+          plain
+          class="ws-retry-button"
+          :icon="Refresh"
+          @click="retryRecordingConnection"
+        >
+          重试连接
+        </el-button>
 
         <div class="header-icon-group">
           <el-tooltip content="设置" placement="bottom">
@@ -854,7 +865,11 @@ const recordingTag = computed<RecordingTag>(() => {
   if (recordingStatus.value === 'recording') return { type: 'success', text: '录制中' }
   if (recordingStatus.value === 'paused') return { type: 'warning', text: '已静音' }
   if (recordingStatus.value === 'connecting') return { type: 'warning', text: '连接中' }
-  if (recordingStatus.value === 'error') return { type: 'danger', text: '录音出错' }
+  if (recordingStatus.value === 'error') {
+    const wsState = wsConnectionStatus.value?.state
+    const hint = wsState === 'failed' || wsState === 'disconnected' ? '连接已断开' : '录音出错'
+    return { type: 'danger', text: hint }
+  }
   return { type: 'info', text: '未录制' }
 })
 
@@ -900,6 +915,13 @@ const recordingIndicatorIcon = computed(() => {
   }
 
   return null
+	})
+
+	const wsRetryVisible = computed(() => {
+	  if (isSessionEnded.value || !sessionId.value) return false
+	  if (recordingStatus.value !== 'error') return false
+	  const state = wsConnectionStatus.value?.state
+	  return !state || state === 'failed' || state === 'disconnected'
 	})
 
 	const segmentationStageText = computed(() => {
@@ -1236,6 +1258,12 @@ async function startRecording() {
     isPaused.value = false
     wsConnectionStatus.value = null
   }
+}
+
+async function retryRecordingConnection(): Promise<void> {
+  if (!wsRetryVisible.value) return
+  wsConnectionStatus.value = null
+  await startRecording()
 }
 
 // 停止录音
@@ -2028,6 +2056,15 @@ function clearTargetAnalysis(): void {
 
 .ws-tag {
   max-width: 46vw;
+}
+
+.ws-retry-button {
+  height: 24px;
+  padding: 0 8px;
+}
+
+.ws-retry-button :deep(.el-icon) {
+  font-size: 14px;
 }
 
 @media (max-width: 480px) {

@@ -486,6 +486,22 @@
 
               <el-form label-position="top" :model="backendForm" class="pane-form">
                 <div class="grid two-col">
+                  <el-form-item label="拆分并发上限">
+                    <el-input-number
+                      v-model="backendForm.transcriptEventsSegmentMaxInFlight"
+                      :min="1"
+                      :max="50"
+                      :step="1"
+                      controls-position="right"
+                      class="mono-input"
+                    />
+                    <div
+                      v-if="getRemark('TRANSCRIPT_EVENTS_SEGMENT_MAX_IN_FLIGHT')"
+                      class="hint"
+                    >
+                      {{ getRemark("TRANSCRIPT_EVENTS_SEGMENT_MAX_IN_FLIGHT") }}
+                    </div>
+                  </el-form-item>
                   <el-form-item label="最大待处理会话数">
                     <el-input-number
                       v-model="backendForm.transcriptEventsSegmentMaxPendingSessions"

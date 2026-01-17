@@ -153,6 +153,7 @@ export interface BackendConfig {
   glmTranscriptAnalysisMinIntervalMs: number
   glmTranscriptAnalysisRateLimitCooldownMs: number
   glmTranscriptAnalysisRateLimitMaxMs: number
+  transcriptEventsSegmentMaxInFlight: number
   transcriptEventsSegmentMaxPendingSessions: number
   transcriptEventsSegmentMaxStalenessMs: number
   transcriptAutoSplitGapMs: number
@@ -179,6 +180,8 @@ export interface GlmQueueStatsBucket {
   lastRateLimitAt?: number
   durationP50Ms?: number | null
   durationP95Ms?: number | null
+  queueDelayP50Ms?: number | null
+  queueDelayP95Ms?: number | null
 }
 
 export interface GlmQueueStats {

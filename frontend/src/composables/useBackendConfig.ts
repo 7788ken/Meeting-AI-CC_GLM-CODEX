@@ -25,6 +25,7 @@ const fallbackDefaults: BackendConfig = {
   glmTranscriptAnalysisMinIntervalMs: 500,
   glmTranscriptAnalysisRateLimitCooldownMs: 2000,
   glmTranscriptAnalysisRateLimitMaxMs: 15000,
+  transcriptEventsSegmentMaxInFlight: 2,
   transcriptEventsSegmentMaxPendingSessions: 300,
   transcriptEventsSegmentMaxStalenessMs: 20000,
   transcriptAutoSplitGapMs: 2500,
@@ -219,6 +220,12 @@ function normalizeBackendConfig(
       base.glmTranscriptAnalysisRateLimitMaxMs,
       0,
       300000
+    ),
+    transcriptEventsSegmentMaxInFlight: normalizeNumberInRange(
+      input.transcriptEventsSegmentMaxInFlight,
+      base.transcriptEventsSegmentMaxInFlight,
+      1,
+      50
     ),
     transcriptEventsSegmentMaxPendingSessions: normalizeNumberInRange(
       input.transcriptEventsSegmentMaxPendingSessions,

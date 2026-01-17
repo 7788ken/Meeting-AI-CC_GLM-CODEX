@@ -145,6 +145,7 @@ export class TranscriptAnalysisService {
         DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT
       )
     )
+    const summaryScheduleKey = this.buildSummaryScheduleKey(sessionId)
 
     const events = snapshot.events.filter(e => (e.content || '').trim())
     if (events.length === 0) {
@@ -174,7 +175,7 @@ export class TranscriptAnalysisService {
           revision: snapshot.revision,
           eventsText: totalText,
         }),
-        scheduleKey: `analysis:${sessionId}`,
+        scheduleKey: summaryScheduleKey,
       })
       const dto: TranscriptSummaryDTO = {
         sessionId,
@@ -200,7 +201,7 @@ export class TranscriptAnalysisService {
           revision: snapshot.revision,
           eventsText: chunkText,
         }),
-        scheduleKey: `analysis:${sessionId}`,
+        scheduleKey: summaryScheduleKey,
       })
       partials.push(markdown.trim())
     }
@@ -208,14 +209,14 @@ export class TranscriptAnalysisService {
     const reduced = await this.reduceBulletLists(
       partials,
       chunkSummarySystemPrompt,
-      `analysis:${sessionId}`
+      summaryScheduleKey
     )
     const combinedPartials = reduced.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
 
     const { markdown, model } = await this.glmClient.generateMarkdown({
       system: summarySystemPrompt,
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
-      scheduleKey: `analysis:${sessionId}`,
+      scheduleKey: summaryScheduleKey,
     })
 
     const dto: TranscriptSummaryDTO = {
@@ -264,6 +265,7 @@ export class TranscriptAnalysisService {
         DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT
       )
     )
+    const summaryScheduleKey = this.buildSummaryScheduleKey(sessionId)
 
     const events = snapshot.events.filter(e => (e.content || '').trim())
     const model = this.glmClient.getModelName()
@@ -313,7 +315,7 @@ export class TranscriptAnalysisService {
           revision: snapshot.revision,
           eventsText: totalText,
         }),
-        scheduleKey: `analysis:${sessionId}`,
+        scheduleKey: summaryScheduleKey,
       })) {
         if (chunk.type === 'delta') {
           markdownBuffer += chunk.text
@@ -346,7 +348,7 @@ export class TranscriptAnalysisService {
           revision: snapshot.revision,
           eventsText: chunkText,
         }),
-        scheduleKey: `analysis:${sessionId}`,
+        scheduleKey: summaryScheduleKey,
       })
       partials.push(markdown.trim())
     }
@@ -355,7 +357,7 @@ export class TranscriptAnalysisService {
     const reduced = await this.reduceBulletLists(
       partials,
       chunkSummarySystemPrompt,
-      `analysis:${sessionId}`
+      summaryScheduleKey
     )
     const combinedPartials = reduced.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
 
@@ -363,7 +365,7 @@ export class TranscriptAnalysisService {
     for await (const chunk of this.glmClient.generateMarkdownStream({
       system: summarySystemPrompt,
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
-      scheduleKey: `analysis:${sessionId}`,
+      scheduleKey: summaryScheduleKey,
     })) {
       if (chunk.type === 'delta') {
         markdownBuffer += chunk.text
@@ -465,7 +467,7 @@ export class TranscriptAnalysisService {
         sourceStartEventIndex: segment.sourceStartEventIndex,
         sourceEndEventIndex: segment.sourceEndEventIndex,
       }),
-      scheduleKey: `analysis:${sessionId}`,
+      scheduleKey: this.buildSegmentScheduleKey(sessionId, segmentId),
     })
 
     const dto: TranscriptSegmentAnalysisDTO = {
@@ -616,7 +618,7 @@ export class TranscriptAnalysisService {
           sourceStartEventIndex: segment.sourceStartEventIndex,
           sourceEndEventIndex: segment.sourceEndEventIndex,
         }),
-        scheduleKey: `analysis:${sessionId}`,
+        scheduleKey: this.buildSegmentScheduleKey(sessionId, segmentId),
       })) {
         if (chunk.type === 'delta') {
           markdownBuffer += chunk.text
@@ -669,6 +671,15 @@ export class TranscriptAnalysisService {
       if (fallbackName) return fallbackName
     }
     return ''
+  }
+
+  private buildSummaryScheduleKey(sessionId: string): string {
+    return `analysis:summary:${sessionId}`
+  }
+
+  private buildSegmentScheduleKey(sessionId: string, segmentId?: string): string {
+    const base = `analysis:segment:${sessionId}`
+    return segmentId ? `${base}:${segmentId}` : base
   }
 
   private getSummaryPromptName(id: string): string {

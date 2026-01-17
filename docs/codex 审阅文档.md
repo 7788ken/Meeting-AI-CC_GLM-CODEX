@@ -105,21 +105,15 @@
 
 | 日期 | 变更范围 | 结论 | 风险点 | 跟进项 |
 |---|---|---|---|---|
+| 2026-01-17 | 并发与链路同步（新增）Review | 发现会话级覆盖与调度并发问题，需补齐限流与任务粒度 | analysis/translation scheduleKey 颗粒度不当导致丢任务；分段调度无全局并发上限；冷却叠加放大退避；WS 断线回滚滞后 | 拆分 scheduleKey 粒度与去重策略；增加分段调度并发上限；统一退避；WS 断线即时回滚 |
 | 2026-01-17 | 前后端录音→转写→拆分→翻译→分析全链路 | 修复 HTTPS 默认 ws 协议与启动回滚问题；前端单测通过 | 混合内容阻断导致 WS 连接失败；start_transcribe 未回滚；采集中途错误状态不一致；拆分窗口无法命中前序句导致停滞；Socket.IO 网关/RecordButton 可能冗余 | 补齐采集中途错误的 stopTranscribe/状态同步；拆分失败自动扩大窗口或触发重建；确认并清理冗余模块 |
 | 2026-01-10 | 后端路由/鉴权/测试、前端单测 | 修复路由误匹配、补齐 E2E 鉴权、修复默认用户初始化竞态与 ID 冲突、增强测试隔离、移除子项目锁文件 | `GET /:id` 误匹配特定路由；全局 mock 污染导致用例互相影响；默认用户异步创建导致登录不稳定 |  |
 
 ## 8. 待修复/疑问/待讨论（滚动）
 
-- 待修复：采集中途错误未同步 stopTranscribe/状态回滚，UI 可能仍显示录制中。`frontend/src/services/transcription.ts`
-- 待修复：拆分窗口未命中 previousSentence 时直接 return，可能导致长期不再生成新段。`backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.service.ts`
-- 待修复：分段调度并发控制与 `GlmRateLimiter` 双层排队，导致有效并发降低与队列等待放大。`backend/src/main.ts`、`backend/src/common/llm/glm-rate-limiter.ts`
-- 待修复：GLM 客户端在 429 时 sleep + `GlmRateLimiter` 冷却并存，存在双重退避与延迟放大。`backend/src/modules/transcript-event-segmentation/transcript-event-segmentation.glm-client.ts`、`backend/src/modules/transcript-event-segmentation/transcript-event-segment-translation.glm-client.ts`、`backend/src/modules/transcript-analysis/transcript-analysis.glm-client.ts`
-- 待修复：分段调度参数 `TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS`/`TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS` 未纳入配置与文档，无法调优。`backend/src/main.ts`
-- 待修复：`GLM_TRANSCRIPT_SEGMENT_TRANSLATION_MODEL` 未在配置种子/设置页暴露，无法配置翻译模型。`backend/src/modules/transcript-event-segmentation/transcript-event-segment-translation.glm-client.ts`、`backend/src/modules/app-config/app-config.constants.ts`、`frontend/src/components/SettingsDrawer.vue`
-- 待修复：分段调度的 session 级 Map（latestRevision/lastRunAt 等）缺少清理，长会话/多会话存在内存增长风险。`backend/src/main.ts`
+- 待跟进：基于 queueDelay P50/P95 指标评估是否需要调整全局 + 桶双层排队策略。`backend/src/common/llm/glm-rate-limiter.ts` `backend/src/main.ts`
 - 待讨论：`TranscriptGateway`(socket.io) 与原生 WebSocket 并存是否保留。`backend/src/modules/transcript/transcript.gateway.ts`
 - 待讨论：`RecordButton` 是否仍有使用场景。`frontend/src/components/RecordButton.vue`
-- 疑问点：分析/翻译未做会话级“最新任务覆盖”，旧任务可能占用桶队列。`backend/src/common/llm/glm-rate-limiter.ts`
 
 ## 9. 相关文档（避免重复造轮子）
 

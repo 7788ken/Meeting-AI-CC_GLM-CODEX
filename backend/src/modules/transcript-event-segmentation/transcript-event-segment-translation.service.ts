@@ -127,7 +127,7 @@ export class TranscriptEventSegmentTranslationService {
     try {
       const targetLanguage = this.resolveTargetLanguage()
       const { translatedText, model } = await this.glmClient.translate(sourceText, targetLanguage, {
-        scheduleKey: `translation:${existing.sessionId}`,
+        scheduleKey: `translation:${existing.sessionId}:${segmentId}`,
       })
       const normalized = translatedText.trim()
       if (!normalized) {

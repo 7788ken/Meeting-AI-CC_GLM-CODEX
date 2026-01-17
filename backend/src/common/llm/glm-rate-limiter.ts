@@ -34,6 +34,7 @@ type BucketState = {
   rateLimitCount: number
   lastRateLimitAt: number
   durationSamples: number[]
+  queueDelaySamples: number[]
   timer?: NodeJS.Timeout
 }
 
@@ -70,6 +71,14 @@ const BUCKET_CONFIG_KEYS: Record<GlmRateLimiterBucket, BucketConfigKeys> = {
   },
 }
 
+const BUCKET_PUMP_WEIGHTS: Record<GlmRateLimiterBucket, number> = {
+  global: 1,
+  asr: 1,
+  segmentation: 1,
+  translation: 1,
+  analysis: 3,
+}
+
 @Injectable()
 export class GlmRateLimiter {
   private readonly logger = new Logger(GlmRateLimiter.name)
@@ -79,6 +88,7 @@ export class GlmRateLimiter {
     os.hostname() ||
     randomBytes(6).toString('hex')
   private bucketStates = new Map<GlmRateLimiterBucket, BucketState>()
+  private bucketPumpCursor = 0
 
   constructor(private readonly appConfigService: AppConfigService) {}
 
@@ -118,6 +128,8 @@ export class GlmRateLimiter {
         lastRateLimitAt: number
         durationP50Ms: number | null
         durationP95Ms: number | null
+        queueDelayP50Ms: number | null
+        queueDelayP95Ms: number | null
       }
     >
   } {
@@ -130,6 +142,8 @@ export class GlmRateLimiter {
         lastRateLimitAt: number
         durationP50Ms: number | null
         durationP95Ms: number | null
+        queueDelayP50Ms: number | null
+        queueDelayP95Ms: number | null
       }
     >
     const bucketList = Object.keys(BUCKET_CONFIG_KEYS) as GlmRateLimiterBucket[]
@@ -142,6 +156,8 @@ export class GlmRateLimiter {
         lastRateLimitAt: state.lastRateLimitAt,
         durationP50Ms: this.computePercentile(state.durationSamples, 0.5),
         durationP95Ms: this.computePercentile(state.durationSamples, 0.95),
+        queueDelayP50Ms: this.computePercentile(state.queueDelaySamples, 0.5),
+        queueDelayP95Ms: this.computePercentile(state.queueDelaySamples, 0.95),
       }
     }
     const totalQueued = bucketList.reduce((sum, bucket) => sum + buckets[bucket].queue, 0)
@@ -175,6 +191,7 @@ export class GlmRateLimiter {
       rateLimitCount: 0,
       lastRateLimitAt: 0,
       durationSamples: [],
+      queueDelaySamples: [],
       timer: undefined,
     }
     this.bucketStates.set(bucket, created)
@@ -265,6 +282,11 @@ export class GlmRateLimiter {
       globalState.lastStartAt = now
     }
     const startedAt = now
+    const queueDelayMs = Math.max(0, startedAt - task.enqueuedAt)
+    this.recordQueueDelay(state, queueDelayMs)
+    if (globalState) {
+      this.recordQueueDelay(globalState, queueDelayMs)
+    }
 
     Promise.resolve()
       .then(task.run)
@@ -292,10 +314,14 @@ export class GlmRateLimiter {
   }
 
   private pumpAllBuckets(): void {
-    const buckets = Object.keys(BUCKET_CONFIG_KEYS) as GlmRateLimiterBucket[]
-    for (const bucket of buckets) {
-      this.pump(bucket)
+    const buckets = this.buildBucketPumpOrder()
+    if (!buckets.length) return
+    const start = this.bucketPumpCursor % buckets.length
+    for (let i = 0; i < buckets.length; i += 1) {
+      const idx = (start + i) % buckets.length
+      this.pump(buckets[idx]!)
     }
+    this.bucketPumpCursor = (start + 1) % buckets.length
   }
 
   private recordDuration(state: BucketState, durationMs: number): void {
@@ -307,12 +333,33 @@ export class GlmRateLimiter {
     }
   }
 
+  private recordQueueDelay(state: BucketState, delayMs: number): void {
+    if (!Number.isFinite(delayMs) || delayMs < 0) return
+    state.queueDelaySamples.push(Math.floor(delayMs))
+    const limit = 60
+    if (state.queueDelaySamples.length > limit) {
+      state.queueDelaySamples.splice(0, state.queueDelaySamples.length - limit)
+    }
+  }
+
   private computePercentile(samples: number[], percentile: number): number | null {
     if (!samples.length) return null
     const normalized = Math.min(1, Math.max(0, percentile))
     const sorted = [...samples].sort((a, b) => a - b)
     const index = Math.floor((sorted.length - 1) * normalized)
     return sorted[index] ?? null
+  }
+
+  private buildBucketPumpOrder(): GlmRateLimiterBucket[] {
+    const buckets = Object.keys(BUCKET_CONFIG_KEYS) as GlmRateLimiterBucket[]
+    const order: GlmRateLimiterBucket[] = []
+    for (const bucket of buckets) {
+      const weight = Math.max(1, Math.floor(BUCKET_PUMP_WEIGHTS[bucket] ?? 1))
+      for (let i = 0; i < weight; i += 1) {
+        order.push(bucket)
+      }
+    }
+    return order
   }
 
   private scheduleTimer(bucket: GlmRateLimiterBucket, delayMs: number): void {

@@ -68,6 +68,9 @@ export class AppConfigDto {
   @ApiProperty({ description: 'AI 分析冷却时间上限（ms）', minimum: 0, maximum: 300000 })
   glmTranscriptAnalysisRateLimitMaxMs: number
 
+  @ApiProperty({ description: '语句拆分全局并发上限', minimum: 1, maximum: 50 })
+  transcriptEventsSegmentMaxInFlight: number
+
   @ApiProperty({ description: '语句拆分待处理会话上限', minimum: 1, maximum: 5000 })
   transcriptEventsSegmentMaxPendingSessions: number
 
@@ -270,6 +273,13 @@ export class UpdateAppConfigDto {
   @Min(0)
   @Max(300000)
   glmTranscriptAnalysisRateLimitMaxMs?: number
+
+  @ApiPropertyOptional({ description: '语句拆分全局并发上限', minimum: 1, maximum: 50 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  transcriptEventsSegmentMaxInFlight?: number
 
   @ApiPropertyOptional({ description: '语句拆分待处理会话上限', minimum: 1, maximum: 5000 })
   @IsOptional()

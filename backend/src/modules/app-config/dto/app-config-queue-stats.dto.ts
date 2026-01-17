@@ -18,6 +18,12 @@ export class AppConfigQueueStatsBucketDto {
 
   @ApiProperty({ description: '近似 P95 请求耗时（ms）' })
   durationP95Ms: number | null
+
+  @ApiProperty({ description: '近似 P50 排队耗时（ms）' })
+  queueDelayP50Ms: number | null
+
+  @ApiProperty({ description: '近似 P95 排队耗时（ms）' })
+  queueDelayP95Ms: number | null
 }
 
 export class AppConfigQueueStatsDto {

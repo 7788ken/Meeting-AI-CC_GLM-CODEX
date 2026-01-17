@@ -43,6 +43,7 @@ export const APP_CONFIG_SEED_KEYS = [
   'TRANSCRIPT_EVENTS_SEGMENT_SYSTEM_PROMPT',
   'TRANSCRIPT_EVENTS_SEGMENT_STRICT_SYSTEM_PROMPT',
   'TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN',
+  'TRANSCRIPT_EVENTS_SEGMENT_MAX_IN_FLIGHT',
   'TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS',
   'TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS',
   'TRANSCRIPT_AUTO_SPLIT_GAP_MS',
@@ -129,6 +130,8 @@ export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
     '语句拆分：严格回显提示词（用于约束/回显 JSON 输出的提示词）。',
   TRANSCRIPT_EVENTS_SEGMENT_MAX_SEGMENTS_PER_RUN:
     '单次语句拆分任务最多生成段数（用于限制一次运行的处理量）。',
+  TRANSCRIPT_EVENTS_SEGMENT_MAX_IN_FLIGHT:
+    '语句拆分：全局并发上限（同时处理的会话数），避免大量任务挂起占用资源。',
   TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS:
     '语句拆分：待处理会话的最大数量（超过会丢弃最旧会话以防堆积）。',
   TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS:
@@ -328,6 +331,14 @@ export const APP_CONFIG_FIELDS = [
     defaultValue: 15000,
     min: 0,
     max: 300000,
+  },
+  {
+    field: 'transcriptEventsSegmentMaxInFlight',
+    key: 'TRANSCRIPT_EVENTS_SEGMENT_MAX_IN_FLIGHT',
+    type: 'number',
+    defaultValue: 2,
+    min: 1,
+    max: 50,
   },
   {
     field: 'transcriptEventsSegmentMaxPendingSessions',

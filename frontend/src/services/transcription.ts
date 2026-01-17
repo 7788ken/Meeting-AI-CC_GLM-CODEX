@@ -329,6 +329,12 @@ export class TranscriptionService {
       }
     })
 
+    websocket.onClose(() => {
+      const shouldRollback = this.isRecording || this.isPaused || this.status === 'connecting'
+      if (!shouldRollback || this.status === 'error') return
+      this.handleError(new Error('WebSocket 连接已断开'))
+    })
+
     websocket.onError((error) => {
       this.handleError(new Error('WebSocket 连接错误'))
     })

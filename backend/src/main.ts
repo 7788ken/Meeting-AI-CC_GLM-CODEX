@@ -56,6 +56,9 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
     })
   )
 
@@ -226,6 +229,12 @@ async function bootstrap() {
       'TRANSCRIPT_EVENTS_SEGMENT_MAX_PENDING_SESSIONS',
       300,
       value => value >= 1 && value <= 5000
+    )
+  const getSegmentationMaxInFlight = () =>
+    readNumberFromConfig(
+      'TRANSCRIPT_EVENTS_SEGMENT_MAX_IN_FLIGHT',
+      2,
+      value => value >= 1 && value <= 50
     )
   const shouldTriggerEventSegmentationOnStopTranscribe = () =>
     getSegmentationConfig().triggerOnStopTranscribe
@@ -1041,7 +1050,8 @@ async function bootstrap() {
       return
     }
 
-    while (true) {
+    const maxInFlight = getSegmentationMaxInFlight()
+    while (transcriptEventSegmentationInFlight.size < maxInFlight) {
       const sessionId = dequeueTranscriptEventSegmentationSession()
       if (!sessionId) return
       if (transcriptEventSegmentationInFlight.has(sessionId)) {
