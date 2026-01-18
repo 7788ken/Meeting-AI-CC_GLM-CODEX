@@ -16,6 +16,7 @@ import { AuthModule } from './modules/auth/auth.module'
 import { DebugErrorModule } from './modules/debug-error/debug-error.module'
 import { AppConfigModule } from './modules/app-config/app-config.module'
 import { PromptLibraryModule } from './modules/prompt-library/prompt-library.module'
+import { OpsModule } from './modules/ops/ops.module'
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
 import { TransformInterceptor } from './common/interceptors/transform.interceptor'
 import { AppController } from './app.controller'
@@ -34,6 +35,7 @@ import { AppService } from './app.service'
     AppConfigModule,
     PromptLibraryModule,
     AuthModule,
+    OpsModule,
     SessionModule,
     SpeechModule,
     TranscriptModule,

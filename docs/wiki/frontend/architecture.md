@@ -30,7 +30,8 @@ frontend/src/
 ├── views/               # 页面组件
 │   ├── HomeView.vue     # 首页/会话列表 (F1006, F1009)
 │   ├── MeetingView.vue  # 会议进行页面 (F1007, F1008)
-│   └── SettingsView.vue # 设置页面
+│   ├── SettingsView.vue # 设置页面
+│   └── ConcurrencySimulatorView.vue # 并发调度模拟器
 │
 ├── services/            # 业务服务层
 │   ├── api.ts           # API 接口定义 (F1005)
@@ -174,6 +175,7 @@ export const useMeetingStore = defineStore('meeting', () => {
 /                    → 首页（会话列表）
 /meeting/:id         → 会议进行页面
 /settings            → 设置页面
+/concurrency-simulator → 并发调度模拟器
 ```
 
 ## 样式方案

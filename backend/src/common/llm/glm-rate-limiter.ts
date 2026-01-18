@@ -79,6 +79,8 @@ const BUCKET_PUMP_WEIGHTS: Record<GlmRateLimiterBucket, number> = {
   analysis: 3,
 }
 
+const INDEPENDENT_BUCKETS = new Set<GlmRateLimiterBucket>(['analysis'])
+
 @Injectable()
 export class GlmRateLimiter {
   private readonly logger = new Logger(GlmRateLimiter.name)
@@ -102,7 +104,7 @@ export class GlmRateLimiter {
 
   onRateLimit(retryAfterMs?: number | null, bucket: GlmRateLimiterBucket = 'global'): void {
     this.applyRateLimit(bucket, retryAfterMs, { log: true })
-    if (bucket !== 'global') {
+    if (bucket !== 'global' && !this.isIndependentBucket(bucket)) {
       this.applyRateLimit('global', retryAfterMs, { log: false, count: false })
     }
   }
@@ -161,20 +163,25 @@ export class GlmRateLimiter {
       }
     }
     const totalQueued = bucketList.reduce((sum, bucket) => sum + buckets[bucket].queue, 0)
-    const totalRateLimitCount = bucketList.reduce(
+    const totalInFlight = bucketList.reduce((sum, bucket) => sum + buckets[bucket].inFlight, 0)
+    const aggregatedBuckets = bucketList.filter(
+      bucket => bucket === 'global' || !this.isIndependentBucket(bucket)
+    )
+    const totalRateLimitCount = aggregatedBuckets.reduce(
       (sum, bucket) => sum + buckets[bucket].rateLimitCount,
       0
     )
-    const latestRateLimitAt = bucketList.reduce(
+    const latestRateLimitAt = aggregatedBuckets.reduce(
       (max, bucket) => Math.max(max, buckets[bucket].lastRateLimitAt),
       0
     )
     const global = buckets.global
     global.queue = totalQueued
+    global.inFlight = totalInFlight
     global.rateLimitCount = totalRateLimitCount
     global.lastRateLimitAt = latestRateLimitAt
     return {
-      totalPending: totalQueued + global.inFlight,
+      totalPending: totalQueued + totalInFlight,
       instanceId: this.instanceId,
       buckets,
     }
@@ -255,7 +262,8 @@ export class GlmRateLimiter {
     const task = state.queue.shift()
     if (!task) return
 
-    const globalState = bucket === 'global' ? null : this.getBucketState('global')
+    const globalState =
+      bucket === 'global' || this.isIndependentBucket(bucket) ? null : this.getBucketState('global')
     if (globalState && globalState.inFlight >= this.getMaxConcurrency('global')) {
       state.queue.unshift(task)
       return
@@ -322,6 +330,10 @@ export class GlmRateLimiter {
       this.pump(buckets[idx]!)
     }
     this.bucketPumpCursor = (start + 1) % buckets.length
+  }
+
+  private isIndependentBucket(bucket: GlmRateLimiterBucket): boolean {
+    return INDEPENDENT_BUCKETS.has(bucket)
   }
 
   private recordDuration(state: BucketState, durationMs: number): void {

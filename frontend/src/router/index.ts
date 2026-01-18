@@ -21,6 +21,11 @@ const routes: RouteRecordRaw[] = [
     name: 'Settings',
     component: () => import('@/views/SettingsView.vue'),
   },
+  {
+    path: '/concurrency-simulator',
+    name: 'ConcurrencySimulator',
+    component: () => import('@/views/ConcurrencySimulatorView.vue'),
+  },
 ]
 
 const router = createRouter({
