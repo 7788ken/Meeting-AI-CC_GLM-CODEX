@@ -91,7 +91,11 @@ export class AudioCaptureService {
   }
 
   private getAudioContextCtor(): (new (options?: AudioContextOptions) => AudioContext) | null {
-    return (globalThis as any).AudioContext || (globalThis as any).webkitAudioContext || null
+    const runtime = globalThis as {
+      AudioContext?: new (options?: AudioContextOptions) => AudioContext
+      webkitAudioContext?: new (options?: AudioContextOptions) => AudioContext
+    }
+    return runtime.AudioContext || runtime.webkitAudioContext || null
   }
 
   private buildAudioConstraints(config?: AudioConfig): MediaTrackConstraints {
@@ -127,7 +131,7 @@ export class AudioCaptureService {
         typeof error === 'object' &&
         error !== null &&
         'name' in error &&
-        (error as any).name === 'OverconstrainedError'
+        (error as { name?: string }).name === 'OverconstrainedError'
 
       if (!shouldFallback) throw error
 
@@ -144,7 +148,8 @@ export class AudioCaptureService {
     // 说明：
     // - Chrome 通常需要 video=true 才会在分享对话框里提供“共享音频”选项。
     // - 实际仅使用音轨，video 轨会在 cleanup 时 stop。
-    return await getDisplayMedia({ video: true, audio: true } as any)
+    const constraints: DisplayMediaStreamConstraints = { video: true, audio: true }
+    return await getDisplayMedia(constraints)
   }
 
   private normalizeGetUserMediaError(error: unknown): Error {
@@ -162,7 +167,7 @@ export class AudioCaptureService {
       }
     }
     if (typeof error === 'object' && error) {
-      const name = (error as any).name as string | undefined
+      const name = (error as { name?: string }).name
       if (name === 'NotAllowedError') {
         return new Error('音频采集权限被拒绝，请在浏览器地址栏允许麦克风/共享音频后重试')
       }

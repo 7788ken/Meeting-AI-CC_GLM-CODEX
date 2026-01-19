@@ -20,6 +20,13 @@ export interface AppSettings {
   wsUrl: string
 }
 
+type RuntimeEnv = {
+  __VITE_API_BASE_URL__?: string
+  __VITE_WS_URL__?: string
+}
+
+const runtimeEnv = globalThis as RuntimeEnv
+
 const STORAGE_KEY = 'meeting-ai.app-settings'
 const FONT_SIZE_MIN = 12
 const FONT_SIZE_MAX = 24
@@ -40,11 +47,10 @@ const buildDefaultSettings = (): AppSettings => {
     segmentFontSize: 16,
     analysisFontSize: 16,
     apiBaseUrl:
-      resolveEnv((globalThis as any).__VITE_API_BASE_URL__ as string, '') ||
-      resolveEnv(import.meta.env.VITE_API_BASE_URL as string, '/api'),
+      resolveEnv(runtimeEnv.__VITE_API_BASE_URL__, '') ||
+      resolveEnv(import.meta.env.VITE_API_BASE_URL, '/api'),
     wsUrl:
-      resolveEnv((globalThis as any).__VITE_WS_URL__ as string, '') ||
-      resolveEnv(import.meta.env.VITE_WS_URL as string, ''),
+      resolveEnv(runtimeEnv.__VITE_WS_URL__, '') || resolveEnv(import.meta.env.VITE_WS_URL, ''),
   }
 }
 
@@ -94,21 +100,9 @@ function normalizeNumberInRange(
   return fallback
 }
 
-function normalizeBoolean(value: unknown, fallback: boolean): boolean {
-  return typeof value === 'boolean' ? value : fallback
-}
-
-function normalizeText(value: unknown, fallback: string): string {
-  if (typeof value !== 'string') return fallback
-  const trimmed = value.trim()
-  return trimmed ? trimmed : fallback
-}
-
 function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppSettings {
   const audioCaptureModeRaw =
-    typeof (input as any).audioCaptureMode === 'string'
-      ? String((input as any).audioCaptureMode).trim()
-      : ''
+    typeof input.audioCaptureMode === 'string' ? input.audioCaptureMode.trim() : ''
   const audioCaptureMode: AudioCaptureMode =
     audioCaptureModeRaw === 'tab' || audioCaptureModeRaw === 'mix' || audioCaptureModeRaw === 'mic'
       ? (audioCaptureModeRaw as AudioCaptureMode)
@@ -117,9 +111,7 @@ function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppS
   const next: AppSettings = {
     asrModel: 'glm',
     micDeviceId:
-      typeof (input as any).micDeviceId === 'string'
-        ? (input as any).micDeviceId.trim()
-        : base.micDeviceId,
+      typeof input.micDeviceId === 'string' ? input.micDeviceId.trim() : base.micDeviceId,
     audioCaptureMode,
     vadStartTh: normalizeNumber(input.vadStartTh, base.vadStartTh, 0),
     vadStopTh: normalizeNumber(input.vadStopTh, base.vadStopTh, 0),
@@ -142,18 +134,18 @@ function normalizeSettings(input: Partial<AppSettings>, base: AppSettings): AppS
       FONT_SIZE_MIN,
       FONT_SIZE_MAX
     ),
-    apiBaseUrl: input.apiBaseUrl?.trim() || base.apiBaseUrl,
-    wsUrl: (input.wsUrl ?? base.wsUrl).trim(),
+    apiBaseUrl: typeof input.apiBaseUrl === 'string' ? input.apiBaseUrl.trim() : base.apiBaseUrl,
+    wsUrl: typeof input.wsUrl === 'string' ? input.wsUrl.trim() : base.wsUrl,
   }
   return next
 }
 
 function applySettings(next?: AppSettings) {
   const target = next ?? settings.value
-  ;(globalThis as any).__VITE_API_BASE_URL__ = target.apiBaseUrl
+  runtimeEnv.__VITE_API_BASE_URL__ = target.apiBaseUrl
   setApiBaseUrl(target.apiBaseUrl)
   if (target.wsUrl) {
-    ;(globalThis as any).__VITE_WS_URL__ = target.wsUrl
+    runtimeEnv.__VITE_WS_URL__ = target.wsUrl
     websocket.setUrl(target.wsUrl)
   }
   applyVadConfig({

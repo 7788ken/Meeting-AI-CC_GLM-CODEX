@@ -351,7 +351,7 @@ export class TranscriptionService {
       this.handleError(new Error('WebSocket 连接已断开'))
     })
 
-    websocket.onError(error => {
+    websocket.onError(_error => {
       this.handleError(new Error('WebSocket 连接错误'))
     })
   }

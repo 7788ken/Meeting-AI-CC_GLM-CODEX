@@ -162,7 +162,6 @@ export class TranscriptEventSegmentationGlmClient {
     const response = await this.postWithRetry(input)
 
     const extracted = this.extractStructuredTextFromGlmResponse(response.data)
-    const isJsonMode = this.isJsonModeRequest(input.requestBody)
     void this.appLogService.recordLlmRequestResponseLog({
       sessionId: input.sessionId,
       label: 'transcript_event_segmentation',
@@ -340,7 +339,14 @@ export class TranscriptEventSegmentationGlmClient {
     text: string | null
     finishReason?: string
   } {
-    const choice = (data as any)?.choices?.[0]
+    const choice = (
+      data as {
+        choices?: Array<{
+          finish_reason?: unknown
+          message?: { content?: unknown; reasoning_content?: unknown }
+        }>
+      }
+    )?.choices?.[0]
     const finishReason =
       typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
     const message = choice?.message

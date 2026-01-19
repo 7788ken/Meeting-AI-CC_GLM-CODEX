@@ -36,4 +36,10 @@ module.exports = [
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   }),
+  {
+    files: ['**/*.spec.ts', '**/test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
 ]

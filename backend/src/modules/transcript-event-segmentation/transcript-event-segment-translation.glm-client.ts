@@ -149,16 +149,20 @@ export class TranscriptEventSegmentTranslationGlmClient {
     if (!responseBody || typeof responseBody !== 'object') return null
     const root = responseBody as { choices?: unknown }
     if (!Array.isArray(root.choices) || !root.choices.length) return null
-    const first = root.choices[0] as any
-    const content = first?.message?.content ?? first?.delta?.content
+    const first = root.choices[0] as {
+      message?: { content?: unknown }
+      delta?: { content?: unknown }
+    }
+    const content = first.message?.content ?? first.delta?.content
     return extractGlmTextContent(content)
   }
 
   private buildInvalidResponseError(response: { data?: unknown; status?: unknown }): Error {
     const status = response.status != null ? String(response.status) : 'unknown'
     const error = new Error(`Invalid response from GLM API (status=${status})`)
-    ;(error as any).glmStatus = response.status
-    ;(error as any).glmResponse = response.data
+    const target = error as { glmStatus?: unknown; glmResponse?: unknown }
+    target.glmStatus = response.status
+    target.glmResponse = response.data
     return error
   }
 }

@@ -11,7 +11,7 @@ export interface WebSocketConfig {
   maxReconnectAttempts?: number
 }
 
-export type MessageHandler = (data: any) => void
+export type MessageHandler = (data: TranscriptMessage) => void
 export type ConnectionHandler = () => void
 export type ErrorHandler = (error: Event) => void
 
@@ -146,7 +146,8 @@ export class WebSocketService {
 
   constructor(config?: WebSocketConfig) {
     const getWsUrl = () => {
-      const envUrl = (globalThis as any).__VITE_WS_URL__ || import.meta.env.VITE_WS_URL
+      const runtimeEnv = globalThis as { __VITE_WS_URL__?: string }
+      const envUrl = runtimeEnv.__VITE_WS_URL__ || import.meta.env.VITE_WS_URL
       if (envUrl) return envUrl
       const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
       return `${protocol}://${location.host}/transcript`

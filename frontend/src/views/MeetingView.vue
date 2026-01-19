@@ -370,6 +370,7 @@
             </div>
 
             <!-- 分析结果 -->
+            <!-- eslint-disable-next-line vue/no-v-html -->
             <div
               v-if="hasAnalysisContent"
               class="analysis-result"
@@ -467,6 +468,7 @@
             </div>
 
             <!-- 分析结果 -->
+            <!-- eslint-disable-next-line vue/no-v-html -->
             <div
               v-if="hasTargetAnalysisContent"
               class="analysis-result"
@@ -1499,7 +1501,7 @@ function normalizeMarkdown(markdown: string): string {
   let out = raw.replace(/\r\n?/g, '\n')
 
   // 兼容全角井号（＃）/全角空格
-  out = out.replace(/＃/g, '#').replace(/　/g, ' ')
+  out = out.replace(/\uFF03/g, '#').replace(/\u3000/g, ' ')
 
   // 针对模型常见输出：标题未换行，导致整个内容被解析为单个 h1/h2。
   // 这里对“已知标题集合”强制补齐前后换行，确保 heading 独立成行。

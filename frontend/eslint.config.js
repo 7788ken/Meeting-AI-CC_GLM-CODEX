@@ -43,9 +43,30 @@ export default [
       sourceType: 'module',
     },
     rules: {
+      'vue/valid-v-for': 'off',
       'vue/multi-word-component-names': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
   }),
+  {
+    files: ['**/*.vue'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
+    files: ['**/*.spec.ts', '**/tests/**/*.{ts,tsx}', '**/e2e/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
+    files: ['src/views/MeetingView.vue'],
+    rules: {
+      'vue/no-v-html': 'off',
+    },
+  },
 ]

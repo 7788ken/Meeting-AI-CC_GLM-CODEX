@@ -110,7 +110,7 @@ async function checkPermission(): Promise<PermissionStatus> {
 
   // 尝试获取权限状态（部分浏览器支持）
   try {
-    const permissions = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+    const permissions = await navigator.permissions.query({ name: 'microphone' })
     return permissions.state === 'granted'
       ? 'granted'
       : permissions.state === 'denied'

@@ -284,7 +284,7 @@ export class TranscriptAnalysisGlmClient {
     headers: Record<string, string>
     requestBody: Record<string, unknown>
     scheduleKey?: string
-  }): Promise<{ data: NodeJS.ReadableStream; status: number; headers: Record<string, any> }> {
+  }): Promise<{ data: NodeJS.ReadableStream; status: number; headers: Record<string, unknown> }> {
     const maxRetries = this.readRetryMax()
     let attempt = 0
     while (true) {
@@ -356,9 +356,8 @@ export class TranscriptAnalysisGlmClient {
   }
 
   private extractDeltaText(payload: unknown): string | null {
-    const choice = (payload as any)?.choices?.[0]
-    const delta = choice?.delta
-    const content = extractGlmTextContent(delta?.content, { trim: false })
+    const choice = (payload as { choices?: Array<{ delta?: { content?: unknown } }> })?.choices?.[0]
+    const content = extractGlmTextContent(choice?.delta?.content, { trim: false })
     if (content) return content
     return null
   }
@@ -373,7 +372,8 @@ export class TranscriptAnalysisGlmClient {
 
   private readRetryAfterMsFromHeaders(headers?: Record<string, unknown>): number | null {
     if (!headers) return null
-    const raw = (headers as any)['retry-after'] ?? (headers as any)['Retry-After']
+    const record = headers as Record<string, unknown>
+    const raw = record['retry-after'] ?? record['Retry-After']
     if (raw == null) return null
     const value = Array.isArray(raw) ? raw[0] : raw
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -399,7 +399,11 @@ export class TranscriptAnalysisGlmClient {
     text: string | null
     finishReason?: string
   } {
-    const choice = (data as any)?.choices?.[0]
+    const choice = (
+      data as {
+        choices?: Array<{ finish_reason?: unknown; message?: { content?: unknown } }>
+      }
+    )?.choices?.[0]
     const finishReason =
       typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
     const message = choice?.message

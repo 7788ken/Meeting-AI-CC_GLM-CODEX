@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { ConfigService } from '@nestjs/config'
 import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { AppModule } from '../src/app.module'
+import { TranscriptModule } from '../src/modules/transcript/transcript.module'
+import { TranscriptService } from '../src/modules/transcript/transcript.service'
 import request from 'supertest'
 
 /**
@@ -256,12 +258,10 @@ describe('API E2E Tests', () => {
 
   describe('Transcript Module Loading', () => {
     it('should load TranscriptModule', () => {
-      const { TranscriptModule } = require('../src/modules/transcript/transcript.module')
       expect(TranscriptModule).toBeDefined()
     })
 
     it('should load TranscriptService', () => {
-      const { TranscriptService } = require('../src/modules/transcript/transcript.service')
       expect(TranscriptService).toBeDefined()
     })
   })

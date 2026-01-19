@@ -14,7 +14,7 @@ export function extractGlmTextContent(
   }
 
   if (content && typeof content === 'object' && !Array.isArray(content)) {
-    const maybeText = (content as any).text
+    const maybeText = (content as { text?: unknown }).text
     if (typeof maybeText === 'string') {
       return hasText(maybeText) ? normalize(maybeText) : null
     }
@@ -31,7 +31,7 @@ export function extractGlmTextContent(
       continue
     }
     if (item && typeof item === 'object') {
-      const maybeText = (item as any).text
+      const maybeText = (item as { text?: unknown }).text
       if (typeof maybeText === 'string' && hasText(maybeText)) {
         parts.push(shouldTrim ? maybeText.trim() : maybeText)
       }

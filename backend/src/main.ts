@@ -10,7 +10,6 @@ import { SmartAudioBufferService } from './modules/transcript/smart-audio-buffer
 import { GlmAsrClient } from './modules/transcript/glm-asr.client'
 import type { AsrConfigDto } from './modules/transcript/dto/transcript.dto'
 import { TranscriptStreamService } from './modules/transcript-stream/transcript-stream.service'
-import { DebugErrorService } from './modules/debug-error/debug-error.service'
 import { GlmRateLimiter } from './common/llm/glm-rate-limiter'
 import {
   TranscriptEventSegmentationService,
@@ -135,7 +134,6 @@ async function bootstrap() {
   const glmAsrClient = app.get(GlmAsrClient)
   const speechService = app.get(SpeechService)
   const transcriptStreamService = app.get(TranscriptStreamService)
-  const debugErrorService = app.get(DebugErrorService)
   const glmRateLimiter = app.get(GlmRateLimiter)
   const transcriptEventSegmentationService = app.get(TranscriptEventSegmentationService)
   const transcriptEventSegmentationConfigService = app.get(TranscriptEventSegmentationConfigService)
@@ -582,41 +580,6 @@ async function bootstrap() {
         audioDurationMs: durationForEvent,
       })
     }
-  }
-
-  async function transcribePcmWithGlm(
-    audioBuffer: Buffer,
-    config?: AsrConfigDto
-  ): Promise<{ text: string; requestId?: string; isFinal: boolean } | null> {
-    if (!audioBuffer || audioBuffer.length === 0) {
-      return null
-    }
-
-    let text = ''
-    let isFinal = false
-    let requestId: string | undefined
-
-    for await (const chunk of glmAsrClient.transcribeStream(audioBuffer, {
-      language: config?.language,
-      hotwords: config?.hotwords,
-      prompt: config?.prompt,
-    })) {
-      if (!requestId && chunk.requestId) {
-        requestId = chunk.requestId
-      }
-      if (chunk.text) {
-        text = chunk.text
-      }
-      if (chunk.isFinal) {
-        isFinal = true
-      }
-    }
-
-    if (!text) {
-      return null
-    }
-
-    return { text, requestId, isFinal }
   }
 
   function sendErrorToClient(clientId: string, error: string): void {

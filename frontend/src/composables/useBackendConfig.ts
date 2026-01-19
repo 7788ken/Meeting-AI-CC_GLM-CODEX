@@ -363,25 +363,25 @@ function validateBackendConfig(input: Partial<BackendConfig> | BackendConfig): s
     }
   }
 
-  const soft = Number((input as any).transcriptMaxBufferDurationSoftMs)
-  const hard = Number((input as any).transcriptMaxBufferDurationHardMs)
+  const soft = Number(input.transcriptMaxBufferDurationSoftMs)
+  const hard = Number(input.transcriptMaxBufferDurationHardMs)
   if (Number.isFinite(soft) && Number.isFinite(hard) && hard < soft) {
     errors.push('音频 buffer 硬上限必须大于等于软上限')
   }
 
-  const translationEnabled = (input as any).transcriptSegmentTranslationEnabled === true
+  const translationEnabled = input.transcriptSegmentTranslationEnabled === true
   const translationLanguage =
-    typeof (input as any).transcriptSegmentTranslationLanguage === 'string'
-      ? (input as any).transcriptSegmentTranslationLanguage.trim()
+    typeof input.transcriptSegmentTranslationLanguage === 'string'
+      ? input.transcriptSegmentTranslationLanguage.trim()
       : ''
   if (translationEnabled && !translationLanguage) {
     errors.push('语句翻译目标语言不能为空')
   }
 
-  const analysisLanguageEnabled = (input as any).transcriptAnalysisLanguageEnabled === true
+  const analysisLanguageEnabled = input.transcriptAnalysisLanguageEnabled === true
   const analysisLanguage =
-    typeof (input as any).transcriptAnalysisLanguage === 'string'
-      ? (input as any).transcriptAnalysisLanguage.trim()
+    typeof input.transcriptAnalysisLanguage === 'string'
+      ? input.transcriptAnalysisLanguage.trim()
       : ''
   if (analysisLanguageEnabled && !analysisLanguage) {
     errors.push('AI 分析目标语言不能为空')

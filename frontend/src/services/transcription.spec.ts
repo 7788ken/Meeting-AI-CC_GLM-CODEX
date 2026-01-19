@@ -28,6 +28,7 @@ const mockWebsocket = {
   sendMessage: vi.fn(),
   onMessage: vi.fn(),
   onConnectionStatus: vi.fn(),
+  onClose: vi.fn(),
   onError: vi.fn(),
   removeAllListeners: vi.fn(),
   disconnect: vi.fn(),
@@ -62,6 +63,7 @@ describe('TranscriptionService', () => {
     mockWebsocket.sendMessage.mockReset()
     mockWebsocket.onMessage.mockReset()
     mockWebsocket.onConnectionStatus.mockReset()
+    mockWebsocket.onClose.mockReset()
     mockWebsocket.onError.mockReset()
     mockWebsocket.removeAllListeners.mockReset()
     mockWebsocket.disconnect.mockReset()

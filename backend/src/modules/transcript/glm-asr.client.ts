@@ -65,7 +65,7 @@ export class GlmAsrClient {
       } hotwords=${hotwordsText ? 'set' : 'none'}`
     )
 
-    let response: { data: NodeJS.ReadableStream; status: number; headers: Record<string, any> }
+    let response: { data: NodeJS.ReadableStream; status: number; headers: Record<string, unknown> }
 
     try {
       response = await this.glmRateLimiter.schedule(

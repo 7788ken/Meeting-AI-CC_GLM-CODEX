@@ -13,7 +13,7 @@ export interface StorageOptions {
   namespace?: string
 }
 
-interface StorageData<T = any> {
+interface StorageData<T = unknown> {
   value: T
   expires?: number // 过期时间戳
 }

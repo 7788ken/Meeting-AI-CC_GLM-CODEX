@@ -4,8 +4,8 @@ import { SmartAudioBufferService } from './smart-audio-buffer.service'
 import { GlmAsrClient } from './glm-asr.client'
 import type { AsrConfigDto } from './dto/transcript.dto'
 
-// Socket.IO 的 Socket 类型（使用 any 简化类型）
-type Socket = any
+// Socket.IO 的 Socket 类型（按需收敛，不依赖具体实现）
+type Socket = unknown
 
 type TranscriptProcessOptions = {
   /**
@@ -27,7 +27,7 @@ export class TranscriptService {
     private readonly smartAudioBufferService: SmartAudioBufferService
   ) {}
 
-  addClient(clientId: string, socket: any) {
+  addClient(clientId: string, socket: Socket) {
     this.clients.set(clientId, socket)
   }
 

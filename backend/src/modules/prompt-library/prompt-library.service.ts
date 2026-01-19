@@ -321,16 +321,17 @@ export class PromptLibraryService implements OnModuleInit {
     }
   }
 
-  private normalizePrompt(input: any): PromptTemplate | null {
+  private normalizePrompt(input: unknown): PromptTemplate | null {
     if (!input || typeof input !== 'object') return null
-    const id = this.normalizeText(input.id)
-    const name = this.normalizeText(input.name)
-    const content = this.normalizeText(input.content)
-    const type = this.normalizeType(input.type)
+    const record = input as Record<string, unknown>
+    const id = this.normalizeText(record.id)
+    const name = this.normalizeText(record.name)
+    const content = this.normalizeText(record.content)
+    const type = this.normalizeType(record.type)
     if (!id || !name || !content || !type) return null
-    const alias = this.normalizeText(input.alias)
-    const createdAt = this.normalizeText(input.createdAt) || new Date().toISOString()
-    const updatedAt = this.normalizeText(input.updatedAt) || createdAt
+    const alias = this.normalizeText(record.alias)
+    const createdAt = this.normalizeText(record.createdAt) || new Date().toISOString()
+    const updatedAt = this.normalizeText(record.updatedAt) || createdAt
 
     return {
       id,
@@ -338,7 +339,7 @@ export class PromptLibraryService implements OnModuleInit {
       alias: alias || undefined,
       type,
       content,
-      isDefault: input.isDefault === true,
+      isDefault: record.isDefault === true,
       createdAt,
       updatedAt,
     }

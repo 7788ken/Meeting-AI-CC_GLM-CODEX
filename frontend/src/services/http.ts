@@ -9,7 +9,8 @@ export interface ApiResponse<T = unknown> {
 
 // 创建HTTP实例
 const getBaseUrl = () => {
-  return (globalThis as any).__VITE_API_BASE_URL__ || '/api'
+  const runtimeEnv = globalThis as { __VITE_API_BASE_URL__?: string }
+  return runtimeEnv.__VITE_API_BASE_URL__ || '/api'
 }
 
 export const http: AxiosInstance = axios.create({
