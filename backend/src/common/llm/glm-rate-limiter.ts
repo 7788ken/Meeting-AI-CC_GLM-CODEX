@@ -17,6 +17,7 @@ type QueueTask<T> = {
   enqueuedAt: number
   label?: string
   key?: string
+  stage?: TaskLogStage
 }
 
 type BucketConfigKeys = {
@@ -29,6 +30,7 @@ type BucketConfigKeys = {
 type BucketState = {
   queue: Array<QueueTask<unknown>>
   inFlight: number
+  externalInFlight: number
   lastStartAt: number
   blockedUntil: number
   rateLimitCount: number
@@ -36,6 +38,20 @@ type BucketState = {
   durationSamples: number[]
   queueDelaySamples: number[]
   timer?: NodeJS.Timeout
+}
+
+type TaskLogStage = 'completed' | 'stream_established' | 'stream_completed'
+
+type TaskLogEntry = {
+  id: string
+  bucket: GlmRateLimiterBucket
+  label: string
+  waitMs: number
+  durationMs: number
+  startedAt: number
+  finishedAt: number
+  status: 'ok' | 'error'
+  stage: TaskLogStage
 }
 
 const BUCKET_CONFIG_KEYS: Record<GlmRateLimiterBucket, BucketConfigKeys> = {
@@ -91,15 +107,18 @@ export class GlmRateLimiter {
     randomBytes(6).toString('hex')
   private bucketStates = new Map<GlmRateLimiterBucket, BucketState>()
   private bucketPumpCursor = 0
+  private taskLog: TaskLogEntry[] = []
+  private taskLogSequence = 1
+  private readonly taskLogLimit = 120
 
   constructor(private readonly appConfigService: AppConfigService) {}
 
   schedule<T>(
     run: () => Promise<T>,
-    options?: { bucket?: GlmRateLimiterBucket; label?: string; key?: string }
+    options?: { bucket?: GlmRateLimiterBucket; label?: string; key?: string; stage?: TaskLogStage }
   ): Promise<T> {
     const bucket = options?.bucket ?? 'global'
-    return this.scheduleInBucket(bucket, run, options?.label, options?.key)
+    return this.scheduleInBucket(bucket, run, options?.label, options?.key, options?.stage)
   }
 
   onRateLimit(retryAfterMs?: number | null, bucket: GlmRateLimiterBucket = 'global'): void {
@@ -151,9 +170,10 @@ export class GlmRateLimiter {
     const bucketList = Object.keys(BUCKET_CONFIG_KEYS) as GlmRateLimiterBucket[]
     for (const bucket of bucketList) {
       const state = this.getBucketState(bucket)
+      const inFlight = state.inFlight + state.externalInFlight
       buckets[bucket] = {
         queue: state.queue.length,
-        inFlight: state.inFlight,
+        inFlight,
         rateLimitCount: state.rateLimitCount,
         lastRateLimitAt: state.lastRateLimitAt,
         durationP50Ms: this.computePercentile(state.durationSamples, 0.5),
@@ -187,12 +207,33 @@ export class GlmRateLimiter {
     }
   }
 
+  getTaskLog(): TaskLogEntry[] {
+    return [...this.taskLog]
+  }
+
+  recordTaskLog(entry: TaskLogEntry): void {
+    this.appendTaskLog(entry)
+  }
+
+  trackExternalInFlight(bucket: GlmRateLimiterBucket): () => void {
+    const state = this.getBucketState(bucket)
+    state.externalInFlight += 1
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      state.externalInFlight = Math.max(0, state.externalInFlight - 1)
+      this.pump(bucket)
+    }
+  }
+
   private getBucketState(bucket: GlmRateLimiterBucket): BucketState {
     const existing = this.bucketStates.get(bucket)
     if (existing) return existing
     const created: BucketState = {
       queue: [],
       inFlight: 0,
+      externalInFlight: 0,
       lastStartAt: 0,
       blockedUntil: 0,
       rateLimitCount: 0,
@@ -209,7 +250,8 @@ export class GlmRateLimiter {
     bucket: GlmRateLimiterBucket,
     run: () => Promise<T>,
     label?: string,
-    key?: string
+    key?: string,
+    stage?: TaskLogStage
   ): Promise<T> {
     const state = this.getBucketState(bucket)
     return new Promise<T>((resolve, reject) => {
@@ -220,7 +262,7 @@ export class GlmRateLimiter {
           superseded?.reject(new Error('Superseded by newer request'))
         }
       }
-      state.queue.push({ run, resolve, reject, enqueuedAt: Date.now(), label, key })
+      state.queue.push({ run, resolve, reject, enqueuedAt: Date.now(), label, key, stage })
       this.pump(bucket)
     })
   }
@@ -258,7 +300,7 @@ export class GlmRateLimiter {
 
   private pump(bucket: GlmRateLimiterBucket): void {
     const state = this.getBucketState(bucket)
-    if (state.inFlight >= this.getMaxConcurrency(bucket)) return
+    if (state.inFlight + state.externalInFlight >= this.getMaxConcurrency(bucket)) return
     const task = state.queue.shift()
     if (!task) return
 
@@ -296,15 +338,32 @@ export class GlmRateLimiter {
       this.recordQueueDelay(globalState, queueDelayMs)
     }
 
+    let taskStatus: 'ok' | 'error' = 'ok'
     Promise.resolve()
       .then(task.run)
+      .catch(error => {
+        taskStatus = 'error'
+        throw error
+      })
       .then(task.resolve, task.reject)
       .finally(() => {
-        const durationMs = Math.max(0, Date.now() - startedAt)
+        const finishedAt = Date.now()
+        const durationMs = Math.max(0, finishedAt - startedAt)
         this.recordDuration(state, durationMs)
         if (globalState) {
           this.recordDuration(globalState, durationMs)
         }
+        this.appendTaskLog({
+          id: task.key?.trim() || `task-${this.taskLogSequence++}`,
+          bucket,
+          label: task.label?.trim() || bucket,
+          waitMs: queueDelayMs,
+          durationMs,
+          startedAt,
+          finishedAt,
+          status: taskStatus,
+          stage: task.stage ?? 'completed',
+        })
         state.inFlight = Math.max(0, state.inFlight - 1)
         if (globalState) {
           globalState.inFlight = Math.max(0, globalState.inFlight - 1)
@@ -316,8 +375,15 @@ export class GlmRateLimiter {
         this.pumpAllBuckets()
       })
 
-    if (state.inFlight < this.getMaxConcurrency(bucket)) {
+    if (state.inFlight + state.externalInFlight < this.getMaxConcurrency(bucket)) {
       this.pump(bucket)
+    }
+  }
+
+  private appendTaskLog(entry: TaskLogEntry): void {
+    this.taskLog.unshift(entry)
+    if (this.taskLog.length > this.taskLogLimit) {
+      this.taskLog.splice(this.taskLogLimit)
     }
   }
 

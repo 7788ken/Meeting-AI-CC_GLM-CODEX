@@ -22,10 +22,12 @@ export class OpsController {
       mergeMap(async () => {
         try {
           const queueStats = this.glmRateLimiter.getQueueStats()
+          const taskLog = this.glmRateLimiter.getTaskLog()
           const sessions = await this.sessionService.findAll()
           return {
             data: {
               queueStats,
+              taskLog,
               sessions,
               timestamp: Date.now(),
             },

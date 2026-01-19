@@ -76,50 +76,57 @@
     </header>
 
     <section class="ops-grid">
-      <div class="main-stack">
-        <div class="panel queues">
-          <div class="panel-title">
-            <span>队列监控</span>
-            <span class="note">全局与分桶</span>
-          </div>
-          <div class="queue-grid">
-            <div v-for="bucket in queueCards" :key="bucket.key" class="queue-card" :style="{ '--accent': bucket.color }">
-              <div class="queue-head">
-                <span class="queue-title">{{ bucket.label }}</span>
-                <span class="queue-state" :class="bucket.status">{{ bucket.statusLabel }}</span>
+      <div class="panel queues">
+        <div class="panel-title">
+          <span>队列监控</span>
+          <span class="note">全局与分桶</span>
+        </div>
+        <div class="queue-grid">
+          <div v-for="bucket in queueCards" :key="bucket.key" class="queue-card" :style="{ '--accent': bucket.color }">
+            <div class="queue-head">
+              <span class="queue-title">{{ bucket.label }}</span>
+              <span class="queue-state" :class="bucket.status">{{ bucket.statusLabel }}</span>
+            </div>
+            <div class="queue-metrics">
+              <div>
+                <span class="metric-label">排队</span>
+                <span class="metric-value fontsize-30 color-red" >{{ bucket.queue }}</span>
               </div>
-              <div class="queue-metrics">
-                <div>
-                  <span class="metric-label">排队</span>
-                  <span class="metric-value">{{ bucket.queue }}</span>
-                </div>
-                <div>
-                  <span class="metric-label">执行</span>
-                  <span class="metric-value">{{ bucket.inFlight }}</span>
-                </div>
-                <div>
-                  <span class="metric-label">延迟 P50</span>
-                  <span class="metric-value">{{ formatDuration(bucket.queueDelayP50Ms) }}</span>
-                </div>
-                <div>
-                  <span class="metric-label">耗时 P95</span>
-                  <span class="metric-value">{{ formatDuration(bucket.durationP95Ms) }}</span>
-                </div>
+              <div>
+                <span class="metric-label">冷却</span>
+                <span class="metric-value fontsize-30">{{ formatDuration(bucket.cooldownRemainingMs) }}</span>
               </div>
-              <div class="queue-foot">
-                <span>并发上限 {{ bucket.concurrency }}</span>
-                <span>冷却 {{ formatDuration(bucket.cooldownRemainingMs) }}</span>
+              <div>
+                <span class="metric-label">延迟 P50</span>
+                <span class="metric-value">{{ formatDuration(bucket.queueDelayP50Ms) }}</span>
+              </div>
+              <div>
+                <span class="metric-label">耗时 P95</span>
+                <span class="metric-value">{{ formatDuration(bucket.durationP95Ms) }}</span>
               </div>
             </div>
+            <div class="queue-foot">
+              <div class="queue-progress" :style="{ '--progress': `${bucket.concurrencyUsage * 100}%` }">
+                <div class="progress-meta">
+                  <span>执行 {{ bucket.inFlight }}</span>
+                  <span>并发上限 {{ bucket.concurrency }}</span>
+                </div>
+                <div class="progress-track">
+                  <span class="progress-fill" />
+                </div>
+              </div>
+                    </div>
           </div>
         </div>
+      </div>
 
+      <div class="main-stack">
         <div class="panel sessions">
           <div class="panel-title">
             <span>运行中会话</span>
             <span class="note">{{ activeSessionCount }} 个活跃</span>
           </div>
-          <div class="session-list">
+          <div ref="sessionListRef" class="session-list">
             <div v-for="session in activeSessionPreview" :key="session.id" class="session-card">
               <div class="session-head">
                 <span class="session-title">{{ session.title }}</span>
@@ -140,13 +147,46 @@
             <span>事件链路日志</span>
             <span class="note">共 {{ eventLogCount }} 条</span>
           </div>
-          <div class="event-list">
+          <div ref="eventListRef" class="event-list">
             <div v-for="event in eventLog" :key="event.id" class="event-item" :class="event.level">
               <span class="event-dot" />
               <span class="event-text">{{ event.message }}</span>
               <span class="event-time">{{ formatTime(event.at) }}</span>
             </div>
             <div v-if="eventLog.length === 0" class="empty">等待系统事件</div>
+          </div>
+        </div>
+
+        <div class="panel task-log">
+          <div class="panel-title">
+            <span>任务日志</span>
+            <span class="note">最近 {{ taskLogCount }} 条</span>
+          </div>
+          <div class="task-log-table">
+            <div class="task-log-row header">
+              <span class="cell type">任务类型</span>
+              <span class="cell stage">阶段</span>
+              <span class="cell id">任务 ID</span>
+              <span class="cell">等待</span>
+              <span class="cell">运行</span>
+              <span class="cell">完成</span>
+            </div>
+            <div ref="taskLogBodyRef" class="task-log-body">
+              <div v-for="task in taskLog" :key="`${task.id}-${task.finishedAt}`" class="task-log-row">
+                <span class="cell type">
+                  <span class="task-type">{{ task.label }}</span>
+                  <span class="task-bucket">{{ task.bucket }}</span>
+                </span>
+                <span class="cell stage">
+                  <span class="task-stage" :class="`stage-${task.stage || 'completed'}`">{{ formatTaskStage(task.stage) }}</span>
+                </span>
+                <span class="cell id">{{ task.id }}</span>
+                <span class="cell">{{ formatDuration(task.waitMs) }}</span>
+                <span class="cell">{{ formatDuration(task.durationMs) }}</span>
+                <span class="cell">{{ formatTime(task.finishedAt) }}</span>
+              </div>
+              <div v-if="taskLog.length === 0" class="empty">暂无任务记录</div>
+            </div>
           </div>
         </div>
       </div>
@@ -220,7 +260,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBackendConfig } from '@/composables/useBackendConfig'
 import {
@@ -243,6 +283,10 @@ const systemAuthHint = ref('')
 const settingsDrawerVisible = ref(false)
 const openingSettingsDrawer = ref(false)
 const eventLog = ref<Array<{ id: number; level: 'info' | 'warn'; message: string; at: number }>>([])
+const taskLog = ref<OpsTaskLogEntry[]>([])
+const eventListRef = ref<HTMLElement | null>(null)
+const taskLogBodyRef = ref<HTMLElement | null>(null)
+const sessionListRef = ref<HTMLElement | null>(null)
 let eventId = 1
 let queueSnapshot: GlmQueueStats | null = null
 
@@ -277,6 +321,12 @@ const formatTime = (value: number) => {
     second: '2-digit',
     hour12: false,
   }).format(new Date(value))
+}
+
+const formatTaskStage = (stage?: OpsTaskLogEntry['stage']) => {
+  if (stage === 'stream_established') return '流建立'
+  if (stage === 'stream_completed') return '流完成'
+  return '完成'
 }
 
 const formatSessionDuration = (value: number) => {
@@ -367,6 +417,7 @@ const queueCards = computed(() =>
       const durationP95 = stats?.durationP95Ms ?? null
       const concurrency = bucketConfig.value[bucket.key as keyof typeof bucketConfig.value]?.concurrency ?? 0
       const cooldownLeft = cooldownRemainingMs(bucket.key as keyof typeof bucketConfig.value)
+      const concurrencyUsage = concurrency > 0 ? Math.min(1, inFlight / concurrency) : 0
       const status = cooldownLeft > 0 ? 'cooldown' : queue > 0 ? 'busy' : 'idle'
       const statusLabel = cooldownLeft > 0 ? '冷却中' : queue > 0 ? '排队中' : '空闲'
       return {
@@ -376,6 +427,7 @@ const queueCards = computed(() =>
         queueDelayP50Ms: delayP50,
         durationP95Ms: durationP95,
         concurrency,
+        concurrencyUsage,
         cooldownRemainingMs: cooldownLeft,
         status,
         statusLabel,
@@ -482,10 +534,24 @@ const systemRows = computed(() => {
 
 const lastRefreshLabel = computed(() => formatTime(lastRefreshAt.value))
 const eventLogCount = computed(() => eventLog.value.length)
+const taskLogCount = computed(() => taskLog.value.length)
+
+type OpsTaskLogEntry = {
+  id: string
+  bucket: string
+  label: string
+  waitMs: number
+  durationMs: number
+  startedAt: number
+  finishedAt: number
+  status: 'ok' | 'error'
+  stage?: 'completed' | 'stream_established' | 'stream_completed'
+}
 
 type OpsStreamPayload = {
   queueStats?: GlmQueueStats | null
   sessions?: Session[]
+  taskLog?: OpsTaskLogEntry[]
   timestamp?: number
   error?: string
 }
@@ -543,6 +609,9 @@ const applyOpsPayload = (payload: OpsStreamPayload) => {
   }
   if (Array.isArray(payload.sessions)) {
     sessions.value = payload.sessions
+  }
+  if (Array.isArray(payload.taskLog)) {
+    taskLog.value = payload.taskLog
   }
   const ts = payload.timestamp ?? Date.now()
   lastRefreshAt.value = ts
@@ -696,6 +765,35 @@ watch(
   }
 )
 
+const scrollToTop = (el: HTMLElement | null) => {
+  if (!el) return
+  el.scrollTop = 0
+}
+
+watch(
+  () => eventLog.value.length,
+  async () => {
+    await nextTick()
+    scrollToTop(eventListRef.value)
+  }
+)
+
+watch(
+  () => taskLog.value.length,
+  async () => {
+    await nextTick()
+    scrollToTop(taskLogBodyRef.value)
+  }
+)
+
+watch(
+  () => activeSessionPreview.value.length,
+  async () => {
+    await nextTick()
+    scrollToTop(sessionListRef.value)
+  }
+)
+
 onMounted(() => {
   void syncSystemSettings()
   startClock()
@@ -720,6 +818,7 @@ onBeforeUnmount(() => {
   --shadow: 0 18px 50px rgba(18, 28, 33, 0.12);
   --radius: 18px;
   min-height: 100vh;
+  box-sizing: border-box;
   padding: 24px 26px;
   color: var(--ink);
   font-family: 'IBM Plex Sans', 'Noto Sans SC', 'PingFang SC', sans-serif;
@@ -731,7 +830,7 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 18px;
   align-content: start;
 }
@@ -943,16 +1042,23 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
+  grid-template-areas:
+    'queues queues'
+    'main side';
+  grid-template-rows: auto minmax(0, 1fr);
   align-items: start;
+  min-height: 0;
 }
 
 .main-stack {
+  grid-area: main;
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-areas:
-    'queues queues'
-    'sessions events';
+    'sessions events'
+    'tasklog tasklog';
+  min-height: 0;
 }
 
 .panel {
@@ -965,6 +1071,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
 
 .queues {
@@ -979,7 +1086,12 @@ onBeforeUnmount(() => {
   grid-area: events;
 }
 
+.task-log {
+  grid-area: tasklog;
+}
+
 .side-stack {
+  grid-area: side;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1069,10 +1181,45 @@ onBeforeUnmount(() => {
 }
 
 .queue-foot {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  gap: 8px;
   font-size: 11px;
   color: var(--muted);
+}
+
+.queue-progress {
+  display: grid;
+  gap: 4px;
+}
+
+.progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.progress-track {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(23, 35, 39, 0.12);
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  width: var(--progress, 0%);
+  background: var(--accent);
+  transition: width 0.2s ease;
+  opacity: 0.85;
+}
+
+.queue-cooldown {
+  font-size: 10px;
 }
 
 .system-section {
@@ -1143,6 +1290,9 @@ onBeforeUnmount(() => {
 .session-list {
   display: grid;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .session-card {
@@ -1185,6 +1335,9 @@ onBeforeUnmount(() => {
 .event-list {
   display: grid;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .event-item {
@@ -1215,6 +1368,87 @@ onBeforeUnmount(() => {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
   font-size: 11px;
   color: var(--muted);
+}
+
+.task-log-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+}
+
+.task-log-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.7fr 1.6fr 0.7fr 0.7fr 0.8fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.task-log-row.header {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.task-log-row .cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-log-row .cell.type {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-log-row .cell.stage {
+  display: flex;
+  align-items: center;
+}
+
+.task-log-row .cell.id {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.task-bucket {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--outline);
+  background: var(--panel-strong);
+  color: var(--ink);
+}
+
+.task-stage {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--outline);
+  background: rgba(31, 122, 140, 0.12);
+  color: #13535f;
+}
+
+.task-stage.stage-stream_completed {
+  background: rgba(124, 159, 95, 0.15);
+  color: #4b6b38;
+}
+
+.task-stage.stage-completed {
+  background: rgba(23, 35, 39, 0.08);
+  color: var(--ink);
+}
+
+.task-log-body {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .pulse-grid {
@@ -1263,17 +1497,49 @@ onBeforeUnmount(() => {
   }
 }
 
+@media (min-width: 1201px) {
+  .ops-screen {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .ops-grid,
+  .main-stack,
+  .side-stack {
+    height: 100%;
+  }
+
+  .main-stack {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .side-stack .panel {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .sessions,
+  .events,
+  .task-log {
+    height: 100%;
+  }
+}
+
 @media (max-width: 1200px) {
   .ops-grid {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'queues'
+      'main'
+      'side';
   }
 
   .main-stack {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      'queues'
       'sessions'
-      'events';
+      'events'
+      'tasklog';
   }
 
   .hero-compact-metrics {
@@ -1328,5 +1594,9 @@ onBeforeUnmount(() => {
   .hero-compact-metrics {
     grid-template-columns: 1fr;
   }
+}
+
+.fontsize-30 {
+  font-size: 30px;
 }
 </style>

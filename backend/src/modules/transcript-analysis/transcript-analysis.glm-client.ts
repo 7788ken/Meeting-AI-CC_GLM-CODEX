@@ -155,27 +155,49 @@ export class TranscriptAnalysisGlmClient {
       throw new Error(`GLM summary HTTP error: status=${response.status}${detail}`)
     }
 
-    for await (const payloadText of this.parseEventStream(response.data)) {
-      if (!payloadText) continue
-      if (payloadText === '[DONE]') {
-        yield { type: 'done' }
-        return
+    const streamStartedAt = Date.now()
+    const releaseExternal = this.glmRateLimiter.trackExternalInFlight('analysis')
+    let streamStatus: 'ok' | 'error' = 'ok'
+    try {
+      for await (const payloadText of this.parseEventStream(response.data)) {
+        if (!payloadText) continue
+        if (payloadText === '[DONE]') {
+          yield { type: 'done' }
+          return
+        }
+
+        let payload: unknown = payloadText
+        try {
+          payload = JSON.parse(payloadText)
+        } catch {
+          continue
+        }
+
+        const delta = this.extractDeltaText(payload)
+        if (delta) {
+          yield { type: 'delta', text: delta }
+        }
       }
 
-      let payload: unknown = payloadText
-      try {
-        payload = JSON.parse(payloadText)
-      } catch {
-        continue
-      }
-
-      const delta = this.extractDeltaText(payload)
-      if (delta) {
-        yield { type: 'delta', text: delta }
-      }
+      yield { type: 'done' }
+    } catch (error) {
+      streamStatus = 'error'
+      throw error
+    } finally {
+      const finishedAt = Date.now()
+      this.glmRateLimiter.recordTaskLog({
+        id: params.scheduleKey?.trim() || `analysis-stream-${streamStartedAt}`,
+        bucket: 'analysis',
+        label: 'transcript_analysis_stream',
+        waitMs: 0,
+        durationMs: Math.max(0, finishedAt - streamStartedAt),
+        startedAt: streamStartedAt,
+        finishedAt,
+        status: streamStatus,
+        stage: 'stream_completed',
+      })
+      releaseExternal()
     }
-
-    yield { type: 'done' }
   }
 
   private async postWithRetry(input: {
@@ -243,6 +265,7 @@ export class TranscriptAnalysisGlmClient {
             bucket: 'analysis',
             label: 'transcript_analysis_stream',
             key: input.scheduleKey,
+            stage: 'stream_established',
           }
         )
       } catch (error) {
