@@ -53,6 +53,7 @@ export class AppLogService {
   private readonly maxTextLength = 2000
   private readonly maxArrayLength = 50
   private readonly maxDepth = 4
+  private readonly maxLogRecords = 10000
   private readonly sensitiveKeys = new Set([
     'authorization',
     'password',
@@ -71,9 +72,12 @@ export class AppLogService {
 
   async recordRequestResponseLog(input: RequestResponseLogInput): Promise<void> {
     if (!this.isRequestResponseEnabled()) return
+    const method = input.method.trim().toUpperCase()
+    if (method === 'GET' && typeof input.statusCode === 'number' && input.statusCode < 400)
+      return
 
     const payload = this.sanitizePayload({
-      method: input.method,
+      method,
       path: input.path,
       statusCode: input.statusCode,
       durationMs: input.durationMs,
@@ -87,7 +91,7 @@ export class AppLogService {
       sessionId: input.sessionId,
       type: 'request_response',
       level: input.statusCode >= 400 ? 'error' : 'info',
-      message: `${input.method} ${input.path}`,
+      message: `${method} ${input.path}`,
       payload,
     })
   }
@@ -237,11 +241,27 @@ export class AppLogService {
           payload: input.payload ? (input.payload as Prisma.InputJsonValue) : undefined,
         },
       })
+      await this.pruneLogs()
     } catch (error) {
       this.logger.warn(
         `Failed to record app log: ${error instanceof Error ? error.message : String(error)}`
       )
     }
+  }
+
+  private async pruneLogs(): Promise<void> {
+    const cutoff = await this.prisma.appLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      skip: this.maxLogRecords,
+      take: 1,
+      select: { createdAt: true },
+    })
+    if (cutoff.length === 0) return
+    await this.prisma.appLog.deleteMany({
+      where: {
+        createdAt: { lt: cutoff[0].createdAt },
+      },
+    })
   }
 
   private sanitizePayload(input: unknown): Record<string, unknown> | undefined {

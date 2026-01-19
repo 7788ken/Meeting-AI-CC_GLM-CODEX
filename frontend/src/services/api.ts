@@ -142,9 +142,13 @@ export interface BackendConfig {
   glmAsrRateLimitCooldownMs: number
   glmAsrRateLimitMaxMs: number
   glmTranscriptEventSegmentConcurrency: number
+  glmTranscriptEventSegmentRebuildConcurrency: number
   glmTranscriptEventSegmentMinIntervalMs: number
+  glmTranscriptEventSegmentRebuildMinIntervalMs: number
   glmTranscriptEventSegmentRateLimitCooldownMs: number
+  glmTranscriptEventSegmentRebuildRateLimitCooldownMs: number
   glmTranscriptEventSegmentRateLimitMaxMs: number
+  glmTranscriptEventSegmentRebuildRateLimitMaxMs: number
   glmTranscriptEventSegmentTranslationConcurrency: number
   glmTranscriptEventSegmentTranslationMinIntervalMs: number
   glmTranscriptEventSegmentTranslationRateLimitCooldownMs: number

@@ -21,17 +21,16 @@ frontend/src/
 │   ├── AIAnalysisPanel.vue       # AI 分析面板 (F1025-F1029)
 │   ├── AppHeader.vue             # 应用头部导航 (F1032)
 │   ├── MainLayout.vue            # 主布局容器 (F1031)
+│   ├── MeetingActionBar.vue      # 会议操作栏
 │   ├── MicPermission.vue         # 麦克风权限请求 (F1010)
 │   ├── ModelSelector.vue         # AI 模型选择器 (F1028)
-│   ├── RecordButton.vue          # 录音控制按钮 (F1033)
 │   ├── SpeechList.vue            # 发言列表 (F1021)
 │   └── TranscriptDisplay.vue     # 转写内容展示 (F1016-F1020)
 │
 ├── views/               # 页面组件
 │   ├── HomeView.vue     # 首页/会话列表 (F1006, F1009)
 │   ├── MeetingView.vue  # 会议进行页面 (F1007, F1008)
-│   ├── SettingsView.vue # 设置页面
-│   └── ConcurrencySimulatorView.vue # 并发调度模拟器
+│   └── ConcurrencySimulatorView.vue # 并发请求运行中控大屏
 │
 ├── services/            # 业务服务层
 │   ├── api.ts           # API 接口定义 (F1005)
@@ -174,8 +173,7 @@ export const useMeetingStore = defineStore('meeting', () => {
 ```
 /                    → 首页（会话列表）
 /meeting/:id         → 会议进行页面
-/settings            → 设置页面
-/concurrency-simulator → 并发调度模拟器
+/ops/concurrency-dashboard → 并发请求运行中控大屏
 ```
 
 ## 样式方案

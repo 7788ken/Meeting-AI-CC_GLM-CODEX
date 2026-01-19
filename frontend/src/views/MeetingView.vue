@@ -176,6 +176,7 @@
           </div>
 	        <div class="panel-actions">
           <el-button
+            v-if="showRebuildButton"
             size="small"
             type="danger"
             plain
@@ -457,6 +458,9 @@ const realtimeStickToBottom = ref(true)
 const endingSession = ref(false)
 const sessionEndedOverride = ref(false)
 const wsConnectionStatus = ref<ConnectionStatus | null>(null)
+const wsLastNotifiedState = ref<ConnectionStatus['state'] | null>(null)
+const suppressNextDisconnectToast = ref(false)
+const sessionSetNotified = ref(false)
 const aiQueueStats = ref<GlmQueueStats | null>(null)
 const aiQueueStatus = ref<'idle' | 'ready' | 'unauthorized' | 'error'>('idle')
 const aiQueueError = ref('')
@@ -481,6 +485,7 @@ let aiQueueTimer: ReturnType<typeof setInterval> | null = null
   const transcriptSegmentTranslationEnabled = computed(
     () => backendConfig.value.transcriptSegmentTranslationEnabled === true
   )
+  const showRebuildButton = computed(() => recordingStatus.value === 'idle')
   const transcriptSegmentTranslationAvailable = computed(() => {
     if (transcriptSegmentTranslationEnabled.value) return true
     return transcriptEventSegmentationStore.segments.some(segment => {
@@ -1216,6 +1221,9 @@ async function startRecording() {
     }
 
     recordingStatus.value = 'connecting'
+    wsLastNotifiedState.value = null
+    suppressNextDisconnectToast.value = false
+    sessionSetNotified.value = false
 
     const buildAudioConfig = () => {
       const mode = appSettings.value.audioCaptureMode
@@ -1250,6 +1258,33 @@ async function startRecording() {
       },
       onConnectionStatusChange: (status) => {
         wsConnectionStatus.value = status
+        if (recordingStatus.value === 'idle') {
+          wsLastNotifiedState.value = status.state
+          return
+        }
+        if (wsLastNotifiedState.value === status.state) return
+
+        if (status.state === 'connected') {
+          ElMessage.success('实时连接已建立')
+        } else if (status.state === 'reconnecting') {
+          ElMessage.warning('连接已断开，正在重连')
+        } else if (status.state === 'failed') {
+          ElMessage.error('连接失败，请检查网络或配置')
+        } else if (status.state === 'disconnected' && !suppressNextDisconnectToast.value) {
+          ElMessage.warning('连接已关闭')
+        }
+
+        if (status.state === 'disconnected') {
+          suppressNextDisconnectToast.value = false
+        }
+        wsLastNotifiedState.value = status.state
+      },
+      onStatusMessage: (payload) => {
+        if (payload?.status !== 'session_set') return
+        if (payload.sessionId && payload.sessionId !== sessionId.value) return
+        if (sessionSetNotified.value) return
+        sessionSetNotified.value = true
+        ElMessage.success('转写会话已就绪')
       },
     })
 
@@ -1272,6 +1307,7 @@ async function retryRecordingConnection(): Promise<void> {
 
 // 停止录音
 function stopRecording() {
+  suppressNextDisconnectToast.value = true
   transcription.stop()
   recordingStatus.value = 'idle'
   isPaused.value = false

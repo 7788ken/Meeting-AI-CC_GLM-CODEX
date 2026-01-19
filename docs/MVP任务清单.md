@@ -83,7 +83,6 @@
 | F1030 | 引入和配置 Element Plus | ✅ | P1 | frontend/src/main.ts | F1001 |
 | F1031 | 实现主布局组件 | ✅ | P0 | frontend/src/components/MainLayout.vue | F1003 |
 | F1032 | 实现顶部导航栏 | ✅ | P0 | frontend/src/components/AppHeader.vue | F1031 |
-| F1033 | 实现录音控制按钮 | ✅ | P0 | frontend/src/components/RecordButton.vue | F1011 |
 | F1034 | 实现基础样式主题 | ✅ | P1 | frontend/src/styles/ | - |
 | F1035 | 实现响应式设计 | ✅ | P1 | frontend/src/components/MainLayout.vue | F1031 |
 

@@ -14,9 +14,13 @@ const fallbackDefaults: BackendConfig = {
   glmAsrRateLimitCooldownMs: 2000,
   glmAsrRateLimitMaxMs: 15000,
   glmTranscriptEventSegmentConcurrency: 1,
+  glmTranscriptEventSegmentRebuildConcurrency: 1,
   glmTranscriptEventSegmentMinIntervalMs: 500,
+  glmTranscriptEventSegmentRebuildMinIntervalMs: 500,
   glmTranscriptEventSegmentRateLimitCooldownMs: 2000,
+  glmTranscriptEventSegmentRebuildRateLimitCooldownMs: 2000,
   glmTranscriptEventSegmentRateLimitMaxMs: 15000,
+  glmTranscriptEventSegmentRebuildRateLimitMaxMs: 15000,
   glmTranscriptEventSegmentTranslationConcurrency: 1,
   glmTranscriptEventSegmentTranslationMinIntervalMs: 500,
   glmTranscriptEventSegmentTranslationRateLimitCooldownMs: 2000,
@@ -159,9 +163,21 @@ function normalizeBackendConfig(
       1,
       50
     ),
+    glmTranscriptEventSegmentRebuildConcurrency: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentRebuildConcurrency,
+      base.glmTranscriptEventSegmentRebuildConcurrency,
+      1,
+      50
+    ),
     glmTranscriptEventSegmentMinIntervalMs: normalizeNumberInRange(
       input.glmTranscriptEventSegmentMinIntervalMs,
       base.glmTranscriptEventSegmentMinIntervalMs,
+      0,
+      60000
+    ),
+    glmTranscriptEventSegmentRebuildMinIntervalMs: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentRebuildMinIntervalMs,
+      base.glmTranscriptEventSegmentRebuildMinIntervalMs,
       0,
       60000
     ),
@@ -171,9 +187,21 @@ function normalizeBackendConfig(
       0,
       120000
     ),
+    glmTranscriptEventSegmentRebuildRateLimitCooldownMs: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentRebuildRateLimitCooldownMs,
+      base.glmTranscriptEventSegmentRebuildRateLimitCooldownMs,
+      0,
+      120000
+    ),
     glmTranscriptEventSegmentRateLimitMaxMs: normalizeNumberInRange(
       input.glmTranscriptEventSegmentRateLimitMaxMs,
       base.glmTranscriptEventSegmentRateLimitMaxMs,
+      0,
+      300000
+    ),
+    glmTranscriptEventSegmentRebuildRateLimitMaxMs: normalizeNumberInRange(
+      input.glmTranscriptEventSegmentRebuildRateLimitMaxMs,
+      base.glmTranscriptEventSegmentRebuildRateLimitMaxMs,
       0,
       300000
     ),

@@ -195,7 +195,9 @@ export class WebSocketService {
         this.ws = new WebSocket(this.url, this.protocols)
 
         this.ws.onopen = () => {
-          console.log('[WebSocket] 连接成功')
+          if (import.meta.env.DEV) {
+            console.log('[WebSocket] 连接成功')
+          }
           this.reconnectAttempts = 0
           this.emitConnectionStatus({
             state: 'connected',
@@ -221,7 +223,9 @@ export class WebSocketService {
         }
 
         this.ws.onclose = () => {
-          console.log('[WebSocket] 连接关闭')
+          if (import.meta.env.DEV) {
+            console.log('[WebSocket] 连接关闭')
+          }
           this.ws = null
           this.onCloseCallback?.()
           if (!this.manualClose) {

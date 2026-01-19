@@ -1,5 +1,5 @@
 <template>
-  <div ref="panelRef" class="event-segments-panel" v-loading="loading">
+  <div ref="panelRef" class="event-segments-panel" v-loading="loading" @scroll="handleScroll">
     <div v-if="!loading && segments.length === 0" class="empty">
       <el-empty description="暂无语句拆分结果" />
     </div>
@@ -205,6 +205,26 @@ const latestSequence = computed(() => {
   return props.segments.reduce((max, item) => Math.max(max, item.sequence ?? 0), 0)
 })
 
+const shouldFollowLatest = ref(true)
+const SCROLL_END_THRESHOLD = 4
+
+function isAtLatestPosition(el: HTMLElement): boolean {
+  if (normalizedOrder.value === 'desc') {
+    return el.scrollTop <= SCROLL_END_THRESHOLD
+  }
+  return el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_END_THRESHOLD
+}
+
+function updateFollowLatest() {
+  const el = panelRef.value
+  if (!el) return
+  shouldFollowLatest.value = isAtLatestPosition(el)
+}
+
+function handleScroll() {
+  updateFollowLatest()
+}
+
 async function scrollToLatest() {
   await nextTick()
   const el = panelRef.value
@@ -218,6 +238,7 @@ async function scrollToLatest() {
 
 watch([latestSequence, normalizedOrder], ([nextSequence]) => {
   if (nextSequence == null) return
+  if (!shouldFollowLatest.value) return
   scrollToLatest()
 })
 </script>

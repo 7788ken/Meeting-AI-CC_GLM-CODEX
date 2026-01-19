@@ -106,14 +106,13 @@
 | 日期 | 变更范围 | 结论 | 风险点 | 跟进项 |
 |---|---|---|---|---|
 | 2026-01-17 | 并发与链路同步（新增）Review | 发现会话级覆盖与调度并发问题，需补齐限流与任务粒度 | analysis/translation scheduleKey 颗粒度不当导致丢任务；分段调度无全局并发上限；冷却叠加放大退避；WS 断线回滚滞后 | 拆分 scheduleKey 粒度与去重策略；增加分段调度并发上限；统一退避；WS 断线即时回滚 |
-| 2026-01-17 | 前后端录音→转写→拆分→翻译→分析全链路 | 修复 HTTPS 默认 ws 协议与启动回滚问题；前端单测通过 | 混合内容阻断导致 WS 连接失败；start_transcribe 未回滚；采集中途错误状态不一致；拆分窗口无法命中前序句导致停滞；Socket.IO 网关/RecordButton 可能冗余 | 补齐采集中途错误的 stopTranscribe/状态同步；拆分失败自动扩大窗口或触发重建；确认并清理冗余模块 |
+| 2026-01-17 | 前后端录音→转写→拆分→翻译→分析全链路 | 修复 HTTPS 默认 ws 协议与启动回滚问题；前端单测通过 | 混合内容阻断导致 WS 连接失败；start_transcribe 未回滚；采集中途错误状态不一致；拆分窗口无法命中前序句导致停滞；Socket.IO 网关可能冗余 | 补齐采集中途错误的 stopTranscribe/状态同步；拆分失败自动扩大窗口或触发重建；确认并清理冗余模块 |
 | 2026-01-10 | 后端路由/鉴权/测试、前端单测 | 修复路由误匹配、补齐 E2E 鉴权、修复默认用户初始化竞态与 ID 冲突、增强测试隔离、移除子项目锁文件 | `GET /:id` 误匹配特定路由；全局 mock 污染导致用例互相影响；默认用户异步创建导致登录不稳定 |  |
 
 ## 8. 待修复/疑问/待讨论（滚动）
 
 - 待跟进：基于 queueDelay P50/P95 指标评估是否需要调整全局 + 桶双层排队策略。`backend/src/common/llm/glm-rate-limiter.ts` `backend/src/main.ts`
 - 待讨论：`TranscriptGateway`(socket.io) 与原生 WebSocket 并存是否保留。`backend/src/modules/transcript/transcript.gateway.ts`
-- 待讨论：`RecordButton` 是否仍有使用场景。`frontend/src/components/RecordButton.vue`
 
 ## 9. 相关文档（避免重复造轮子）
 

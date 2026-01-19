@@ -159,7 +159,9 @@ export class AudioCaptureService {
     }
     if (typeof error === 'object' && error) {
       const name = (error as any).name as string | undefined
-      if (name === 'NotAllowedError') return new Error('音频采集权限被拒绝（麦克风/共享音频）')
+      if (name === 'NotAllowedError') {
+        return new Error('音频采集权限被拒绝，请在浏览器地址栏允许麦克风/共享音频后重试')
+      }
       if (name === 'AbortError') return new Error('已取消共享标签页音频')
       if (name === 'NotFoundError') return new Error('未找到可用的麦克风设备')
       if (name === 'NotReadableError') return new Error('麦克风被占用或不可用')

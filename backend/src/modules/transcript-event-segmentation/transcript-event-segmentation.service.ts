@@ -386,6 +386,7 @@ export class TranscriptEventSegmentationService {
     let persistError: string | undefined = undefined
     let llmRaw: string | undefined
     let llmRetryRaw: string | undefined
+    const bucket = input.mode === 'rebuild' ? 'segmentation_rebuild' : 'segmentation'
     const allowDegradeOnStrictFailure = this.appConfigService.getBoolean(
       'GLM_TRANSCRIPT_EVENT_SEGMENT_DEGRADE_ON_STRICT_FAIL',
       false
@@ -418,6 +419,7 @@ export class TranscriptEventSegmentationService {
       const raw = await this.glmClient.generateStructuredJson({
         ...prompt,
         sessionId: input.sessionId,
+        bucket,
       })
       llmRaw = raw
       emitProgress('parsing')
@@ -449,6 +451,7 @@ export class TranscriptEventSegmentationService {
         const retryRaw = await this.glmClient.generateStructuredJson({
           ...retryPrompt,
           sessionId: input.sessionId,
+          bucket,
         })
         llmRetryRaw = retryRaw
         const retryParsed = parseTranscriptEventSegmentJson(retryRaw)

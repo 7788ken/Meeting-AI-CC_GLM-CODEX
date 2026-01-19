@@ -44,30 +44,42 @@
 
 ### 会议控制组件
 
-#### RecordButton
+#### MeetingActionBar
 
-录音控制按钮。
+会议操作栏，提供录音、静音、结束会话与快捷键入口。
 
-**位置**: `src/components/RecordButton.vue` (F1033)
+**位置**: `src/components/MeetingActionBar.vue`
 
 **Props**:
 | Prop | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `recording` | `boolean` | `false` | 是否正在录音 |
-| `disabled` | `boolean` | `false` | 是否禁用 |
+| `enabled` | `boolean` | - | 是否启用操作栏渲染 |
+| `compact` | `boolean` | - | 是否使用紧凑布局 |
+| `disabled` | `boolean` | - | 是否禁用按钮交互 |
+| `ending` | `boolean` | - | 会话结束中状态 |
+| `isSessionEnded` | `boolean` | - | 会话已结束标记 |
+| `recordingStatus` | `'idle' \| 'connecting' \| 'recording' \| 'paused' \| 'error'` | - | 录音状态 |
+| `isPaused` | `boolean` | - | 是否处于暂停状态 |
 
 **Emits**:
 | Event | Payload | 说明 |
 |-------|---------|------|
-| `start` | - | 开始录音 |
-| `stop` | - | 停止录音 |
-| `pause` | - | 暂停录音 |
-| `resume` | - | 恢复录音 |
+| `toggle-recording` | - | 开始/停止录音 |
+| `toggle-mute` | - | 暂停/继续 |
+| `end-session` | - | 结束会话 |
+| `toggle-realtime` | - | 切换实时面板 |
 
-**状态**:
-- `idle` - 空闲
-- `recording` - 录音中
-- `paused` - 已暂停
+**暴露方法**:
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `openHelp` | - | 打开快捷键弹窗 |
+
+**使用场景**:
+- 会议进行页的主操作栏（开始/停止录音、暂停/继续、结束会话）
+- 窄屏模式下合并操作入口与快捷键提示
+
+**相关文档**:
+- [前端架构](./architecture.md)
 
 ---
 
@@ -234,14 +246,6 @@ AI 模型选择器组件。
     </template>
 
     <div class="meeting-content">
-      <div class="left-panel">
-        <RecordButton
-          :recording="isRecording"
-          @start="handleStart"
-          @stop="handleStop"
-        />
-      </div>
-
       <div class="right-panel">
         <AIAnalysisPanel
           :session-id="sessionId"
@@ -250,6 +254,19 @@ AI 模型选择器组件。
         />
       </div>
     </div>
+
+    <MeetingActionBar
+      :enabled="true"
+      :compact="false"
+      :disabled="!sessionId"
+      :ending="endingSession"
+      :isSessionEnded="isSessionEnded"
+      :recordingStatus="recordingStatus"
+      :isPaused="isPaused"
+      @toggle-recording="toggleRecording"
+      @toggle-mute="toggleMute"
+      @end-session="endSession"
+    />
   </MainLayout>
 </template>
 ```

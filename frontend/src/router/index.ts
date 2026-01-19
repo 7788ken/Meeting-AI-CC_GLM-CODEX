@@ -17,13 +17,8 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/MeetingView.vue'),
   },
   {
-    path: '/settings',
-    name: 'Settings',
-    component: () => import('@/views/SettingsView.vue'),
-  },
-  {
-    path: '/concurrency-simulator',
-    name: 'ConcurrencySimulator',
+    path: '/ops/concurrency-dashboard',
+    name: 'ConcurrencyDashboard',
     component: () => import('@/views/ConcurrencySimulatorView.vue'),
   },
 ]

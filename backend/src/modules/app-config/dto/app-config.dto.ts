@@ -35,14 +35,26 @@ export class AppConfigDto {
   @ApiProperty({ description: '语句拆分并发上限', minimum: 1, maximum: 50 })
   glmTranscriptEventSegmentConcurrency: number
 
+  @ApiProperty({ description: '语句重建拆分并发上限', minimum: 1, maximum: 50 })
+  glmTranscriptEventSegmentRebuildConcurrency: number
+
   @ApiProperty({ description: '语句拆分启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
   glmTranscriptEventSegmentMinIntervalMs: number
+
+  @ApiProperty({ description: '语句重建拆分启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  glmTranscriptEventSegmentRebuildMinIntervalMs: number
 
   @ApiProperty({ description: '语句拆分冷却时间（ms）', minimum: 0, maximum: 120000 })
   glmTranscriptEventSegmentRateLimitCooldownMs: number
 
+  @ApiProperty({ description: '语句重建拆分冷却时间（ms）', minimum: 0, maximum: 120000 })
+  glmTranscriptEventSegmentRebuildRateLimitCooldownMs: number
+
   @ApiProperty({ description: '语句拆分冷却时间上限（ms）', minimum: 0, maximum: 300000 })
   glmTranscriptEventSegmentRateLimitMaxMs: number
+
+  @ApiProperty({ description: '语句重建拆分冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  glmTranscriptEventSegmentRebuildRateLimitMaxMs: number
 
   @ApiProperty({ description: '语句翻译并发上限', minimum: 1, maximum: 50 })
   glmTranscriptEventSegmentTranslationConcurrency: number
@@ -209,12 +221,26 @@ export class UpdateAppConfigDto {
   @Max(50)
   glmTranscriptEventSegmentConcurrency?: number
 
+  @ApiPropertyOptional({ description: '语句重建拆分并发上限', minimum: 1, maximum: 50 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  glmTranscriptEventSegmentRebuildConcurrency?: number
+
   @ApiPropertyOptional({ description: '语句拆分启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
   @IsOptional()
   @IsInt()
   @Min(0)
   @Max(60000)
   glmTranscriptEventSegmentMinIntervalMs?: number
+
+  @ApiPropertyOptional({ description: '语句重建拆分启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60000)
+  glmTranscriptEventSegmentRebuildMinIntervalMs?: number
 
   @ApiPropertyOptional({ description: '语句拆分冷却时间（ms）', minimum: 0, maximum: 120000 })
   @IsOptional()
@@ -223,12 +249,26 @@ export class UpdateAppConfigDto {
   @Max(120000)
   glmTranscriptEventSegmentRateLimitCooldownMs?: number
 
+  @ApiPropertyOptional({ description: '语句重建拆分冷却时间（ms）', minimum: 0, maximum: 120000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120000)
+  glmTranscriptEventSegmentRebuildRateLimitCooldownMs?: number
+
   @ApiPropertyOptional({ description: '语句拆分冷却时间上限（ms）', minimum: 0, maximum: 300000 })
   @IsOptional()
   @IsInt()
   @Min(0)
   @Max(300000)
   glmTranscriptEventSegmentRateLimitMaxMs?: number
+
+  @ApiPropertyOptional({ description: '语句重建拆分冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(300000)
+  glmTranscriptEventSegmentRebuildRateLimitMaxMs?: number
 
   @ApiPropertyOptional({ description: '语句翻译并发上限', minimum: 1, maximum: 50 })
   @IsOptional()

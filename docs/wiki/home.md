@@ -47,7 +47,7 @@ AI 会议助手是一个智能会议记录系统，支持：
 | [组件文档](./frontend/components.md) | Vue 组件使用说明 |
 | [状态管理](./frontend/state-management.md) | Pinia 状态管理指南 |
 | [API 服务](./frontend/api-service.md) | 前端 API 调用规范 |
-| [并发调度模拟器](./frontend/concurrency-simulator.md) | 并发请求排队与优先级演示页面 |
+| [并发请求运行中控大屏](./frontend/concurrency-dashboard.md) | 运行态队列与链路监控视图 |
 
 ### 后端开发
 | 文档 | 描述 |

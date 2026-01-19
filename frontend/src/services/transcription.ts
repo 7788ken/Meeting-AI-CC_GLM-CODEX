@@ -17,6 +17,7 @@ export interface TranscriptionConfig {
   onError?: (error: Error) => void
   onStatusChange?: (status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error') => void
   onConnectionStatusChange?: (status: ConnectionStatus) => void
+  onStatusMessage?: (data: { status?: string; sessionId?: string }) => void
 }
 
 export const DEFAULT_ASR_CONFIG: AsrConfig = {
@@ -102,6 +103,7 @@ export class TranscriptionService {
   private onErrorCallback?: (error: Error) => void
   private onStatusChangeCallback?: (status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error') => void
   private onConnectionStatusChangeCallback?: (status: ConnectionStatus) => void
+  private onStatusMessageCallback?: (data: { status?: string; sessionId?: string }) => void
 
   constructor() {
     this.setupWebSocketHandlers()
@@ -125,6 +127,7 @@ export class TranscriptionService {
     this.onErrorCallback = config.onError
     this.onStatusChangeCallback = config.onStatusChange
     this.onConnectionStatusChangeCallback = config.onConnectionStatusChange
+    this.onStatusMessageCallback = config.onStatusMessage
     this.audioConfig = config.audio
 
     let transcribeStarted = false
@@ -210,6 +213,7 @@ export class TranscriptionService {
     websocket.stopTranscribe()
     this.setStatus('idle')
     this.onConnectionStatusChangeCallback = undefined
+    this.onStatusMessageCallback = undefined
   }
 
   /**
@@ -301,6 +305,7 @@ export class TranscriptionService {
       if (data.type === 'transcript' && data.data.content) {
         this.handleTranscript(data.data)
       } else if (data.type === 'status') {
+        this.onStatusMessageCallback?.(data.data)
         if (import.meta.env.DEV) {
           console.log('[Transcription] 状态消息', data.data)
         }
@@ -436,6 +441,7 @@ export class TranscriptionService {
     this.onErrorCallback = undefined
     this.onStatusChangeCallback = undefined
     this.onConnectionStatusChangeCallback = undefined
+    this.onStatusMessageCallback = undefined
   }
 }
 

@@ -13,6 +13,10 @@ export const APP_CONFIG_SEED_KEYS = [
   'GLM_TRANSCRIPT_EVENT_SEGMENT_MIN_INTERVAL_MS',
   'GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_COOLDOWN_MS',
   'GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_MAX_MS',
+  'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_CONCURRENCY',
+  'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_MIN_INTERVAL_MS',
+  'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_RATE_LIMIT_COOLDOWN_MS',
+  'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_RATE_LIMIT_MAX_MS',
   'GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_CONCURRENCY',
   'GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_MIN_INTERVAL_MS',
   'GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_RATE_LIMIT_COOLDOWN_MS',
@@ -86,6 +90,14 @@ export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
     '语句拆分模块专用 429 冷却时间（ms）；未配置时回退全局冷却。',
   GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_MAX_MS:
     '语句拆分模块专用 429 冷却上限（ms）；未配置时回退全局冷却上限。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_CONCURRENCY:
+    '语句重建拆分模块专用 GLM 并发上限；未配置时回退全局并发上限。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_MIN_INTERVAL_MS:
+    '语句重建拆分模块专用 GLM 启动请求最小间隔（ms）；未配置时回退全局间隔。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_RATE_LIMIT_COOLDOWN_MS:
+    '语句重建拆分模块专用 429 冷却时间（ms）；未配置时回退全局冷却。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_RATE_LIMIT_MAX_MS:
+    '语句重建拆分模块专用 429 冷却上限（ms）；未配置时回退全局冷却上限。',
   GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_CONCURRENCY:
     '语句翻译模块专用 GLM 并发上限；未配置时回退全局并发上限。',
   GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_MIN_INTERVAL_MS:
@@ -254,8 +266,24 @@ export const APP_CONFIG_FIELDS = [
     max: 50,
   },
   {
+    field: 'glmTranscriptEventSegmentRebuildConcurrency',
+    key: 'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_CONCURRENCY',
+    type: 'number',
+    defaultValue: 1,
+    min: 1,
+    max: 50,
+  },
+  {
     field: 'glmTranscriptEventSegmentMinIntervalMs',
     key: 'GLM_TRANSCRIPT_EVENT_SEGMENT_MIN_INTERVAL_MS',
+    type: 'number',
+    defaultValue: 500,
+    min: 0,
+    max: 60000,
+  },
+  {
+    field: 'glmTranscriptEventSegmentRebuildMinIntervalMs',
+    key: 'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_MIN_INTERVAL_MS',
     type: 'number',
     defaultValue: 500,
     min: 0,
@@ -270,8 +298,24 @@ export const APP_CONFIG_FIELDS = [
     max: 120000,
   },
   {
+    field: 'glmTranscriptEventSegmentRebuildRateLimitCooldownMs',
+    key: 'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_RATE_LIMIT_COOLDOWN_MS',
+    type: 'number',
+    defaultValue: 2000,
+    min: 0,
+    max: 120000,
+  },
+  {
     field: 'glmTranscriptEventSegmentRateLimitMaxMs',
     key: 'GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_MAX_MS',
+    type: 'number',
+    defaultValue: 15000,
+    min: 0,
+    max: 300000,
+  },
+  {
+    field: 'glmTranscriptEventSegmentRebuildRateLimitMaxMs',
+    key: 'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_RATE_LIMIT_MAX_MS',
     type: 'number',
     defaultValue: 15000,
     min: 0,

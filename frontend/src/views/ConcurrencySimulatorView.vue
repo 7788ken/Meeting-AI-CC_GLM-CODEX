@@ -299,6 +299,7 @@ const bucketMeta = [
   { key: 'global', label: '全局', color: '#2f4858' },
   { key: 'asr', label: 'ASR', color: '#e85d37' },
   { key: 'segmentation', label: '拆分', color: '#1f7a8c' },
+  { key: 'segmentation_rebuild', label: '重建', color: '#6a7a89' },
   { key: 'translation', label: '翻译', color: '#7c9f5f' },
   { key: 'analysis', label: '分析', color: '#e0a458' },
 ] as const
@@ -366,6 +367,14 @@ const bucketConfig = computed(() => ({
     cooldownMs: clampCooldownMs(
       backendConfig.value.glmTranscriptEventSegmentRateLimitCooldownMs,
       backendConfig.value.glmTranscriptEventSegmentRateLimitMaxMs
+    ),
+  },
+  segmentation_rebuild: {
+    concurrency: backendConfig.value.glmTranscriptEventSegmentRebuildConcurrency,
+    minIntervalMs: backendConfig.value.glmTranscriptEventSegmentRebuildMinIntervalMs,
+    cooldownMs: clampCooldownMs(
+      backendConfig.value.glmTranscriptEventSegmentRebuildRateLimitCooldownMs,
+      backendConfig.value.glmTranscriptEventSegmentRebuildRateLimitMaxMs
     ),
   },
   translation: {
@@ -467,7 +476,7 @@ const activeSessionOverflow = computed(() =>
 )
 
 const systemMatrixHeads = computed(() => {
-  const heads = ['全局', 'ASR', '拆分']
+  const heads = ['全局', 'ASR', '拆分', '重建']
   if (translationEnabled.value) heads.push('翻译')
   heads.push('分析')
   return heads
@@ -490,6 +499,7 @@ const systemMatrixRows = computed(() => {
       { key: 'global', value: config.glmGlobalConcurrency },
       { key: 'asr', value: config.glmAsrConcurrency },
       { key: 'segment', value: config.glmTranscriptEventSegmentConcurrency },
+      { key: 'rebuild', value: config.glmTranscriptEventSegmentRebuildConcurrency },
       { key: 'translate', value: translateValue(config.glmTranscriptEventSegmentTranslationConcurrency) },
       { key: 'analysis', value: config.glmTranscriptAnalysisConcurrency },
     ]),
@@ -497,6 +507,7 @@ const systemMatrixRows = computed(() => {
       { key: 'global', value: formatMs(config.glmGlobalMinIntervalMs) },
       { key: 'asr', value: formatMs(config.glmAsrMinIntervalMs) },
       { key: 'segment', value: formatMs(config.glmTranscriptEventSegmentMinIntervalMs) },
+      { key: 'rebuild', value: formatMs(config.glmTranscriptEventSegmentRebuildMinIntervalMs) },
       { key: 'translate', value: translateValue(config.glmTranscriptEventSegmentTranslationMinIntervalMs, formatMs) },
       { key: 'analysis', value: formatMs(config.glmTranscriptAnalysisMinIntervalMs) },
     ]),
@@ -504,6 +515,7 @@ const systemMatrixRows = computed(() => {
       { key: 'global', value: formatMs(config.glmGlobalRateLimitCooldownMs) },
       { key: 'asr', value: formatMs(config.glmAsrRateLimitCooldownMs) },
       { key: 'segment', value: formatMs(config.glmTranscriptEventSegmentRateLimitCooldownMs) },
+      { key: 'rebuild', value: formatMs(config.glmTranscriptEventSegmentRebuildRateLimitCooldownMs) },
       { key: 'translate', value: translateValue(config.glmTranscriptEventSegmentTranslationRateLimitCooldownMs, formatMs) },
       { key: 'analysis', value: formatMs(config.glmTranscriptAnalysisRateLimitCooldownMs) },
     ]),

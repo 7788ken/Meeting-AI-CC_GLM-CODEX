@@ -8,6 +8,9 @@
         </div>
       </div>
       <div class="header-right">
+        <el-button plain @click="openConcurrencyDashboard">
+          运行中控大屏
+        </el-button>
         <el-button type="primary" @click="createMeeting" :loading="loading">
           + 创建新会议
         </el-button>
@@ -234,6 +237,11 @@ async function createMeeting() {
   }
 }
 
+function openConcurrencyDashboard() {
+  const target = router.resolve({ path: '/ops/concurrency-dashboard' }).href
+  window.open(target, '_blank', 'noopener')
+}
+
 function openMeeting(id: string) {
   router.push(`/meeting/${id}`)
 }
@@ -397,6 +405,7 @@ function getMeetingStatusText(meeting: Session): string {
 .header-right {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 .app-title {

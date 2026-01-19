@@ -7,6 +7,7 @@ export type GlmRateLimiterBucket =
   | 'global'
   | 'asr'
   | 'segmentation'
+  | 'segmentation_rebuild'
   | 'translation'
   | 'analysis'
 
@@ -73,6 +74,12 @@ const BUCKET_CONFIG_KEYS: Record<GlmRateLimiterBucket, BucketConfigKeys> = {
     cooldownMs: 'GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_COOLDOWN_MS',
     maxCooldownMs: 'GLM_TRANSCRIPT_EVENT_SEGMENT_RATE_LIMIT_MAX_MS',
   },
+  segmentation_rebuild: {
+    concurrency: 'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_CONCURRENCY',
+    minIntervalMs: 'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_MIN_INTERVAL_MS',
+    cooldownMs: 'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_RATE_LIMIT_COOLDOWN_MS',
+    maxCooldownMs: 'GLM_TRANSCRIPT_EVENT_SEGMENT_REBUILD_RATE_LIMIT_MAX_MS',
+  },
   translation: {
     concurrency: 'GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_CONCURRENCY',
     minIntervalMs: 'GLM_TRANSCRIPT_EVENT_SEGMENT_TRANSLATION_MIN_INTERVAL_MS',
@@ -88,11 +95,12 @@ const BUCKET_CONFIG_KEYS: Record<GlmRateLimiterBucket, BucketConfigKeys> = {
 }
 
 const BUCKET_PUMP_WEIGHTS: Record<GlmRateLimiterBucket, number> = {
-  global: 1,
-  asr: 1,
-  segmentation: 1,
-  translation: 1,
-  analysis: 3,
+  global: 4,
+  asr: 4,
+  segmentation: 4,
+  segmentation_rebuild: 1,
+  translation: 4,
+  analysis: 6,
 }
 
 const INDEPENDENT_BUCKETS = new Set<GlmRateLimiterBucket>(['analysis'])

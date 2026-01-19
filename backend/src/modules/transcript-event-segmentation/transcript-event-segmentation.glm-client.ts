@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
 import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/llm/glm'
-import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
+import { GlmRateLimiter, type GlmRateLimiterBucket } from '../../common/llm/glm-rate-limiter'
 import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
 import { AppConfigService } from '../app-config/app-config.service'
 import { AppLogService } from '../app-log/app-log.service'
@@ -28,6 +28,7 @@ export class TranscriptEventSegmentationGlmClient {
     system: string
     user: string
     sessionId?: string
+    bucket?: GlmRateLimiterBucket
   }): Promise<string> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
@@ -41,6 +42,7 @@ export class TranscriptEventSegmentationGlmClient {
     const model = this.getModelName()
     const maxTokens = this.readMaxTokens()
     const useJsonMode = this.shouldUseJsonMode()
+    const bucket = params.bucket ?? 'segmentation'
     const requestBody: Record<string, unknown> = {
       model,
       messages: [
@@ -65,6 +67,7 @@ export class TranscriptEventSegmentationGlmClient {
         headers,
         requestBody: body,
         sessionId: params.sessionId,
+        bucket,
       })
 
     if (!useJsonMode) {
@@ -153,6 +156,7 @@ export class TranscriptEventSegmentationGlmClient {
     headers: Record<string, string>
     requestBody: Record<string, unknown>
     sessionId?: string
+    bucket: GlmRateLimiterBucket
   }): Promise<string> {
     const startedAt = Date.now()
     const response = await this.postWithRetry(input)
@@ -215,8 +219,13 @@ export class TranscriptEventSegmentationGlmClient {
     endpoint: string
     headers: Record<string, string>
     requestBody: Record<string, unknown>
+    bucket: GlmRateLimiterBucket
   }): Promise<{ data?: unknown; status?: unknown }> {
     const maxRetries = this.readRetryMax()
+    const label =
+      input.bucket === 'segmentation_rebuild'
+        ? 'transcript_event_segmentation_rebuild'
+        : 'transcript_event_segmentation'
     let attempt = 0
     while (true) {
       try {
@@ -225,7 +234,7 @@ export class TranscriptEventSegmentationGlmClient {
             firstValueFrom(
               this.httpService.post(input.endpoint, input.requestBody, { headers: input.headers })
             ),
-          { bucket: 'segmentation', label: 'transcript_event_segmentation' }
+          { bucket: input.bucket, label }
         )
       } catch (error) {
         const status = this.extractStatusCode(error)
@@ -235,7 +244,7 @@ export class TranscriptEventSegmentationGlmClient {
 
         const retryAfterMs = this.readRetryAfterMs(error)
         const delayMs = this.resolveRetryDelayMs(error, attempt)
-        this.glmRateLimiter.onRateLimit(retryAfterMs ?? delayMs, 'segmentation')
+        this.glmRateLimiter.onRateLimit(retryAfterMs ?? delayMs, input.bucket)
         if (attempt >= maxRetries) {
           throw error
         }
