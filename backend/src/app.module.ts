@@ -14,13 +14,16 @@ import { TranscriptEventSegmentationModule } from './modules/transcript-event-se
 import { TranscriptAnalysisModule } from './modules/transcript-analysis/transcript-analysis.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { DebugErrorModule } from './modules/debug-error/debug-error.module'
+import { AppLogModule } from './modules/app-log/app-log.module'
 import { AppConfigModule } from './modules/app-config/app-config.module'
 import { PromptLibraryModule } from './modules/prompt-library/prompt-library.module'
 import { OpsModule } from './modules/ops/ops.module'
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
+import { AppLogInterceptor } from './common/interceptors/app-log.interceptor'
 import { TransformInterceptor } from './common/interceptors/transform.interceptor'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter'
 
 @Module({
   imports: [
@@ -43,11 +46,17 @@ import { AppService } from './app.service'
     TranscriptEventSegmentationModule,
     TranscriptAnalysisModule,
     DebugErrorModule,
+    AppLogModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
     ConfigurationService,
+    AllExceptionsFilter,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AppLogInterceptor,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformInterceptor,

@@ -611,6 +611,15 @@
                       {{ getRemark("GLM_TRANSCRIPT_SUMMARY_THINKING") }}
                     </div>
                   </el-form-item>
+                  <el-form-item label="针对性分析深度思考">
+                    <el-switch v-model="backendForm.glmTranscriptSegmentAnalysisThinking" />
+                    <div
+                      v-if="getRemark('GLM_TRANSCRIPT_SEGMENT_ANALYSIS_THINKING')"
+                      class="hint"
+                    >
+                      {{ getRemark("GLM_TRANSCRIPT_SEGMENT_ANALYSIS_THINKING") }}
+                    </div>
+                  </el-form-item>
                 </div>
 
                 <div class="pane-title section-title">重试与退避</div>
@@ -1399,8 +1408,25 @@
                     {{ getRemark("TRANSCRIPT_DEBUG_LOG_UTTERANCES") }}
                   </div>
                 </el-form-item>
+                <el-form-item label="请求与回复日志">
+                  <el-switch v-model="backendForm.appLogRequestResponseEnabled" />
+                  <div v-if="getRemark('APP_LOG_REQUEST_RESPONSE_ENABLED')" class="hint">
+                    {{ getRemark("APP_LOG_REQUEST_RESPONSE_ENABLED") }}
+                  </div>
+                </el-form-item>
+                <el-form-item label="错误日志">
+                  <el-switch v-model="backendForm.appLogErrorEnabled" />
+                  <div v-if="getRemark('APP_LOG_ERROR_ENABLED')" class="hint">
+                    {{ getRemark("APP_LOG_ERROR_ENABLED") }}
+                  </div>
+                </el-form-item>
+                <el-form-item label="系统日志">
+                  <el-switch v-model="backendForm.appLogSystemEnabled" />
+                  <div v-if="getRemark('APP_LOG_SYSTEM_ENABLED')" class="hint">
+                    {{ getRemark("APP_LOG_SYSTEM_ENABLED") }}
+                  </div>
+                </el-form-item>
               </el-form>
-              <div class="hint">请求/错误/系统日志的独立配置暂未开放。</div>
             </section>
           </el-tab-pane>
 

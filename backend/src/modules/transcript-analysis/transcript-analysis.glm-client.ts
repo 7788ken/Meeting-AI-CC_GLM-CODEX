@@ -49,10 +49,16 @@ export class TranscriptAnalysisGlmClient {
     return this.appConfigService.getBoolean('GLM_TRANSCRIPT_SUMMARY_THINKING', true)
   }
 
+  private resolveThinking(enableThinking?: boolean): boolean {
+    if (typeof enableThinking === 'boolean') return enableThinking
+    return this.shouldEnableThinking()
+  }
+
   async generateMarkdown(params: {
     system: string
     user: string
     scheduleKey?: string
+    enableThinking?: boolean
   }): Promise<{ markdown: string; model: string }> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
@@ -65,7 +71,7 @@ export class TranscriptAnalysisGlmClient {
 
     const model = this.getModelName()
     const maxTokens = this.readMaxTokens()
-    const enableThinking = this.shouldEnableThinking()
+    const enableThinking = this.resolveThinking(params.enableThinking)
 
     const requestBody: Record<string, unknown> = {
       model,
@@ -104,6 +110,7 @@ export class TranscriptAnalysisGlmClient {
     system: string
     user: string
     scheduleKey?: string
+    enableThinking?: boolean
   }): AsyncIterable<TranscriptSummaryStreamChunk> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
@@ -116,7 +123,7 @@ export class TranscriptAnalysisGlmClient {
 
     const model = this.getModelName()
     const maxTokens = this.readMaxTokens()
-    const enableThinking = this.shouldEnableThinking()
+    const enableThinking = this.resolveThinking(params.enableThinking)
 
     const requestBody: Record<string, unknown> = {
       model,

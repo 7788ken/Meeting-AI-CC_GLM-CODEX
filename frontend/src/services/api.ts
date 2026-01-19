@@ -160,6 +160,9 @@ export interface BackendConfig {
   transcriptMaxBufferDurationSoftMs: number
   transcriptMaxBufferDurationHardMs: number
   transcriptDebugLogUtterances: boolean
+  appLogRequestResponseEnabled: boolean
+  appLogErrorEnabled: boolean
+  appLogSystemEnabled: boolean
   transcriptSegmentTranslationEnabled: boolean
   transcriptSegmentTranslationLanguage: string
   glmTranscriptSegmentTranslationModel: string
@@ -168,6 +171,7 @@ export interface BackendConfig {
   glmTranscriptSummaryModel: string
   glmTranscriptSummaryMaxTokens: number
   glmTranscriptSummaryThinking: boolean
+  glmTranscriptSegmentAnalysisThinking: boolean
   glmTranscriptSummaryRetryMax: number
   glmTranscriptSummaryRetryBaseMs: number
   glmTranscriptSummaryRetryMaxMs: number
@@ -248,6 +252,18 @@ export interface DebugError {
   stack?: string
   context?: unknown
   occurredAt?: string
+  createdAt: string
+}
+
+export type AppLogType = 'request_response' | 'error' | 'system'
+
+export interface AppLog {
+  id: string
+  sessionId?: string
+  type: AppLogType
+  level: 'info' | 'warn' | 'error'
+  message: string
+  payload?: Record<string, unknown>
   createdAt: string
 }
 
@@ -456,4 +472,22 @@ export const debugErrorApi = {
   // 清空会话的调试错误列表
   clearBySession: (sessionId: string) =>
     del<ApiResponse<{ deletedCount: number }>>(`/debug-errors/session/${sessionId}`),
+}
+
+export const appLogsApi = {
+  listBySession: (sessionId: string, type?: AppLogType, limit = 200) => {
+    const query = new URLSearchParams()
+    if (type) query.set('type', type)
+    if (Number.isFinite(limit)) query.set('limit', String(limit))
+    const suffix = query.toString()
+    const url = suffix ? `/app-logs/session/${sessionId}?${suffix}` : `/app-logs/session/${sessionId}`
+    return get<ApiResponse<AppLog[]>>(url)
+  },
+  clearBySession: (sessionId: string, type?: AppLogType) => {
+    const query = new URLSearchParams()
+    if (type) query.set('type', type)
+    const suffix = query.toString()
+    const url = suffix ? `/app-logs/session/${sessionId}?${suffix}` : `/app-logs/session/${sessionId}`
+    return del<ApiResponse<{ deletedCount: number }>>(url)
+  },
 }

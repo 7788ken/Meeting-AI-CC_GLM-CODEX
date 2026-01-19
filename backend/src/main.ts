@@ -20,6 +20,7 @@ import {
 import { TranscriptEventSegmentationConfigService } from './modules/transcript-event-segmentation/transcript-event-segmentation-config.service'
 import { TranscriptEventSegmentTranslationService } from './modules/transcript-event-segmentation/transcript-event-segment-translation.service'
 import { AppConfigService } from './modules/app-config/app-config.service'
+import { AppLogService } from './modules/app-log/app-log.service'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { isSegmentKeyRollback } from './modules/transcript/segment-key'
@@ -35,6 +36,7 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService)
   const appConfigService = app.get(AppConfigService)
+  const appLogService = app.get(AppLogService)
   const logger = new Logger('Bootstrap')
 
   // 进程级异常兜底，避免未处理异常直接导致服务退出
@@ -48,7 +50,7 @@ async function bootstrap() {
   })
 
   // 全局异常过滤器
-  app.useGlobalFilters(new AllExceptionsFilter())
+  app.useGlobalFilters(app.get(AllExceptionsFilter))
 
   // 全局验证管道
   app.useGlobalPipes(
@@ -82,6 +84,7 @@ async function bootstrap() {
     .addTag('transcript-event-segmentation', '语句拆分')
     .addTag('app-config', '后端配置')
     .addTag('debug-errors', '会话调试报错')
+    .addTag('app-logs', '会话日志')
     .addBearerAuth()
     .build()
 
@@ -287,6 +290,11 @@ async function bootstrap() {
               }
 
               clientSessions.set(ws, nextSessionId)
+              void appLogService.recordSystemLog({
+                sessionId: nextSessionId,
+                message: 'WebSocket 会话已绑定',
+                payload: { clientId },
+              })
               addClientToSession(nextSessionId, ws)
 
               ws.send(
@@ -425,6 +433,11 @@ async function bootstrap() {
       }
       if (sessionId) {
         removeClientFromSession(sessionId, ws)
+        void appLogService.recordSystemLog({
+          sessionId,
+          message: 'WebSocket 连接已断开',
+          payload: { clientId },
+        })
       }
       clientSessions.delete(ws)
       clientIds.delete(ws) // 防止内存泄漏：使用 Map 时必须手动删除
@@ -1240,6 +1253,10 @@ async function bootstrap() {
     logger.log(`🚀 Server running on http://0.0.0.0:${port}`)
     logger.log(`📡 WebSocket server running on ws://0.0.0.0:${port}/transcript`)
     logger.log(`📚 API Documentation: http://localhost:${port}/api/docs`)
+    void appLogService.recordSystemLog({
+      message: '服务启动完成',
+      payload: { port, env: process.env.NODE_ENV || 'development' },
+    })
   })
 }
 

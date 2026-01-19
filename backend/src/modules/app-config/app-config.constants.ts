@@ -33,6 +33,7 @@ export const APP_CONFIG_SEED_KEYS = [
   'GLM_TRANSCRIPT_SUMMARY_MODEL',
   'GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS',
   'GLM_TRANSCRIPT_SUMMARY_THINKING',
+  'GLM_TRANSCRIPT_SEGMENT_ANALYSIS_THINKING',
   'GLM_TRANSCRIPT_SUMMARY_RETRY_MAX',
   'GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS',
   'GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS',
@@ -48,6 +49,9 @@ export const APP_CONFIG_SEED_KEYS = [
   'TRANSCRIPT_EVENTS_SEGMENT_MAX_STALENESS_MS',
   'TRANSCRIPT_AUTO_SPLIT_GAP_MS',
   'TRANSCRIPT_DEBUG_LOG_UTTERANCES',
+  'APP_LOG_REQUEST_RESPONSE_ENABLED',
+  'APP_LOG_ERROR_ENABLED',
+  'APP_LOG_SYSTEM_ENABLED',
   'TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED',
   'TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE',
   'TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED',
@@ -114,6 +118,8 @@ export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
     '会议总结模型；不配置时会回退使用语句拆分模型（GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL）。',
   GLM_TRANSCRIPT_SUMMARY_MAX_TOKENS: '会议总结：单次输出 max_tokens 上限。',
   GLM_TRANSCRIPT_SUMMARY_THINKING: '会议总结：是否启用深度思考（可能提升质量但更慢/更贵）。',
+  GLM_TRANSCRIPT_SEGMENT_ANALYSIS_THINKING:
+    '针对性分析：是否启用深度思考（未配置时沿用会议总结设置）。',
   GLM_TRANSCRIPT_SUMMARY_RETRY_MAX: '会议总结：遇到 429 的最大重试次数（0 表示不重试）。',
   GLM_TRANSCRIPT_SUMMARY_RETRY_BASE_MS: '会议总结：429 退避基准延迟（ms）。',
   GLM_TRANSCRIPT_SUMMARY_RETRY_MAX_MS: '会议总结：429 退避最大延迟（ms）。',
@@ -139,6 +145,9 @@ export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
   TRANSCRIPT_AUTO_SPLIT_GAP_MS:
     '实时转写：无 segmentKey 时，相邻 utterance 更新超过该间隔（ms）将强制切分为新 speech。',
   TRANSCRIPT_DEBUG_LOG_UTTERANCES: '转写调试：打印最终 utterance / event（仅用于排障，建议关闭）。',
+  APP_LOG_REQUEST_RESPONSE_ENABLED: '日志记录：是否记录请求与回复（仅用于排障，建议关闭）。',
+  APP_LOG_ERROR_ENABLED: '日志记录：是否记录错误日志（仅用于排障，建议关闭）。',
+  APP_LOG_SYSTEM_ENABLED: '日志记录：是否记录系统日志（仅用于排障，建议关闭）。',
   TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED:
     '语句翻译：是否在语句拆分后生成翻译（保留技术名/标识符）。',
   TRANSCRIPT_SEGMENT_TRANSLATION_LANGUAGE:
@@ -387,6 +396,24 @@ export const APP_CONFIG_FIELDS = [
     defaultValue: false,
   },
   {
+    field: 'appLogRequestResponseEnabled',
+    key: 'APP_LOG_REQUEST_RESPONSE_ENABLED',
+    type: 'boolean',
+    defaultValue: false,
+  },
+  {
+    field: 'appLogErrorEnabled',
+    key: 'APP_LOG_ERROR_ENABLED',
+    type: 'boolean',
+    defaultValue: false,
+  },
+  {
+    field: 'appLogSystemEnabled',
+    key: 'APP_LOG_SYSTEM_ENABLED',
+    type: 'boolean',
+    defaultValue: false,
+  },
+  {
     field: 'transcriptSegmentTranslationEnabled',
     key: 'TRANSCRIPT_SEGMENT_TRANSLATION_ENABLED',
     type: 'boolean',
@@ -433,6 +460,12 @@ export const APP_CONFIG_FIELDS = [
   {
     field: 'glmTranscriptSummaryThinking',
     key: 'GLM_TRANSCRIPT_SUMMARY_THINKING',
+    type: 'boolean',
+    defaultValue: true,
+  },
+  {
+    field: 'glmTranscriptSegmentAnalysisThinking',
+    key: 'GLM_TRANSCRIPT_SEGMENT_ANALYSIS_THINKING',
     type: 'boolean',
     defaultValue: true,
   },

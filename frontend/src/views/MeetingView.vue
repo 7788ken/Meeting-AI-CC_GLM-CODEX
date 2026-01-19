@@ -640,8 +640,7 @@ let aiQueueTimer: ReturnType<typeof setInterval> | null = null
 	const analysisProgress = ref<string>('')
 	const summaryPromptName = ref('')
 	let analysisEventSource: EventSource | null = null
-	let targetAnalysisEventSource: EventSource | null = null
-	let targetAnalysisStreamSegmentId: string | null = null
+	const targetAnalysisStreams = new Map<string, EventSource>()
 
 	// 针对性分析状态
 	const analysisMode = ref<'general' | 'target'>('general')
@@ -1680,15 +1679,21 @@ function clearAnalysis(): void {
   analysisProgress.value = ''
 }
 
-function stopTargetAnalysisStream(): void {
-  if (targetAnalysisEventSource) {
-    targetAnalysisEventSource.close()
-    targetAnalysisEventSource = null
+function stopTargetAnalysisStream(segmentId?: string): void {
+  if (segmentId) {
+    const stream = targetAnalysisStreams.get(segmentId)
+    if (stream) {
+      stream.close()
+      targetAnalysisStreams.delete(segmentId)
+    }
+    targetAnalysisInFlight.delete(segmentId)
+    return
   }
-  if (targetAnalysisStreamSegmentId) {
-    targetAnalysisInFlight.delete(targetAnalysisStreamSegmentId)
-    targetAnalysisStreamSegmentId = null
+  for (const [id, stream] of targetAnalysisStreams) {
+    stream.close()
+    targetAnalysisInFlight.delete(id)
   }
+  targetAnalysisStreams.clear()
 }
 
 // 切换到针对性分析模式
@@ -1732,7 +1737,10 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
     return
   }
 
-  if (targetAnalysisInFlight.has(segId)) return
+  if (targetAnalysisInFlight.has(segId)) {
+    if (!force) return
+    stopTargetAnalysisStream(segId)
+  }
 
   if (!force) {
     try {
@@ -1759,11 +1767,6 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
   }
 
   if (!canTriggerGlobalAction()) return
-
-  if (targetAnalysisEventSource) {
-    targetAnalysisEventSource.close()
-    targetAnalysisEventSource = null
-  }
 
   targetAnalysisErrors.delete(segId)
   targetAnalysisInFlight.add(segId)
@@ -1813,8 +1816,8 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
   let hadAnyDelta = false
   let markdownBuffer = ''
   let promptName = ''
-  targetAnalysisEventSource = new EventSource(streamUrl)
-  targetAnalysisStreamSegmentId = segId
+  const targetAnalysisEventSource = new EventSource(streamUrl)
+  targetAnalysisStreams.set(segId, targetAnalysisEventSource)
 
   const updateCache = () => {
     if (activeSessionId !== sessionId.value) return
@@ -1829,7 +1832,7 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
   const finishOnce = (payload?: { ok?: boolean; message?: string }) => {
     if (finished) return
     finished = true
-    stopTargetAnalysisStream()
+    stopTargetAnalysisStream(segId)
 
     if (payload?.ok) {
       ElMessage.success(`针对性分析完成 - @${seg.sequence}`)

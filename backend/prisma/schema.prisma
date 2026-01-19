@@ -44,3 +44,18 @@ model AppConfig {
 
   @@map("app_configs")
 }
+
+// 应用日志（用于会话调试台）
+model AppLog {
+  id        String   @id @default(uuid())
+  sessionId String?
+  type      String
+  level     String
+  message   String   @db.Text
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, type])
+  @@index([type])
+  @@map("app_logs")
+}

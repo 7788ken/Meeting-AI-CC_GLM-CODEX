@@ -32,6 +32,9 @@ const fallbackDefaults: BackendConfig = {
   transcriptMaxBufferDurationSoftMs: 30000,
   transcriptMaxBufferDurationHardMs: 50000,
   transcriptDebugLogUtterances: false,
+  appLogRequestResponseEnabled: false,
+  appLogErrorEnabled: false,
+  appLogSystemEnabled: false,
   transcriptSegmentTranslationEnabled: false,
   transcriptSegmentTranslationLanguage: '简体中文',
   glmTranscriptSegmentTranslationModel: '',
@@ -40,6 +43,7 @@ const fallbackDefaults: BackendConfig = {
   glmTranscriptSummaryModel: '',
   glmTranscriptSummaryMaxTokens: 2500,
   glmTranscriptSummaryThinking: true,
+  glmTranscriptSegmentAnalysisThinking: true,
   glmTranscriptSummaryRetryMax: 3,
   glmTranscriptSummaryRetryBaseMs: 500,
   glmTranscriptSummaryRetryMaxMs: 8000,
@@ -254,6 +258,18 @@ function normalizeBackendConfig(
       input.transcriptDebugLogUtterances,
       base.transcriptDebugLogUtterances
     ),
+    appLogRequestResponseEnabled: normalizeBoolean(
+      input.appLogRequestResponseEnabled,
+      base.appLogRequestResponseEnabled
+    ),
+    appLogErrorEnabled: normalizeBoolean(
+      input.appLogErrorEnabled,
+      base.appLogErrorEnabled
+    ),
+    appLogSystemEnabled: normalizeBoolean(
+      input.appLogSystemEnabled,
+      base.appLogSystemEnabled
+    ),
     transcriptSegmentTranslationEnabled: normalizeBoolean(
       input.transcriptSegmentTranslationEnabled,
       base.transcriptSegmentTranslationEnabled
@@ -285,6 +301,10 @@ function normalizeBackendConfig(
     glmTranscriptSummaryThinking: normalizeBoolean(
       input.glmTranscriptSummaryThinking,
       base.glmTranscriptSummaryThinking
+    ),
+    glmTranscriptSegmentAnalysisThinking: normalizeBoolean(
+      input.glmTranscriptSegmentAnalysisThinking,
+      base.glmTranscriptSegmentAnalysisThinking
     ),
     glmTranscriptSummaryRetryMax: normalizeNumberInRange(
       input.glmTranscriptSummaryRetryMax,

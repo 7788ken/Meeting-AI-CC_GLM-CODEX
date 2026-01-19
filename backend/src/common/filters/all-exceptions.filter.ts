@@ -4,17 +4,22 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Injectable,
   Logger,
 } from '@nestjs/common'
 import { Request, Response } from 'express'
+import { AppLogService } from '../../modules/app-log/app-log.service'
 
 /**
  * 全局异常过滤器
  * 统一处理所有异常，返回标准化的错误响应
  */
 @Catch()
+@Injectable()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name)
+
+  constructor(private readonly appLogService: AppLogService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp()
@@ -51,8 +56,30 @@ export class AllExceptionsFilter implements ExceptionFilter {
       `${request.method} ${request.url}`,
       exception instanceof Error ? exception.stack : JSON.stringify(exception)
     )
+    void this.appLogService.recordErrorLog({
+      sessionId: extractSessionId(request),
+      message,
+      statusCode: status,
+      method: request.method,
+      path: request.url,
+      stack: exception instanceof Error ? exception.stack : undefined,
+      error: errorResponse,
+    })
 
     // 发送响应
     response.status(status).json(responseBody)
   }
+}
+
+function extractSessionId(request: Request): string | undefined {
+  const candidates = [
+    request.params?.sessionId,
+    request.query?.sessionId,
+    (request.body as { sessionId?: unknown } | undefined)?.sessionId,
+    request.headers['x-session-id'],
+  ]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+  return undefined
 }

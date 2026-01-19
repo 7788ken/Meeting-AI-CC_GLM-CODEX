@@ -149,6 +149,13 @@ export class AppConfigController {
 
   private resolveFieldValue(field: AppConfigFieldConfig): string | number | boolean {
     if (field.type === 'boolean') {
+      if (field.key === 'GLM_TRANSCRIPT_SEGMENT_ANALYSIS_THINKING') {
+        const summaryThinking = this.appConfigService.getBoolean(
+          'GLM_TRANSCRIPT_SUMMARY_THINKING',
+          true
+        )
+        return this.appConfigService.getBoolean(field.key, summaryThinking)
+      }
       return this.appConfigService.getBoolean(field.key, Boolean(field.defaultValue))
     }
     if (field.type === 'number') {

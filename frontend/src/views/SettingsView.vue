@@ -1,4 +1,5 @@
 <template>
+  <!-- 本文件不需要修改编辑。 -->
   <div class="settings-container">
     <header class="settings-header app-surface">
       <div class="title-stack">
@@ -116,6 +117,9 @@
           </el-form-item>
           <el-form-item label="会议总结深度思考">
             <el-switch v-model="backendForm.glmTranscriptSummaryThinking" />
+          </el-form-item>
+          <el-form-item label="针对性分析深度思考">
+            <el-switch v-model="backendForm.glmTranscriptSegmentAnalysisThinking" />
           </el-form-item>
 
           <el-form-item label="并发上限">

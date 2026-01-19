@@ -524,6 +524,7 @@ const systemRows = computed(() => {
     { label: '摘要模型', value: config.glmTranscriptSummaryModel || '--' },
     { label: '摘要最大 tokens', value: config.glmTranscriptSummaryMaxTokens },
     { label: '摘要思考模式', value: config.glmTranscriptSummaryThinking ? '开启' : '关闭' },
+    { label: '针对性思考模式', value: config.glmTranscriptSegmentAnalysisThinking ? '开启' : '关闭' },
     { label: '拆分并发上限', value: config.transcriptEventsSegmentMaxInFlight },
     { label: '拆分最大会话', value: config.transcriptEventsSegmentMaxPendingSessions },
     { label: '拆分过期阈值', value: formatMs(config.transcriptEventsSegmentMaxStalenessMs) },

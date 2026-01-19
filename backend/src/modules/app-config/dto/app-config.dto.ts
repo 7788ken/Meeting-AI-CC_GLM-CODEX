@@ -89,6 +89,15 @@ export class AppConfigDto {
   @ApiProperty({ description: '转写调试：打印语句日志' })
   transcriptDebugLogUtterances: boolean
 
+  @ApiProperty({ description: '日志记录：请求与回复' })
+  appLogRequestResponseEnabled: boolean
+
+  @ApiProperty({ description: '日志记录：错误日志' })
+  appLogErrorEnabled: boolean
+
+  @ApiProperty({ description: '日志记录：系统日志' })
+  appLogSystemEnabled: boolean
+
   @ApiProperty({ description: '语句翻译：是否启用语句拆分后翻译' })
   transcriptSegmentTranslationEnabled: boolean
 
@@ -112,6 +121,9 @@ export class AppConfigDto {
 
   @ApiProperty({ description: '会议总结是否启用深度思考' })
   glmTranscriptSummaryThinking: boolean
+
+  @ApiProperty({ description: '针对性分析是否启用深度思考' })
+  glmTranscriptSegmentAnalysisThinking: boolean
 
   @ApiProperty({ description: '会议总结重试次数', minimum: 0, maximum: 10 })
   glmTranscriptSummaryRetryMax: number
@@ -321,6 +333,21 @@ export class UpdateAppConfigDto {
   @IsBoolean()
   transcriptDebugLogUtterances?: boolean
 
+  @ApiPropertyOptional({ description: '日志记录：请求与回复' })
+  @IsOptional()
+  @IsBoolean()
+  appLogRequestResponseEnabled?: boolean
+
+  @ApiPropertyOptional({ description: '日志记录：错误日志' })
+  @IsOptional()
+  @IsBoolean()
+  appLogErrorEnabled?: boolean
+
+  @ApiPropertyOptional({ description: '日志记录：系统日志' })
+  @IsOptional()
+  @IsBoolean()
+  appLogSystemEnabled?: boolean
+
   @ApiPropertyOptional({ description: '语句翻译：是否启用语句拆分后翻译' })
   @IsOptional()
   @IsBoolean()
@@ -362,6 +389,11 @@ export class UpdateAppConfigDto {
   @IsOptional()
   @IsBoolean()
   glmTranscriptSummaryThinking?: boolean
+
+  @ApiPropertyOptional({ description: '针对性分析是否启用深度思考' })
+  @IsOptional()
+  @IsBoolean()
+  glmTranscriptSegmentAnalysisThinking?: boolean
 
   @ApiPropertyOptional({ description: '会议总结重试次数', minimum: 0, maximum: 10 })
   @IsOptional()

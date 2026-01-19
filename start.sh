@@ -4,6 +4,9 @@
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUN_DIR="$PROJECT_ROOT/.run"
+BACKEND_PID_FILE="$RUN_DIR/backend.pid"
+FRONTEND_PID_FILE="$RUN_DIR/frontend.pid"
 
 # 颜色输出
 GREEN='\033[0;32m'
@@ -277,6 +280,9 @@ echo ""
 echo -e "${BLUE}▶ 等待数据库服务就绪...${NC}"
 sleep 3
 
+# 运行时 PID 文件目录
+mkdir -p "$RUN_DIR"
+
 # 启动后端
 echo -e "${BLUE}▶ 启动后端服务 (端口 5181)...${NC}"
 cd "$PROJECT_ROOT/backend" || exit 1
@@ -285,6 +291,7 @@ BACKEND_PID=$!
 echo -e "${GREEN}后端 PID: $BACKEND_PID${NC}"
 sleep 2
 if ps -p $BACKEND_PID > /dev/null 2>&1; then
+    echo "$BACKEND_PID" > "$BACKEND_PID_FILE"
     echo -e "${GREEN}✅ 后端服务已启动${NC}"
 else
     echo -e "${RED}❌ 后端启动失败${NC}"
@@ -301,6 +308,7 @@ FRONTEND_PID=$!
 echo -e "${GREEN}前端 PID: $FRONTEND_PID${NC}"
 sleep 2
 if ps -p $FRONTEND_PID > /dev/null 2>&1; then
+    echo "$FRONTEND_PID" > "$FRONTEND_PID_FILE"
     echo -e "${GREEN}✅ 前端服务已启动${NC}"
 else
     echo -e "${RED}❌ 前端启动失败${NC}"

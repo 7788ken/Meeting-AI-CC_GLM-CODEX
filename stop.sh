@@ -2,6 +2,9 @@
 # Meeting-AI 开发环境关闭脚本
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUN_DIR="$PROJECT_ROOT/.run"
+BACKEND_PID_FILE="$RUN_DIR/backend.pid"
+FRONTEND_PID_FILE="$RUN_DIR/frontend.pid"
 
 # 颜色输出
 GREEN='\033[0;32m'
@@ -12,12 +15,52 @@ NC='\033[0m'
 
 echo -e "${BLUE}🛑 关闭 Meeting-AI 开发环境${NC}"
 
+stop_pid_file() {
+    local service_name=$1
+    local pid_file=$2
+
+    if [ ! -f "$pid_file" ]; then
+        return 1
+    fi
+
+    local pid
+    pid=$(cat "$pid_file" 2>/dev/null || true)
+    if [ -z "$pid" ]; then
+        rm -f "$pid_file"
+        return 1
+    fi
+
+    if ! ps -p "$pid" > /dev/null 2>&1; then
+        rm -f "$pid_file"
+        return 1
+    fi
+
+    echo -e "${BLUE}▶ 停止${service_name}服务...${NC}"
+    kill "$pid" 2>/dev/null || true
+    local waited=0
+    while ps -p "$pid" > /dev/null 2>&1 && [ $waited -lt 5 ]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if ps -p "$pid" > /dev/null 2>&1; then
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$pid_file"
+    echo -e "${GREEN}✅ ${service_name}服务已停止${NC}"
+    return 0
+}
+
 # 停止后端进程
 stop_backend() {
+    if stop_pid_file "后端" "$BACKEND_PID_FILE"; then
+        return
+    fi
+
     echo -e "${BLUE}▶ 停止后端服务...${NC}"
-    # 查找后端进程
-    local backend_pids=$(pgrep -f "pnpm.*start:dev" || true)
+    local backend_pids=$(pgrep -f "$PROJECT_ROOT/backend" || true)
     if [ -n "$backend_pids" ]; then
+        echo "$backend_pids" | xargs kill 2>/dev/null || true
+        sleep 1
         echo "$backend_pids" | xargs kill -9 2>/dev/null || true
         echo -e "${GREEN}✅ 后端服务已停止${NC}"
     else
@@ -27,10 +70,15 @@ stop_backend() {
 
 # 停止前端进程
 stop_frontend() {
+    if stop_pid_file "前端" "$FRONTEND_PID_FILE"; then
+        return
+    fi
+
     echo -e "${BLUE}▶ 停止前端服务...${NC}"
-    # 查找前端进程
-    local frontend_pids=$(pgrep -f "pnpm.*dev" | grep -v "start:dev" || true)
+    local frontend_pids=$(pgrep -f "$PROJECT_ROOT/frontend" || true)
     if [ -n "$frontend_pids" ]; then
+        echo "$frontend_pids" | xargs kill 2>/dev/null || true
+        sleep 1
         echo "$frontend_pids" | xargs kill -9 2>/dev/null || true
         echo -e "${GREEN}✅ 前端服务已停止${NC}"
     else

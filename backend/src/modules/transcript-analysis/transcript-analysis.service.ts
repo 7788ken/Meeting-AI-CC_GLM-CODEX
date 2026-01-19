@@ -146,6 +146,7 @@ export class TranscriptAnalysisService {
       )
     )
     const summaryScheduleKey = this.buildSummaryScheduleKey(sessionId)
+    const summaryThinking = this.resolveSummaryThinking()
 
     const events = snapshot.events.filter(e => (e.content || '').trim())
     if (events.length === 0) {
@@ -176,6 +177,7 @@ export class TranscriptAnalysisService {
           eventsText: totalText,
         }),
         scheduleKey: summaryScheduleKey,
+        enableThinking: summaryThinking,
       })
       const dto: TranscriptSummaryDTO = {
         sessionId,
@@ -202,6 +204,7 @@ export class TranscriptAnalysisService {
           eventsText: chunkText,
         }),
         scheduleKey: summaryScheduleKey,
+        enableThinking: summaryThinking,
       })
       partials.push(markdown.trim())
     }
@@ -209,7 +212,8 @@ export class TranscriptAnalysisService {
     const reduced = await this.reduceBulletLists(
       partials,
       chunkSummarySystemPrompt,
-      summaryScheduleKey
+      summaryScheduleKey,
+      summaryThinking
     )
     const combinedPartials = reduced.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
 
@@ -217,6 +221,7 @@ export class TranscriptAnalysisService {
       system: summarySystemPrompt,
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
       scheduleKey: summaryScheduleKey,
+      enableThinking: summaryThinking,
     })
 
     const dto: TranscriptSummaryDTO = {
@@ -266,6 +271,7 @@ export class TranscriptAnalysisService {
       )
     )
     const summaryScheduleKey = this.buildSummaryScheduleKey(sessionId)
+    const summaryThinking = this.resolveSummaryThinking()
 
     const events = snapshot.events.filter(e => (e.content || '').trim())
     const model = this.glmClient.getModelName()
@@ -316,6 +322,7 @@ export class TranscriptAnalysisService {
           eventsText: totalText,
         }),
         scheduleKey: summaryScheduleKey,
+        enableThinking: summaryThinking,
       })) {
         if (chunk.type === 'delta') {
           markdownBuffer += chunk.text
@@ -349,6 +356,7 @@ export class TranscriptAnalysisService {
           eventsText: chunkText,
         }),
         scheduleKey: summaryScheduleKey,
+        enableThinking: summaryThinking,
       })
       partials.push(markdown.trim())
     }
@@ -357,7 +365,8 @@ export class TranscriptAnalysisService {
     const reduced = await this.reduceBulletLists(
       partials,
       chunkSummarySystemPrompt,
-      summaryScheduleKey
+      summaryScheduleKey,
+      summaryThinking
     )
     const combinedPartials = reduced.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
 
@@ -366,6 +375,7 @@ export class TranscriptAnalysisService {
       system: summarySystemPrompt,
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
       scheduleKey: summaryScheduleKey,
+      enableThinking: summaryThinking,
     })) {
       if (chunk.type === 'delta') {
         markdownBuffer += chunk.text
@@ -449,6 +459,7 @@ export class TranscriptAnalysisService {
 
     const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
     const promptName = this.resolveSegmentPromptName(analysisConfig.chunkSummaryPromptId)
+    const segmentThinking = this.resolveSegmentAnalysisThinking()
     const segmentSystemPrompt = this.buildAnalysisSystemPrompt(
       this.promptLibraryService.resolvePromptContent(
         analysisConfig.chunkSummaryPromptId,
@@ -468,6 +479,7 @@ export class TranscriptAnalysisService {
         sourceEndEventIndex: segment.sourceEndEventIndex,
       }),
       scheduleKey: this.buildSegmentScheduleKey(sessionId, segmentId),
+      enableThinking: segmentThinking,
     })
 
     const dto: TranscriptSegmentAnalysisDTO = {
@@ -520,6 +532,7 @@ export class TranscriptAnalysisService {
     const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
     const promptName = this.resolveSegmentPromptName(analysisConfig.chunkSummaryPromptId)
     const inFlightKey = `${sessionId}:${segmentId}`
+    const segmentThinking = this.resolveSegmentAnalysisThinking()
 
     if (!input.force) {
       const inFlight = this.segmentAnalysisInFlight.get(inFlightKey)
@@ -548,7 +561,9 @@ export class TranscriptAnalysisService {
       const cached = await this.segmentAnalysisModel
         .findOne({ sessionId, segmentId: objectId })
         .exec()
-      if (cached && cached.sourceRevision === segment.sourceRevision) {
+      const cachedMarkdown =
+        cached && typeof cached.markdown === 'string' ? cached.markdown.trim() : ''
+      if (cached && cached.sourceRevision === segment.sourceRevision && cachedMarkdown) {
         yield {
           type: 'meta',
           data: {
@@ -562,11 +577,14 @@ export class TranscriptAnalysisService {
             sourceEndEventIndex: segment.sourceEndEventIndex,
           },
         }
-        if (cached.markdown) {
-          yield { type: 'delta', data: cached.markdown }
-        }
+        yield { type: 'delta', data: cachedMarkdown }
         yield { type: 'done', data: { generatedAt: cached.generatedAt } }
         return
+      }
+      if (cached && cached.sourceRevision === segment.sourceRevision && !cachedMarkdown) {
+        this.logger.warn(
+          `Segment analysis cache empty, retrying stream, sessionId=${sessionId}, segmentId=${segmentId}`
+        )
       }
     }
 
@@ -607,23 +625,45 @@ export class TranscriptAnalysisService {
     }
 
     let markdownBuffer = ''
+    const segmentUserPrompt = buildTranscriptSegmentAnalysisUserPrompt({
+      sessionId,
+      revision: segment.sourceRevision,
+      segmentSequence: segment.sequence,
+      segmentContent: String(segment.content || '').trim(),
+      sourceStartEventIndex: segment.sourceStartEventIndex,
+      sourceEndEventIndex: segment.sourceEndEventIndex,
+    })
+    const scheduleKey = this.buildSegmentScheduleKey(sessionId, segmentId)
+
     try {
       for await (const chunk of this.glmClient.generateMarkdownStream({
         system: segmentSystemPrompt,
-        user: buildTranscriptSegmentAnalysisUserPrompt({
-          sessionId,
-          revision: segment.sourceRevision,
-          segmentSequence: segment.sequence,
-          segmentContent: String(segment.content || '').trim(),
-          sourceStartEventIndex: segment.sourceStartEventIndex,
-          sourceEndEventIndex: segment.sourceEndEventIndex,
-        }),
-        scheduleKey: this.buildSegmentScheduleKey(sessionId, segmentId),
+        user: segmentUserPrompt,
+        scheduleKey,
+        enableThinking: segmentThinking,
       })) {
         if (chunk.type === 'delta') {
           markdownBuffer += chunk.text
           yield { type: 'delta', data: chunk.text }
         }
+      }
+
+      if (!markdownBuffer.trim()) {
+        this.logger.warn(
+          `Segment analysis stream returned empty markdown, retrying once, sessionId=${sessionId}, segmentId=${segmentId}`
+        )
+        const fallback = await this.glmClient.generateMarkdown({
+          system: segmentSystemPrompt,
+          user: segmentUserPrompt,
+          scheduleKey,
+          enableThinking: segmentThinking,
+        })
+        const fallbackMarkdown = fallback?.markdown?.trim() ?? ''
+        if (!fallbackMarkdown) {
+          throw new Error('Segment analysis returned empty markdown')
+        }
+        markdownBuffer = fallbackMarkdown
+        yield { type: 'delta', data: fallbackMarkdown }
       }
 
       const generatedAt = new Date().toISOString()
@@ -680,6 +720,18 @@ export class TranscriptAnalysisService {
   private buildSegmentScheduleKey(sessionId: string, segmentId?: string): string {
     const base = `analysis:segment:${sessionId}`
     return segmentId ? `${base}:${segmentId}` : base
+  }
+
+  private resolveSummaryThinking(): boolean {
+    return this.appConfigService.getBoolean('GLM_TRANSCRIPT_SUMMARY_THINKING', true)
+  }
+
+  private resolveSegmentAnalysisThinking(): boolean {
+    const summaryThinking = this.resolveSummaryThinking()
+    return this.appConfigService.getBoolean(
+      'GLM_TRANSCRIPT_SEGMENT_ANALYSIS_THINKING',
+      summaryThinking
+    )
   }
 
   private getSummaryPromptName(id: string): string {
@@ -747,7 +799,8 @@ export class TranscriptAnalysisService {
   private async reduceBulletLists(
     partials: string[],
     chunkSummarySystemPrompt: string,
-    scheduleKey?: string
+    scheduleKey?: string,
+    enableThinking?: boolean
   ): Promise<string[]> {
     let materials = partials.filter(Boolean)
     if (materials.length <= this.reduceBatchSize) return materials
@@ -761,6 +814,7 @@ export class TranscriptAnalysisService {
           system: chunkSummarySystemPrompt,
           user: `请合并以下要点列表：去重、合并同类项，输出 Markdown 要点列表（不要标题）。\n\n${mergedInput}`,
           scheduleKey,
+          enableThinking,
         })
         next.push(markdown.trim())
       }
