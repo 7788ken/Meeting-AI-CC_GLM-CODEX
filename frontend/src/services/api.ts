@@ -255,7 +255,7 @@ export interface DebugError {
   createdAt: string
 }
 
-export type AppLogType = 'request_response' | 'error' | 'system'
+export type AppLogType = 'request_response' | 'error' | 'system' | 'llm'
 
 export interface AppLog {
   id: string

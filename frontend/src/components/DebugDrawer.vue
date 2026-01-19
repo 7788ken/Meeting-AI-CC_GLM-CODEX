@@ -326,29 +326,33 @@ const visibleProxy = computed({
 	const lastUpdated = ref('')
 
 	const logTabs = [
-	  { name: 'request_response', label: '请求/回复', type: 'request_response' as AppLogType },
+	  { name: 'request_response', label: '请求/回复', type: 'llm' as AppLogType },
 	  { name: 'error_logs', label: '错误日志', type: 'error' as AppLogType },
 	  { name: 'system_logs', label: '系统日志', type: 'system' as AppLogType },
 	]
 
 	const logsByType = reactive<Record<AppLogType, AppLog[]>>({
 	  request_response: [],
+	  llm: [],
 	  error: [],
 	  system: [],
 	})
 	const logsLoading = ref(false)
 	const logsUpdatedAt = reactive<Record<AppLogType, string>>({
 	  request_response: '',
+	  llm: '',
 	  error: '',
 	  system: '',
 	})
 	const selectedLogId = reactive<Record<AppLogType, string>>({
 	  request_response: '',
+	  llm: '',
 	  error: '',
 	  system: '',
 	})
 	const logFilters = reactive<Record<AppLogType, { selected: string[]; keyword: string }>>({
 	  request_response: { selected: [], keyword: '' },
+	  llm: { selected: [], keyword: '' },
 	  error: { selected: [], keyword: '' },
 	  system: { selected: [], keyword: '' },
 	})
@@ -364,7 +368,7 @@ function getActiveLog(type: AppLogType): AppLog | null {
   const filtered = getFilteredLogs(type)
   const selected = selectedLogId[type]
   if (selected) {
-    return filtered.find(item => item.id === selected) || null
+    return filtered.find(item => item.id === selected) || filtered[0] || null
   }
   return filtered[0] || null
 }
@@ -462,7 +466,7 @@ const promptSnippetText = computed(() => {
 })
 
 function resolveLogType(tabName: string): AppLogType | null {
-  if (tabName === 'request_response') return 'request_response'
+  if (tabName === 'request_response') return 'llm'
   if (tabName === 'error_logs') return 'error'
   if (tabName === 'system_logs') return 'system'
   return null
@@ -538,7 +542,8 @@ async function loadLogs(type: AppLogType) {
 
   try {
     logsLoading.value = true
-    const response = await appLogsApi.listBySession(props.sessionId, type)
+    const limit = type === 'llm' ? 100 : 200
+    const response = await appLogsApi.listBySession(props.sessionId, type, limit)
     logsByType[type] = response.data || []
     selectedLogId[type] = logsByType[type][0]?.id || ''
     logsUpdatedAt[type] = new Date().toISOString()
@@ -634,6 +639,7 @@ function selectLog(type: AppLogType, id: string) {
 function logTypeLabel(type: AppLogType): string {
   const map: Record<AppLogType, string> = {
     request_response: '请求/回复',
+    llm: 'LLM 请求/回复',
     error: '错误日志',
     system: '系统日志',
   }
@@ -672,6 +678,8 @@ function getLogFilterOptions(type: AppLogType): LogFilterGroup[] {
 
   const methods = new Set<string>()
   const statusGroups = new Set<string>()
+  const models = new Set<string>()
+  const labels = new Set<string>()
   for (const log of logsByType[type]) {
     const meta = getLogMeta(log)
     if (meta.method) methods.add(meta.method.toUpperCase())
@@ -679,6 +687,12 @@ function getLogFilterOptions(type: AppLogType): LogFilterGroup[] {
       const group = `${Math.floor(meta.statusCode / 100)}xx`
       statusGroups.add(group)
     }
+    const payload = log.payload as Record<string, unknown> | undefined
+    const params = payload?.params as Record<string, unknown> | undefined
+    const model = typeof params?.model === 'string' ? params.model.trim() : ''
+    if (model) models.add(model)
+    const label = typeof payload?.label === 'string' ? payload.label.trim() : ''
+    if (label) labels.add(label)
   }
 
   if (methods.size > 0) {
@@ -703,6 +717,30 @@ function getLogFilterOptions(type: AppLogType): LogFilterGroup[] {
     })
   }
 
+  if (models.size > 0) {
+    groups.push({
+      label: '模型',
+      options: Array.from(models)
+        .sort()
+        .map(model => ({
+          label: model,
+          value: `model:${model}`,
+        })),
+    })
+  }
+
+  if (labels.size > 0) {
+    groups.push({
+      label: '标签',
+      options: Array.from(labels)
+        .sort()
+        .map(label => ({
+          label,
+          value: `label:${label}`,
+        })),
+    })
+  }
+
   return groups
 }
 
@@ -720,15 +758,17 @@ function getFilteredLogs(type: AppLogType): AppLog[] {
   })
 }
 
-function groupFilters(selected: string[]): Record<'level' | 'method' | 'status', string[]> {
-  const grouped: Record<'level' | 'method' | 'status', string[]> = {
+function groupFilters(selected: string[]): Record<'level' | 'method' | 'status' | 'model' | 'label', string[]> {
+  const grouped: Record<'level' | 'method' | 'status' | 'model' | 'label', string[]> = {
     level: [],
     method: [],
     status: [],
+    model: [],
+    label: [],
   }
   for (const item of selected) {
     const [kind, value] = item.split(':')
-    if (kind === 'level' || kind === 'method' || kind === 'status') {
+    if (kind === 'level' || kind === 'method' || kind === 'status' || kind === 'model' || kind === 'label') {
       grouped[kind].push(value)
     }
   }
@@ -737,7 +777,7 @@ function groupFilters(selected: string[]): Record<'level' | 'method' | 'status',
 
 function matchesLogFilters(
   log: AppLog,
-  filters: Record<'level' | 'method' | 'status', string[]>
+  filters: Record<'level' | 'method' | 'status' | 'model' | 'label', string[]>
 ): boolean {
   const levelMatches = filters.level.length === 0 || filters.level.includes(log.level)
   const meta = getLogMeta(log)
@@ -748,16 +788,28 @@ function matchesLogFilters(
     ? `${Math.floor(meta.statusCode / 100)}xx`
     : ''
   const statusMatches = filters.status.length === 0 || (statusGroup ? filters.status.includes(statusGroup) : false)
-  return levelMatches && methodMatches && statusMatches
+  const payload = log.payload as Record<string, unknown> | undefined
+  const params = payload?.params as Record<string, unknown> | undefined
+  const model = typeof params?.model === 'string' ? params.model.trim() : ''
+  const modelMatches = filters.model.length === 0 || (model ? filters.model.includes(model) : false)
+  const label = typeof payload?.label === 'string' ? payload.label.trim() : ''
+  const labelMatches = filters.label.length === 0 || (label ? filters.label.includes(label) : false)
+  return levelMatches && methodMatches && statusMatches && modelMatches && labelMatches
 }
 
 function getLogSearchText(log: AppLog): string {
   const meta = getLogMeta(log)
+  const payload = log.payload as Record<string, unknown> | undefined
+  const params = payload?.params as Record<string, unknown> | undefined
+  const model = typeof params?.model === 'string' ? params.model : ''
+  const label = typeof payload?.label === 'string' ? payload.label : ''
   const segments = [
     log.message,
     meta.method,
     meta.path,
     typeof meta.statusCode === 'number' ? String(meta.statusCode) : '',
+    model,
+    label,
     safeStringify(log.payload),
   ]
   return segments.filter(Boolean).join(' ').toLowerCase()

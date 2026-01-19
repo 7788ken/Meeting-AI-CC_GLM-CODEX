@@ -12,6 +12,7 @@ describe('TranscriptEventSegmentationGlmClient', () => {
   let httpService: jest.Mocked<HttpService>
   let segmentationConfigService: { getConfig: jest.Mock }
   let glmRateLimiter: { schedule: jest.Mock; onRateLimit: jest.Mock; isInCooldown: jest.Mock }
+  let appLogService: { recordLlmRequestResponseLog: jest.Mock }
 
   const getRequestBody = (callIndex = 0) => (httpService.post.mock.calls[callIndex] as any)[1]
 
@@ -62,6 +63,10 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       onRateLimit: jest.fn(),
       isInCooldown: jest.fn(() => false),
     }
+
+    appLogService = {
+      recordLlmRequestResponseLog: jest.fn(),
+    }
   })
 
   afterEach(() => {
@@ -88,7 +93,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       appConfigService,
       httpService,
       segmentationConfigService as any,
-      glmRateLimiter as any
+      glmRateLimiter as any,
+      appLogService as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -121,7 +127,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       appConfigService,
       httpService,
       segmentationConfigService as any,
-      glmRateLimiter as any
+      glmRateLimiter as any,
+      appLogService as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -149,7 +156,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       appConfigService,
       httpService,
       segmentationConfigService as any,
-      glmRateLimiter as any
+      glmRateLimiter as any,
+      appLogService as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -177,7 +185,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       appConfigService,
       httpService,
       segmentationConfigService as any,
-      glmRateLimiter as any
+      glmRateLimiter as any,
+      appLogService as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -219,7 +228,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       appConfigService,
       httpService,
       segmentationConfigService as any,
-      glmRateLimiter as any
+      glmRateLimiter as any,
+      appLogService as any
     )
     await expect(client.generateStructuredJson({ system: 's', user: 'u' })).rejects.toThrow(
       'Invalid response format from GLM API'
@@ -274,7 +284,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       appConfigService,
       httpService,
       segmentationConfigService as any,
-      glmRateLimiter as any
+      glmRateLimiter as any,
+      appLogService as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -306,7 +317,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       appConfigService,
       httpService,
       segmentationConfigService as any,
-      glmRateLimiter as any
+      glmRateLimiter as any,
+      appLogService as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -348,7 +360,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       appConfigService,
       httpService,
       segmentationConfigService as any,
-      glmRateLimiter as any
+      glmRateLimiter as any,
+      appLogService as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 
@@ -391,7 +404,8 @@ describe('TranscriptEventSegmentationGlmClient', () => {
       appConfigService,
       httpService,
       segmentationConfigService as any,
-      glmRateLimiter as any
+      glmRateLimiter as any,
+      appLogService as any
     )
     const result = await client.generateStructuredJson({ system: 's', user: 'u' })
 

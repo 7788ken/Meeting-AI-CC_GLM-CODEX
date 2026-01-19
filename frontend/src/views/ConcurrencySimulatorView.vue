@@ -282,6 +282,7 @@ const systemSourceLabel = ref('系统配置未同步')
 const systemAuthHint = ref('')
 const settingsDrawerVisible = ref(false)
 const openingSettingsDrawer = ref(false)
+const authPrompted = ref(false)
 const eventLog = ref<Array<{ id: number; level: 'info' | 'warn'; message: string; at: number }>>([])
 const taskLog = ref<OpsTaskLogEntry[]>([])
 const eventListRef = ref<HTMLElement | null>(null)
@@ -659,6 +660,19 @@ const syncSystemSettings = async () => {
     if (status?.data?.enabled) {
       systemSourceLabel.value = '系统配置未授权'
       systemAuthHint.value = '请完成系统设置密码验证'
+      if (!authPrompted.value) {
+        authPrompted.value = true
+        try {
+          await ElMessageBox.confirm('系统配置需要授权后才能查看，是否现在验证？', '需要授权', {
+            confirmButtonText: '去验证',
+            cancelButtonText: '稍后',
+            type: 'warning',
+          })
+          await openSettingsDrawer()
+        } catch {
+          // 用户取消
+        }
+      }
       return
     }
   } catch {

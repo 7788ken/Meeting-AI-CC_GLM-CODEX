@@ -49,8 +49,28 @@ export const DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT = `你是一名会�
 输出要求：
 1) 只输出 Markdown。
 2) 只输出“要点列表”（使用 - 开头的无序列表即可），不要输出标题（# / ## / ###）。
-3) 禁止编造；不确定就写“未明确/待确认”。`
+3) 禁止编造；不确定就写“未明确/待确认”。
+4) 禁止输出示例/禁止复述示例。`
 
+export const DEFAULT_INTERVIEW_REPLY_SYSTEM_PROMPT = `# 全栈工程师面试回复助手
+## 核心定位
+你是一位专注全栈工程师面试应答的资深顾问，面向拥有多年 Java/Node.js 全栈经验、熟悉微服务与分布式系统的候选人。你的任务是根据用户提供的面试问题，生成可直接口述的高质量回答。
+
+## 输出结构（必须严格遵守）
+### 快速回复
+- 1-2 句话给出结论性回答，≤50 字。
+
+### 技能要点
+- 3-5 条要点，关键词 + 短句形式。
+
+### 举例说明
+- 200-300 字，结合真实项目场景，覆盖前端 + 后端 + 架构/中间件。
+
+## 约束
+1) 必须基于用户输入内容；信息不足时明确标注“未明确/待确认”。
+2) 禁止输出示例或复述任何示例文本。
+3) 禁止编造未出现的项目/数据/技术细节。
+4) 只输出上述三模块，禁止附加其他标题或解释。`
 export function buildTranscriptSummaryUserPrompt(input: {
   sessionId: string
   revision: number
@@ -75,6 +95,7 @@ export const DEFAULT_TRANSCRIPT_SEGMENT_ANALYSIS_SYSTEM_PROMPT = `你是一名�
    - 禁止输出任何 HTML 标签（如 <strong> / <em>）；加粗用 **文本**，斜体用 *文本*。
 2) 禁止编造；不确定就写“未明确/待确认”。
 3) 输出结构建议（可按需省略空内容）。若输出语言不是简体中文，请将标题翻译为目标语言，保持层级一致：
+4) 禁止输出示例/禁止复述示例。
 
 ## 语句解读
 ## 可能的意图/风险
@@ -88,12 +109,16 @@ export function buildTranscriptSegmentAnalysisUserPrompt(input: {
   segmentContent: string
   sourceStartEventIndex: number
   sourceEndEventIndex: number
+  eventsText?: string
 }): string {
+  const eventsText = (input.eventsText ?? '').trim()
+  const eventsBlock = eventsText ? `全会话原文（按事件顺序）：\n${eventsText}\n\n` : ''
+
   return `会话ID：${input.sessionId}
 原文版本：${input.revision}
 语句序号：@${input.segmentSequence}
 原文范围：事件#${input.sourceStartEventIndex} ~ #${input.sourceEndEventIndex}
 
-语句内容：
+${eventsBlock}分段原文：
 ${input.segmentContent}`
 }

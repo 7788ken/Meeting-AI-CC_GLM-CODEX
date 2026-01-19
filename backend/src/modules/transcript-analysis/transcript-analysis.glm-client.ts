@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs'
 import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/llm/glm'
 import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
 import { AppConfigService } from '../app-config/app-config.service'
+import { AppLogService } from '../app-log/app-log.service'
 
 export type TranscriptSummaryStreamChunk =
   | { type: 'delta'; text: string }
@@ -20,7 +21,8 @@ export class TranscriptAnalysisGlmClient {
   constructor(
     private readonly appConfigService: AppConfigService,
     private readonly httpService: HttpService,
-    private readonly glmRateLimiter: GlmRateLimiter
+    private readonly glmRateLimiter: GlmRateLimiter,
+    private readonly appLogService: AppLogService
   ) {}
 
   getModelName(): string {
@@ -59,6 +61,7 @@ export class TranscriptAnalysisGlmClient {
     user: string
     scheduleKey?: string
     enableThinking?: boolean
+    sessionId?: string
   }): Promise<{ markdown: string; model: string }> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
@@ -91,6 +94,7 @@ export class TranscriptAnalysisGlmClient {
 
     this.logger.debug(`Calling GLM for transcript summary, model=${model}`)
 
+    const startedAt = Date.now()
     const response = await this.postWithRetry({
       endpoint,
       headers,
@@ -102,6 +106,19 @@ export class TranscriptAnalysisGlmClient {
     if (!extracted.text) {
       throw this.buildInvalidResponseError(response, extracted.finishReason)
     }
+    void this.appLogService.recordLlmRequestResponseLog({
+      sessionId: params.sessionId,
+      label: 'transcript_summary',
+      endpoint,
+      requestBody,
+      response: {
+        status: typeof response.status === 'number' ? response.status : undefined,
+        data: response.data,
+      },
+      durationMs: Date.now() - startedAt,
+      scheduleKey: params.scheduleKey,
+      responseText: extracted.text,
+    })
 
     return { markdown: extracted.text, model }
   }
@@ -111,6 +128,7 @@ export class TranscriptAnalysisGlmClient {
     user: string
     scheduleKey?: string
     enableThinking?: boolean
+    sessionId?: string
   }): AsyncIterable<TranscriptSummaryStreamChunk> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
@@ -145,10 +163,23 @@ export class TranscriptAnalysisGlmClient {
 
     this.logger.debug(`Calling GLM for transcript summary stream, model=${model}`)
 
+    const startedAt = Date.now()
     const response = await this.postStreamWithRetry({
       endpoint,
       headers,
       requestBody,
+      scheduleKey: params.scheduleKey,
+    })
+    void this.appLogService.recordLlmRequestResponseLog({
+      sessionId: params.sessionId,
+      label: 'transcript_summary_stream',
+      endpoint,
+      requestBody,
+      response: {
+        status: typeof response.status === 'number' ? response.status : undefined,
+        data: undefined,
+      },
+      durationMs: Date.now() - startedAt,
       scheduleKey: params.scheduleKey,
     })
 

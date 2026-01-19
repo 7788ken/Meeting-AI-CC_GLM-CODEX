@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { AppConfigService } from '../app-config/app-config.service'
 import {
   DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT,
+  DEFAULT_INTERVIEW_REPLY_SYSTEM_PROMPT,
   DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT,
 } from '../transcript-analysis/transcript-analysis.prompt'
 import {
@@ -34,6 +35,22 @@ type PromptLibrarySnapshot = {
   version: number
   prompts: PromptTemplate[]
 }
+
+type BuiltInPromptDefinition = {
+  alias: string
+  name: string
+  type: PromptTemplateType
+  content: string
+}
+
+const BUILTIN_PROMPT_DEFINITIONS: BuiltInPromptDefinition[] = [
+  {
+    alias: 'builtin:interview-reply-assistant',
+    name: '面试回复助手（内置）',
+    type: 'chunk_summary',
+    content: DEFAULT_INTERVIEW_REPLY_SYSTEM_PROMPT,
+  },
+]
 
 @Injectable()
 export class PromptLibraryService implements OnModuleInit {
@@ -92,6 +109,10 @@ export class PromptLibraryService implements OnModuleInit {
       next = this.applyDefault(next.concat(chunkPrompt), 'chunk_summary', chunkPrompt.id)
       changed = true
     }
+
+    const builtInResult = this.ensureBuiltInPrompts(next)
+    next = builtInResult.list
+    changed = changed || builtInResult.changed
 
     if (changed) {
       await this.persistSnapshot(next)
@@ -274,17 +295,19 @@ export class PromptLibraryService implements OnModuleInit {
     if (this.initialized) return
     await this.appConfigService.refreshCache()
     const snapshot = this.loadSnapshot()
-    if (snapshot.prompts.length === 0) {
+    let next = snapshot.prompts
+    if (next.length === 0) {
       const defaults = [
         this.buildDefaultPrompt('summary'),
         this.buildDefaultPrompt('chunk_summary'),
       ]
       const seeded = this.applyDefault(defaults, 'summary', defaults[0].id)
-      const seededWithChunkDefault = this.applyDefault(seeded, 'chunk_summary', defaults[1].id)
-      await this.persistSnapshot(seededWithChunkDefault)
+      next = this.applyDefault(seeded, 'chunk_summary', defaults[1].id)
     } else {
-      await this.persistSnapshot(this.ensureDefaultsForSnapshot(snapshot.prompts))
+      next = this.ensureDefaultsForSnapshot(next)
     }
+    next = this.ensureBuiltInPrompts(next).list
+    await this.persistSnapshot(next)
     this.initialized = true
   }
 
@@ -367,6 +390,70 @@ export class PromptLibraryService implements OnModuleInit {
       }
     }
     return next
+  }
+
+  private ensureBuiltInPrompts(
+    list: PromptTemplate[]
+  ): { list: PromptTemplate[]; changed: boolean } {
+    if (BUILTIN_PROMPT_DEFINITIONS.length === 0) {
+      return { list, changed: false }
+    }
+
+    let next = [...list]
+    let changed = false
+    const now = new Date().toISOString()
+
+    for (const def of BUILTIN_PROMPT_DEFINITIONS) {
+      const normalizedContent = this.normalizeText(def.content) || def.content
+      const existingIndex = next.findIndex(
+        prompt =>
+          prompt.alias === def.alias || (prompt.name === def.name && prompt.type === def.type)
+      )
+
+      if (existingIndex < 0) {
+        next = next.concat({
+          id: randomUUID(),
+          name: def.name,
+          alias: def.alias,
+          type: def.type,
+          content: normalizedContent,
+          isDefault: false,
+          createdAt: now,
+          updatedAt: now,
+        })
+        changed = true
+        continue
+      }
+
+      const current = next[existingIndex]
+      let updated = { ...current }
+      let updatedFlag = false
+
+      if (current.name !== def.name) {
+        updated.name = def.name
+        updatedFlag = true
+      }
+      if (current.alias !== def.alias) {
+        updated.alias = def.alias
+        updatedFlag = true
+      }
+      if (current.type !== def.type) {
+        updated.type = def.type
+        updatedFlag = true
+      }
+      if (this.normalizeText(current.content) !== this.normalizeText(normalizedContent)) {
+        updated.content = normalizedContent
+        updatedFlag = true
+      }
+
+      if (updatedFlag) {
+        updated.updatedAt = now
+        next[existingIndex] = updated
+        changed = true
+      }
+    }
+
+    return { list: next, changed }
   }
 
   private ensureDefaultForType(list: PromptTemplate[], type: PromptTemplateType): PromptTemplate[] {

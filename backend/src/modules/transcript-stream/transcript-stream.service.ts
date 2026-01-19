@@ -126,6 +126,14 @@ export class TranscriptStreamService {
     }
   }
 
+  async getAllEvents(input: { sessionId: string }): Promise<TranscriptEventDTO[]> {
+    const docs = await this.eventModel
+      .find({ sessionId: input.sessionId })
+      .sort({ eventIndex: 1 })
+      .exec()
+    return docs.map(d => this.toEventDTO(d))
+  }
+
   async getState(input: { sessionId: string }): Promise<TranscriptStreamStateDTO> {
     const state = await this.stateModel.findOne({ sessionId: input.sessionId }).exec()
 

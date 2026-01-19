@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose'
 import {
   TranscriptStreamService,
   type TranscriptEventDTO,
+  type TranscriptStreamSnapshotDTO,
 } from '../transcript-stream/transcript-stream.service'
 import { TranscriptAnalysisGlmClient } from './transcript-analysis.glm-client'
 import {
@@ -74,7 +75,6 @@ export type TranscriptSummaryStreamEvent =
 @Injectable()
 export class TranscriptAnalysisService {
   private readonly logger = new Logger(TranscriptAnalysisService.name)
-  private readonly maxEvents = 5000
   private readonly maxChunkChars = 28000
   private readonly reduceBatchSize = 8
   private readonly segmentAnalysisInFlight = new Map<
@@ -124,10 +124,7 @@ export class TranscriptAnalysisService {
       throw new Error('sessionId is required')
     }
 
-    const snapshot = await this.transcriptStreamService.getSnapshot({
-      sessionId,
-      limit: this.maxEvents,
-    })
+    const snapshot = await this.loadFullSnapshot(sessionId)
 
     const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
     const promptName = this.resolveSummaryPromptName(analysisConfig.summaryPromptId)
@@ -178,6 +175,7 @@ export class TranscriptAnalysisService {
         }),
         scheduleKey: summaryScheduleKey,
         enableThinking: summaryThinking,
+        sessionId,
       })
       const dto: TranscriptSummaryDTO = {
         sessionId,
@@ -205,6 +203,7 @@ export class TranscriptAnalysisService {
         }),
         scheduleKey: summaryScheduleKey,
         enableThinking: summaryThinking,
+        sessionId,
       })
       partials.push(markdown.trim())
     }
@@ -213,7 +212,8 @@ export class TranscriptAnalysisService {
       partials,
       chunkSummarySystemPrompt,
       summaryScheduleKey,
-      summaryThinking
+      summaryThinking,
+      sessionId
     )
     const combinedPartials = reduced.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
 
@@ -222,6 +222,7 @@ export class TranscriptAnalysisService {
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
       scheduleKey: summaryScheduleKey,
       enableThinking: summaryThinking,
+      sessionId,
     })
 
     const dto: TranscriptSummaryDTO = {
@@ -249,10 +250,7 @@ export class TranscriptAnalysisService {
 
     yield { type: 'progress', data: '正在读取原文…' }
 
-    const snapshot = await this.transcriptStreamService.getSnapshot({
-      sessionId,
-      limit: this.maxEvents,
-    })
+    const snapshot = await this.loadFullSnapshot(sessionId)
 
     const analysisConfig = this.transcriptAnalysisConfigService.getConfig()
     const promptName = this.resolveSummaryPromptName(analysisConfig.summaryPromptId)
@@ -323,6 +321,7 @@ export class TranscriptAnalysisService {
         }),
         scheduleKey: summaryScheduleKey,
         enableThinking: summaryThinking,
+        sessionId,
       })) {
         if (chunk.type === 'delta') {
           markdownBuffer += chunk.text
@@ -357,6 +356,7 @@ export class TranscriptAnalysisService {
         }),
         scheduleKey: summaryScheduleKey,
         enableThinking: summaryThinking,
+        sessionId,
       })
       partials.push(markdown.trim())
     }
@@ -366,7 +366,8 @@ export class TranscriptAnalysisService {
       partials,
       chunkSummarySystemPrompt,
       summaryScheduleKey,
-      summaryThinking
+      summaryThinking,
+      sessionId
     )
     const combinedPartials = reduced.map((md, idx) => `材料${idx + 1}：\n${md}`).join('\n\n')
 
@@ -376,6 +377,7 @@ export class TranscriptAnalysisService {
       user: `请基于以下“分片要点”，输出整场会议的最终结构化总结（严格遵循既定标题结构）。\n\n${combinedPartials}`,
       scheduleKey: summaryScheduleKey,
       enableThinking: summaryThinking,
+      sessionId,
     })) {
       if (chunk.type === 'delta') {
         markdownBuffer += chunk.text
@@ -467,6 +469,8 @@ export class TranscriptAnalysisService {
         DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT
       )
     )
+    const sessionEvents = await this.transcriptStreamService.getAllEvents({ sessionId })
+    const sessionEventsText = sessionEvents.length ? this.buildEventsText(sessionEvents) : ''
 
     const { markdown, model } = await this.glmClient.generateMarkdown({
       system: segmentSystemPrompt,
@@ -475,11 +479,13 @@ export class TranscriptAnalysisService {
         revision: segment.sourceRevision,
         segmentSequence: segment.sequence,
         segmentContent: String(segment.content || '').trim(),
+        eventsText: sessionEventsText,
         sourceStartEventIndex: segment.sourceStartEventIndex,
         sourceEndEventIndex: segment.sourceEndEventIndex,
       }),
       scheduleKey: this.buildSegmentScheduleKey(sessionId, segmentId),
       enableThinking: segmentThinking,
+      sessionId,
     })
 
     const dto: TranscriptSegmentAnalysisDTO = {
@@ -609,6 +615,8 @@ export class TranscriptAnalysisService {
     const sourceRevision = segment.sourceRevision
     const sourceStartEventIndex = segment.sourceStartEventIndex
     const sourceEndEventIndex = segment.sourceEndEventIndex
+    const sessionEvents = await this.transcriptStreamService.getAllEvents({ sessionId })
+    const sessionEventsText = sessionEvents.length ? this.buildEventsText(sessionEvents) : ''
 
     yield {
       type: 'meta',
@@ -630,6 +638,7 @@ export class TranscriptAnalysisService {
       revision: segment.sourceRevision,
       segmentSequence: segment.sequence,
       segmentContent: String(segment.content || '').trim(),
+      eventsText: sessionEventsText,
       sourceStartEventIndex: segment.sourceStartEventIndex,
       sourceEndEventIndex: segment.sourceEndEventIndex,
     })
@@ -641,6 +650,7 @@ export class TranscriptAnalysisService {
         user: segmentUserPrompt,
         scheduleKey,
         enableThinking: segmentThinking,
+        sessionId,
       })) {
         if (chunk.type === 'delta') {
           markdownBuffer += chunk.text
@@ -657,6 +667,7 @@ export class TranscriptAnalysisService {
           user: segmentUserPrompt,
           scheduleKey,
           enableThinking: segmentThinking,
+          sessionId,
         })
         const fallbackMarkdown = fallback?.markdown?.trim() ?? ''
         if (!fallbackMarkdown) {
@@ -715,6 +726,19 @@ export class TranscriptAnalysisService {
 
   private buildSummaryScheduleKey(sessionId: string): string {
     return `analysis:summary:${sessionId}`
+  }
+
+  private async loadFullSnapshot(sessionId: string): Promise<TranscriptStreamSnapshotDTO> {
+    const [state, events] = await Promise.all([
+      this.transcriptStreamService.getState({ sessionId }),
+      this.transcriptStreamService.getAllEvents({ sessionId }),
+    ])
+    return {
+      sessionId,
+      revision: state.revision,
+      nextEventIndex: state.nextEventIndex,
+      events,
+    }
   }
 
   private buildSegmentScheduleKey(sessionId: string, segmentId?: string): string {
@@ -800,7 +824,8 @@ export class TranscriptAnalysisService {
     partials: string[],
     chunkSummarySystemPrompt: string,
     scheduleKey?: string,
-    enableThinking?: boolean
+    enableThinking?: boolean,
+    sessionId?: string
   ): Promise<string[]> {
     let materials = partials.filter(Boolean)
     if (materials.length <= this.reduceBatchSize) return materials
@@ -815,6 +840,7 @@ export class TranscriptAnalysisService {
           user: `请合并以下要点列表：去重、合并同类项，输出 Markdown 要点列表（不要标题）。\n\n${mergedInput}`,
           scheduleKey,
           enableThinking,
+          sessionId,
         })
         next.push(markdown.trim())
       }

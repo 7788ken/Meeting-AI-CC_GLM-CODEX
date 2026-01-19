@@ -326,6 +326,11 @@
 	          </div>
 	          <p class="empty-text">等待分析</p>
 	          <p class="empty-hint">点击语句卡片上的"针对性分析"按钮生成分析</p>
+	          <div class="empty-actions">
+	            <el-button size="small" type="primary" plain @click="startTargetAnalysis({ force: true })">
+	              重试
+	            </el-button>
+	          </div>
 	        </div>
 
 	        <!-- 加载状态 -->
@@ -2507,6 +2512,10 @@ function clearTargetAnalysis(): void {
   color: var(--ink-400);
   margin: 0;
   max-width: 280px;
+}
+
+.empty-actions {
+  margin-top: 12px;
 }
 
 /* 加载状态 */

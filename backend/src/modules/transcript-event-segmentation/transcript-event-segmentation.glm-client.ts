@@ -5,6 +5,7 @@ import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/ll
 import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
 import { TranscriptEventSegmentationConfigService } from './transcript-event-segmentation-config.service'
 import { AppConfigService } from '../app-config/app-config.service'
+import { AppLogService } from '../app-log/app-log.service'
 
 @Injectable()
 export class TranscriptEventSegmentationGlmClient {
@@ -19,10 +20,15 @@ export class TranscriptEventSegmentationGlmClient {
     private readonly appConfigService: AppConfigService,
     private readonly httpService: HttpService,
     private readonly segmentationConfigService: TranscriptEventSegmentationConfigService,
-    private readonly glmRateLimiter: GlmRateLimiter
+    private readonly glmRateLimiter: GlmRateLimiter,
+    private readonly appLogService: AppLogService
   ) {}
 
-  async generateStructuredJson(params: { system: string; user: string }): Promise<string> {
+  async generateStructuredJson(params: {
+    system: string
+    user: string
+    sessionId?: string
+  }): Promise<string> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
       throw new Error('GLM_API_KEY not configured')
@@ -58,6 +64,7 @@ export class TranscriptEventSegmentationGlmClient {
         endpoint,
         headers,
         requestBody: body,
+        sessionId: params.sessionId,
       })
 
     if (!useJsonMode) {
@@ -145,11 +152,25 @@ export class TranscriptEventSegmentationGlmClient {
     endpoint: string
     headers: Record<string, string>
     requestBody: Record<string, unknown>
+    sessionId?: string
   }): Promise<string> {
+    const startedAt = Date.now()
     const response = await this.postWithRetry(input)
 
     const extracted = this.extractStructuredTextFromGlmResponse(response.data)
     const isJsonMode = this.isJsonModeRequest(input.requestBody)
+    void this.appLogService.recordLlmRequestResponseLog({
+      sessionId: input.sessionId,
+      label: 'transcript_event_segmentation',
+      endpoint: input.endpoint,
+      requestBody: input.requestBody,
+      response: {
+        status: typeof response.status === 'number' ? response.status : undefined,
+        data: response.data,
+      },
+      durationMs: Date.now() - startedAt,
+      responseText: extracted.text,
+    })
 
     if (extracted.text) {
       const normalizedJson = this.extractJsonObjectIfValid(extracted.text)

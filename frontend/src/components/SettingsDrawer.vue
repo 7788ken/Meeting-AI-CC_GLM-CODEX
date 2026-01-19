@@ -1590,7 +1590,7 @@ const promptTypeLabels: Record<PromptTemplateType, string> = {
   summary: '会议总结',
   chunk_summary: '针对分析',
 }
-const systemDefaultPromptNames = new Set(['会议总结（默认）', '分片总结（默认）'])
+const systemDefaultPromptNames = new Set(['会议总结（默认）', '分片总结（默认）', '面试回复助手（内置）'])
 const promptForm = reactive({
   id: '',
   type: 'summary' as PromptTemplateType,

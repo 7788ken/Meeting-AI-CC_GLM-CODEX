@@ -4,7 +4,7 @@ import { PrismaService } from '../../database/prisma.service'
 import { AppConfigService } from '../app-config/app-config.service'
 import { AppLogDto } from './dto/app-log.dto'
 
-export type AppLogType = 'request_response' | 'error' | 'system'
+export type AppLogType = 'request_response' | 'error' | 'system' | 'llm'
 export type AppLogLevel = 'info' | 'warn' | 'error'
 
 type RequestResponseLogInput = {
@@ -34,6 +34,17 @@ type SystemLogInput = {
   message: string
   level?: AppLogLevel
   payload?: Record<string, unknown>
+}
+
+type LlmLogInput = {
+  sessionId?: string
+  label: string
+  endpoint: string
+  requestBody: Record<string, unknown>
+  response?: { status?: number; data?: unknown }
+  durationMs?: number
+  scheduleKey?: string
+  responseText?: string
 }
 
 @Injectable()
@@ -110,6 +121,44 @@ export class AppLogService {
       level: input.level ?? 'info',
       message: input.message,
       payload: this.sanitizePayload(input.payload),
+    })
+  }
+
+  async recordLlmRequestResponseLog(input: LlmLogInput): Promise<void> {
+    if (!this.isRequestResponseEnabled()) return
+
+    const prompt = this.extractPrompt(input.requestBody)
+    const params = this.extractRequestParams(input.requestBody)
+    const payload = {
+      scope: 'llm',
+      label: input.label,
+      endpoint: input.endpoint,
+      method: 'POST',
+      path: input.endpoint,
+      statusCode: input.response?.status,
+      durationMs: input.durationMs,
+      scheduleKey: input.scheduleKey,
+      prompt,
+      params,
+      request: {
+        body: input.requestBody,
+      },
+      response: input.response
+        ? {
+            status: input.response.status,
+            data: input.response.data,
+          }
+        : undefined,
+      responseText: input.responseText,
+    }
+
+    const statusCode = input.response?.status
+    await this.createLog({
+      sessionId: input.sessionId,
+      type: 'llm',
+      level: typeof statusCode === 'number' && statusCode >= 400 ? 'error' : 'info',
+      message: `LLM ${input.label}`,
+      payload: this.sanitizePayload(payload),
     })
   }
 
@@ -243,5 +292,56 @@ export class AppLogService {
     if (!normalized) return ''
     if (normalized.length <= this.maxTextLength) return normalized
     return `${normalized.slice(0, this.maxTextLength)}…(truncated)`
+  }
+
+  private extractPrompt(requestBody: Record<string, unknown>): {
+    system?: string
+    user?: string
+  } {
+    const messages = Array.isArray(requestBody.messages)
+      ? (requestBody.messages as Array<Record<string, unknown>>)
+      : []
+    let system: string | undefined
+    let user: string | undefined
+    for (const message of messages) {
+      const role = typeof message.role === 'string' ? message.role : ''
+      const text = this.extractMessageContent(message.content)
+      if (!text) continue
+      if (role === 'system' && !system) system = text
+      if (role === 'user' && !user) user = text
+    }
+    return { system, user }
+  }
+
+  private extractMessageContent(content: unknown): string | undefined {
+    if (typeof content === 'string') return content.trim()
+    if (content && typeof content === 'object' && !Array.isArray(content)) {
+      const text = (content as { text?: unknown }).text
+      return typeof text === 'string' ? text.trim() : undefined
+    }
+    if (!Array.isArray(content)) return undefined
+    const parts: string[] = []
+    for (const entry of content) {
+      if (typeof entry === 'string') {
+        if (entry.trim()) parts.push(entry.trim())
+        continue
+      }
+      if (entry && typeof entry === 'object') {
+        const text = (entry as { text?: unknown }).text
+        if (typeof text === 'string' && text.trim()) parts.push(text.trim())
+      }
+    }
+    const joined = parts.join('\n').trim()
+    return joined ? joined : undefined
+  }
+
+  private extractRequestParams(requestBody: Record<string, unknown>): Record<string, unknown> {
+    const pick = (key: string) => (key in requestBody ? requestBody[key] : undefined)
+    const params: Record<string, unknown> = {}
+    for (const key of ['model', 'temperature', 'max_tokens', 'thinking', 'response_format', 'stream']) {
+      const value = pick(key)
+      if (value != null) params[key] = value
+    }
+    return params
   }
 }

@@ -41,7 +41,8 @@ export class AppLogController {
     if (
       normalized === 'request_response' ||
       normalized === 'error' ||
-      normalized === 'system'
+      normalized === 'system' ||
+      normalized === 'llm'
     ) {
       return normalized as AppLogType
     }

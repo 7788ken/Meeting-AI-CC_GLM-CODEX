@@ -5,6 +5,7 @@ import { extractGlmTextContent, getGlmAuthorizationToken } from '../../common/ll
 import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
 import { AppConfigService } from '../app-config/app-config.service'
 import { buildTranscriptEventSegmentTranslationPrompt } from './transcript-event-segment-translation.prompt'
+import { AppLogService } from '../app-log/app-log.service'
 
 @Injectable()
 export class TranscriptEventSegmentTranslationGlmClient {
@@ -14,7 +15,8 @@ export class TranscriptEventSegmentTranslationGlmClient {
   constructor(
     private readonly appConfigService: AppConfigService,
     private readonly httpService: HttpService,
-    private readonly glmRateLimiter: GlmRateLimiter
+    private readonly glmRateLimiter: GlmRateLimiter,
+    private readonly appLogService: AppLogService
   ) {}
 
   getModelName(): string {
@@ -31,7 +33,7 @@ export class TranscriptEventSegmentTranslationGlmClient {
   async translate(
     text: string,
     targetLanguage: string,
-    options?: { scheduleKey?: string }
+    options?: { scheduleKey?: string; sessionId?: string }
   ): Promise<{ translatedText: string; model: string }> {
     const apiKey = this.appConfigService.getString('GLM_API_KEY', '').trim()
     if (!apiKey) {
@@ -70,6 +72,7 @@ export class TranscriptEventSegmentTranslationGlmClient {
 
     this.logger.debug(`Calling GLM for segment translation, model=${model}`)
 
+    const startedAt = Date.now()
     const response = await this.postWithRetry({
       endpoint,
       headers,
@@ -80,6 +83,19 @@ export class TranscriptEventSegmentTranslationGlmClient {
     if (!extracted) {
       throw this.buildInvalidResponseError(response)
     }
+    void this.appLogService.recordLlmRequestResponseLog({
+      sessionId: options?.sessionId,
+      label: 'transcript_event_translation',
+      endpoint,
+      requestBody,
+      response: {
+        status: typeof response.status === 'number' ? response.status : undefined,
+        data: response.data,
+      },
+      durationMs: Date.now() - startedAt,
+      scheduleKey: options?.scheduleKey,
+      responseText: extracted,
+    })
 
     return { translatedText: extracted, model }
   }

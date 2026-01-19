@@ -250,4 +250,6 @@ export const StorageKeys = {
   LANGUAGE: 'language',
   /** 最近访问的会话列表 */
   RECENT_SESSIONS: 'recent-sessions',
+  /** 系统设置授权密码（本地缓存） */
+  SETTINGS_PASSWORD: 'settings-password',
 } as const

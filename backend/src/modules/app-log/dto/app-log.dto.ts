@@ -7,7 +7,7 @@ export class AppLogDto {
   @ApiPropertyOptional({ description: '会话 ID' })
   sessionId?: string
 
-  @ApiProperty({ description: '日志类型（request_response/error/system）' })
+  @ApiProperty({ description: '日志类型（request_response/error/system/llm）' })
   type: string
 
   @ApiProperty({ description: '日志级别（info/warn/error）' })

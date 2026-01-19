@@ -415,7 +415,10 @@ export class TranscriptEventSegmentationService {
     const promptUserForLog = truncateForLog(prompt.user)
 
     try {
-      const raw = await this.glmClient.generateStructuredJson(prompt)
+      const raw = await this.glmClient.generateStructuredJson({
+        ...prompt,
+        sessionId: input.sessionId,
+      })
       llmRaw = raw
       emitProgress('parsing')
       const parsed = parseTranscriptEventSegmentJson(raw)
@@ -443,7 +446,10 @@ export class TranscriptEventSegmentationService {
           systemPrompt: this.configService.getConfig().systemPrompt,
           strictSystemPrompt: this.configService.getConfig().strictSystemPrompt,
         })
-        const retryRaw = await this.glmClient.generateStructuredJson(retryPrompt)
+        const retryRaw = await this.glmClient.generateStructuredJson({
+          ...retryPrompt,
+          sessionId: input.sessionId,
+        })
         llmRetryRaw = retryRaw
         const retryParsed = parseTranscriptEventSegmentJson(retryRaw)
         const retryCandidate =
