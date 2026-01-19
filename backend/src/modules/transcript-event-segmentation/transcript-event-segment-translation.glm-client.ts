@@ -20,10 +20,13 @@ export class TranscriptEventSegmentTranslationGlmClient {
   ) {}
 
   getModelName(): string {
-    const configured =
-      this.appConfigService.getString('GLM_TRANSCRIPT_SEGMENT_TRANSLATION_MODEL', '').trim()
+    const configured = this.appConfigService
+      .getString('GLM_TRANSCRIPT_SEGMENT_TRANSLATION_MODEL', '')
+      .trim()
     if (configured) return configured
-    const fallback = this.appConfigService.getString('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL', '').trim()
+    const fallback = this.appConfigService
+      .getString('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL', '')
+      .trim()
     if (!fallback) {
       throw new Error('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL not configured')
     }
@@ -126,7 +129,9 @@ export class TranscriptEventSegmentTranslationGlmClient {
           throw error
         }
         const delayMs = delays[attempt]!
-        this.logger.warn(`GLM rate limited (429), retrying in ${delayMs}ms (attempt ${attempt + 1}/${delays.length})`)
+        this.logger.warn(
+          `GLM rate limited (429), retrying in ${delayMs}ms (attempt ${attempt + 1}/${delays.length})`
+        )
         this.glmRateLimiter.onRateLimit(delayMs, 'translation')
       }
     }
@@ -156,5 +161,4 @@ export class TranscriptEventSegmentTranslationGlmClient {
     ;(error as any).glmResponse = response.data
     return error
   }
-
 }

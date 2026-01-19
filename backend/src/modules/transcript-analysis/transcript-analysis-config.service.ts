@@ -154,11 +154,7 @@ export class TranscriptAnalysisConfigService implements OnModuleInit {
     }
   }
 
-  private normalizePromptId(
-    value: unknown,
-    type: PromptTemplateType,
-    fallbackId: string
-  ): string {
+  private normalizePromptId(value: unknown, type: PromptTemplateType, fallbackId: string): string {
     const normalized = typeof value === 'string' ? value.trim() : ''
     if (normalized && this.promptLibraryService.isPromptIdForType(normalized, type)) {
       return normalized

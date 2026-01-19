@@ -1,15 +1,14 @@
 <template>
   <div class="header-left">
-    <el-button
-      v-if="showBackButton"
-      size="small"
-      class="back-button"
-      @click="emit('back')"
-    >
+    <el-button v-if="showBackButton" size="small" class="back-button" @click="emit('back')">
       ← 返回
     </el-button>
     <h1 class="app-title">{{ title }}</h1>
-    <el-tag :type="statusTagType" size="small" :class="['status-pill', status === 'active' ? 'is-active' : 'is-ended']">
+    <el-tag
+      :type="statusTagType"
+      size="small"
+      :class="['status-pill', status === 'active' ? 'is-active' : 'is-ended']"
+    >
       <span class="status-dot" />
       {{ statusText }}
     </el-tag>
@@ -30,7 +29,7 @@ const props = withDefaults(
   {
     showBackButton: true,
     status: 'ended',
-  },
+  }
 )
 
 const emit = defineEmits<{
@@ -70,7 +69,7 @@ const statusText = computed(() => (props.status === 'active' ? '会话进行中'
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-color: rgba(15, 23, 42, 0.10);
+  border-color: rgba(15, 23, 42, 0.1);
   background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(10px);
 }
@@ -91,5 +90,27 @@ const statusText = computed(() => (props.status === 'active' ? '会话进行中'
 
 .status-pill.is-ended .status-dot {
   background: rgba(15, 23, 42, 0.24);
+}
+
+@media (max-width: 768px) {
+  .header-left {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .back-button {
+    justify-self: start;
+  }
+
+  .app-title {
+    justify-self: center;
+    text-align: center;
+  }
+
+  .status-pill {
+    justify-self: end;
+  }
 }
 </style>

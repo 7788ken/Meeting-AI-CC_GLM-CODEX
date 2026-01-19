@@ -3,8 +3,18 @@
  * 整合音频捕获和 WebSocket，处理实时转写
  */
 
-import { AudioCaptureService, audioCapture, type AudioConfig, type AudioDataCallback } from './audioCapture'
-import { websocket, type ConnectionStatus, type LegacyTranscriptData, type TranscriptMessage } from './websocket'
+import {
+  AudioCaptureService,
+  audioCapture,
+  type AudioConfig,
+  type AudioDataCallback,
+} from './audioCapture'
+import {
+  websocket,
+  type ConnectionStatus,
+  type LegacyTranscriptData,
+  type TranscriptMessage,
+} from './websocket'
 import type { Speech } from './api'
 import type { AsrConfig } from '../types'
 
@@ -101,7 +111,9 @@ export class TranscriptionService {
 
   private onTranscriptCallback?: (transcript: Speech) => void
   private onErrorCallback?: (error: Error) => void
-  private onStatusChangeCallback?: (status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error') => void
+  private onStatusChangeCallback?: (
+    status: 'idle' | 'connecting' | 'recording' | 'paused' | 'error'
+  ) => void
   private onConnectionStatusChangeCallback?: (status: ConnectionStatus) => void
   private onStatusMessageCallback?: (data: { status?: string; sessionId?: string }) => void
 
@@ -231,7 +243,7 @@ export class TranscriptionService {
       let state: VADState = 'idle'
       let silentMs = 0
 
-      const onAudioData: AudioDataCallback = (audioData) => {
+      const onAudioData: AudioDataCallback = audioData => {
         const sampleRate = Number(audioData.sampleRate) || 16000
         const frameMs = Math.max(0, Math.floor((audioData.data.length / sampleRate) * 1000))
         const energy = AudioCaptureService.getAudioEnergy(audioData.data)
@@ -287,11 +299,10 @@ export class TranscriptionService {
           websocket.sendAudioData(pcm16)
           return
         }
-
       }
 
       audioCapture
-        .startCapture(onAudioData, (error) => this.handleError(error), this.audioConfig)
+        .startCapture(onAudioData, error => this.handleError(error), this.audioConfig)
         .then(resolve)
         .catch(reject)
     })
@@ -314,7 +325,7 @@ export class TranscriptionService {
       }
     })
 
-    websocket.onConnectionStatus((status) => {
+    websocket.onConnectionStatus(status => {
       this.onConnectionStatusChangeCallback?.(status)
       if (!this.isRecording) return
 
@@ -340,7 +351,7 @@ export class TranscriptionService {
       this.handleError(new Error('WebSocket 连接已断开'))
     })
 
-    websocket.onError((error) => {
+    websocket.onError(error => {
       this.handleError(new Error('WebSocket 连接错误'))
     })
   }

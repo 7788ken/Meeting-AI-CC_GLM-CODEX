@@ -107,26 +107,19 @@ export class AnalysisService {
 }
 ```
 
-### 3. WebSocket 网关
+### 3. 原生 WebSocket
 
-实时通信使用 WebSocket Gateway：
+实时通信使用原生 WebSocket，统一入口为 `/transcript`：
 
 ```typescript
-@WebSocketGateway({
-  cors: { origin: '*' },
-  path: '/ws/transcript',
-})
-export class TranscriptGateway {
-  @SubscribeMessage('audio:start')
-  handleAudioStart(client: Socket, payload: StartPayload) {
-    // 开始处理音频流
-  }
+// ws://{host}/transcript
+// 控制消息（JSON）
+{ "type": "set_session", "sessionId": "..." }
+{ "type": "start_transcribe", "asrConfig": { "language": "zh-CN" } }
+{ "type": "stop_transcribe" }
 
-  @SubscribeMessage('audio:data')
-  handleAudioData(client: Socket, payload: ArrayBuffer) {
-    // 处理音频数据
-  }
-}
+// 音频数据（二进制 PCM 16-bit）
+// 服务端返回：{ type: "transcript", data: {...} } 等消息
 ```
 
 ## 数据存储

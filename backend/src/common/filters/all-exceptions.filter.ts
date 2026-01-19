@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common'
 import { Request, Response } from 'express'
 import { AppLogService } from '../../modules/app-log/app-log.service'
+import { SessionActivityService } from '../../modules/ops/session-activity.service'
 
 /**
  * 全局异常过滤器
@@ -19,7 +20,10 @@ import { AppLogService } from '../../modules/app-log/app-log.service'
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name)
 
-  constructor(private readonly appLogService: AppLogService) {}
+  constructor(
+    private readonly appLogService: AppLogService,
+    private readonly sessionActivityService: SessionActivityService
+  ) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp()
@@ -56,8 +60,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       `${request.method} ${request.url}`,
       exception instanceof Error ? exception.stack : JSON.stringify(exception)
     )
+    const sessionId = extractSessionId(request)
+    if (sessionId) {
+      this.sessionActivityService.recordActivity(sessionId)
+    }
     void this.appLogService.recordErrorLog({
-      sessionId: extractSessionId(request),
+      sessionId,
       message,
       statusCode: status,
       method: request.method,

@@ -264,10 +264,5 @@ describe('API E2E Tests', () => {
       const { TranscriptService } = require('../src/modules/transcript/transcript.service')
       expect(TranscriptService).toBeDefined()
     })
-
-    it('should load TranscriptGateway', () => {
-      const { TranscriptGateway } = require('../src/modules/transcript/transcript.gateway')
-      expect(TranscriptGateway).toBeDefined()
-    })
   })
 })

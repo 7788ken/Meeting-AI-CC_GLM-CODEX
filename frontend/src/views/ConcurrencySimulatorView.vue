@@ -28,7 +28,9 @@
         <div class="metric-card" :class="`metric-${queueHealth.level}`">
           <div class="metric-header">
             <span class="metric-label">总排队</span>
-            <span v-if="queueHealth.label" class="metric-badge" :class="queueHealth.level">{{ queueHealth.label }}</span>
+            <span v-if="queueHealth.label" class="metric-badge" :class="queueHealth.level">{{
+              queueHealth.label
+            }}</span>
           </div>
           <span class="metric-value">{{ totalPending }}</span>
         </div>
@@ -37,7 +39,9 @@
           <div class="metric-header">
             <span class="metric-label">执行中</span>
           </div>
-          <span class="metric-value">{{ totalInFlight }}/{{ bucketConfig.global.concurrency }}</span>
+          <span class="metric-value"
+            >{{ totalInFlight }}/{{ bucketConfig.global.concurrency }}</span
+          >
           <span class="metric-hint">并发上限</span>
         </div>
 
@@ -82,7 +86,12 @@
           <span class="note">全局与分桶</span>
         </div>
         <div class="queue-grid">
-          <div v-for="bucket in queueCards" :key="bucket.key" class="queue-card" :style="{ '--accent': bucket.color }">
+          <div
+            v-for="bucket in queueCards"
+            :key="bucket.key"
+            class="queue-card"
+            :style="{ '--accent': bucket.color }"
+          >
             <div class="queue-head">
               <span class="queue-title">{{ bucket.label }}</span>
               <span class="queue-state" :class="bucket.status">{{ bucket.statusLabel }}</span>
@@ -90,11 +99,13 @@
             <div class="queue-metrics">
               <div>
                 <span class="metric-label">排队</span>
-                <span class="metric-value fontsize-30 color-red" >{{ bucket.queue }}</span>
+                <span class="metric-value fontsize-30 color-red">{{ bucket.queue }}</span>
               </div>
               <div>
                 <span class="metric-label">冷却</span>
-                <span class="metric-value fontsize-30">{{ formatDuration(bucket.cooldownRemainingMs) }}</span>
+                <span class="metric-value fontsize-30">{{
+                  formatDuration(bucket.cooldownRemainingMs)
+                }}</span>
               </div>
               <div>
                 <span class="metric-label">延迟 P50</span>
@@ -106,7 +117,10 @@
               </div>
             </div>
             <div class="queue-foot">
-              <div class="queue-progress" :style="{ '--progress': `${bucket.concurrencyUsage * 100}%` }">
+              <div
+                class="queue-progress"
+                :style="{ '--progress': `${bucket.concurrencyUsage * 100}%` }"
+              >
                 <div class="progress-meta">
                   <span>执行 {{ bucket.inFlight }}</span>
                   <span>并发上限 {{ bucket.concurrency }}</span>
@@ -115,7 +129,7 @@
                   <span class="progress-fill" />
                 </div>
               </div>
-                    </div>
+            </div>
           </div>
         </div>
       </div>
@@ -139,7 +153,9 @@
             </div>
             <div v-if="activeSessionPreview.length === 0" class="empty">暂无运行中的会话</div>
           </div>
-          <div v-if="activeSessionOverflow > 0" class="more">+{{ activeSessionOverflow }} 个会话持续运行</div>
+          <div v-if="activeSessionOverflow > 0" class="more">
+            +{{ activeSessionOverflow }} 个会话持续运行
+          </div>
         </div>
 
         <div class="panel events">
@@ -172,13 +188,19 @@
               <span class="cell">完成</span>
             </div>
             <div ref="taskLogBodyRef" class="task-log-body">
-              <div v-for="task in taskLog" :key="`${task.id}-${task.finishedAt}`" class="task-log-row">
+              <div
+                v-for="task in taskLog"
+                :key="`${task.id}-${task.finishedAt}`"
+                class="task-log-row"
+              >
                 <span class="cell type">
                   <span class="task-type">{{ task.label }}</span>
                   <span class="task-bucket">{{ task.bucket }}</span>
                 </span>
                 <span class="cell stage">
-                  <span class="task-stage" :class="`stage-${task.stage || 'completed'}`">{{ formatTaskStage(task.stage) }}</span>
+                  <span class="task-stage" :class="`stage-${task.stage || 'completed'}`">{{
+                    formatTaskStage(task.stage)
+                  }}</span>
                 </span>
                 <span class="cell id">{{ task.id }}</span>
                 <span class="cell">{{ formatDuration(task.waitMs) }}</span>
@@ -197,25 +219,29 @@
             <span>系统参数</span>
             <span class="note">{{ systemSourceLabel }}</span>
           </div>
-          <div class="system-section">
-            <div class="section-title">限流矩阵</div>
-            <div class="system-table" :style="{ '--cols-rest': systemMatrixColCount }">
-              <div class="system-row header">
-                <span class="cell metric">指标</span>
-                <span v-for="head in systemMatrixHeads" :key="head" class="cell">{{ head }}</span>
-              </div>
-              <div v-for="row in systemMatrixRows" :key="row.label" class="system-row">
-                <span class="cell metric">{{ row.label }}</span>
-                <span v-for="item in row.values" :key="item.key" class="cell">{{ item.value }}</span>
+          <div class="system-body">
+            <div class="system-section">
+              <div class="section-title">限流矩阵</div>
+              <div class="system-table" :style="{ '--cols-rest': systemMatrixColCount }">
+                <div class="system-row header">
+                  <span class="cell metric">指标</span>
+                  <span v-for="head in systemMatrixHeads" :key="head" class="cell">{{ head }}</span>
+                </div>
+                <div v-for="row in systemMatrixRows" :key="row.label" class="system-row">
+                  <span class="cell metric">{{ row.label }}</span>
+                  <span v-for="item in row.values" :key="item.key" class="cell">{{
+                    item.value
+                  }}</span>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="system-section">
-            <div class="section-title">能力与策略</div>
-            <div class="system-grid">
-              <div v-for="row in systemRows" :key="row.label" class="system-item">
-                <span class="label">{{ row.label }}</span>
-                <span class="value">{{ row.value }}</span>
+            <div class="system-section">
+              <div class="section-title">能力与策略</div>
+              <div class="system-grid">
+                <div v-for="row in systemRows" :key="row.label" class="system-item">
+                  <span class="label">{{ row.label }}</span>
+                  <span class="value">{{ row.value }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -226,31 +252,37 @@
             <span>运行脉冲</span>
             <span class="note">实时状态</span>
           </div>
-          <div class="pulse-grid">
-            <div class="pulse-item">
-              <span class="label">队列压力</span>
-              <span class="value">{{ queueHealth.label }}</span>
-              <span class="hint">总排队 {{ totalPending }}</span>
+          <div class="pulse-body">
+            <div class="pulse-grid">
+              <div class="pulse-item">
+                <span class="label">队列压力</span>
+                <span class="value">{{ queueHealth.label }}</span>
+                <span class="hint">总排队 {{ totalPending }}</span>
+              </div>
+              <div class="pulse-item">
+                <span class="label">调度频率</span>
+                <span class="value">{{ formatDuration(bucketConfig.global.minIntervalMs) }}</span>
+                <span class="hint">全局最小间隔</span>
+              </div>
+              <div class="pulse-item">
+                <span class="label">语言翻译</span>
+                <span class="value">{{ translationEnabled ? '开启' : '关闭' }}</span>
+                <span class="hint">{{
+                  backendConfig.transcriptSegmentTranslationLanguage || '--'
+                }}</span>
+              </div>
+              <div class="pulse-item">
+                <span class="label">分析语言</span>
+                <span class="value">{{
+                  backendConfig.transcriptAnalysisLanguageEnabled ? '开启' : '关闭'
+                }}</span>
+                <span class="hint">{{ backendConfig.transcriptAnalysisLanguage || '--' }}</span>
+              </div>
             </div>
-            <div class="pulse-item">
-              <span class="label">调度频率</span>
-              <span class="value">{{ formatDuration(bucketConfig.global.minIntervalMs) }}</span>
-              <span class="hint">全局最小间隔</span>
+            <div class="pulse-foot">
+              <span>实例 {{ queueStats?.instanceId || '--' }}</span>
+              <span>最近同步 {{ lastRefreshLabel }}</span>
             </div>
-            <div class="pulse-item">
-              <span class="label">语言翻译</span>
-              <span class="value">{{ translationEnabled ? '开启' : '关闭' }}</span>
-              <span class="hint">{{ backendConfig.transcriptSegmentTranslationLanguage || '--' }}</span>
-            </div>
-            <div class="pulse-item">
-              <span class="label">分析语言</span>
-              <span class="value">{{ backendConfig.transcriptAnalysisLanguageEnabled ? '开启' : '关闭' }}</span>
-              <span class="hint">{{ backendConfig.transcriptAnalysisLanguage || '--' }}</span>
-            </div>
-          </div>
-          <div class="pulse-foot">
-            <span>实例 {{ queueStats?.instanceId || '--' }}</span>
-            <span>最近同步 {{ lastRefreshLabel }}</span>
           </div>
         </div>
       </div>
@@ -263,13 +295,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBackendConfig } from '@/composables/useBackendConfig'
-import {
-  appConfigSecurityApi,
-  type GlmQueueStats,
-  type Session,
-} from '@/services/api'
+import { appConfigSecurityApi, type GlmQueueStats, type Session } from '@/services/api'
 import { getApiBaseUrl } from '@/services/http'
-import { clearSettingsPassword, getSettingsPassword, setSettingsPassword } from '@/services/settingsSecurity'
+import {
+  clearSettingsPassword,
+  getSettingsPassword,
+  setSettingsPassword,
+} from '@/services/settingsSecurity'
 import SettingsDrawer from '@/components/SettingsDrawer.vue'
 
 const { backendConfig, refreshBackendConfig } = useBackendConfig()
@@ -303,10 +335,13 @@ const bucketMeta = [
   { key: 'translation', label: '翻译', color: '#7c9f5f' },
   { key: 'analysis', label: '分析', color: '#e0a458' },
 ] as const
-const bucketLabelMap = bucketMeta.reduce((acc, bucket) => {
-  acc[bucket.key] = bucket.label
-  return acc
-}, {} as Record<string, string>)
+const bucketLabelMap = bucketMeta.reduce(
+  (acc, bucket) => {
+    acc[bucket.key] = bucket.label
+    return acc
+  },
+  {} as Record<string, string>
+)
 
 const formatDuration = (value: number | null | undefined) => {
   if (!Number.isFinite(value)) return '--'
@@ -339,6 +374,14 @@ const formatSessionDuration = (value: number) => {
   const seconds = totalSeconds % 60
   if (hours > 0) return `${hours}h${String(minutes).padStart(2, '0')}m`
   return `${minutes}m${String(seconds).padStart(2, '0')}s`
+}
+
+const recentRequestWindowMs = 30 * 1000
+const hasRecentRequest = (session: Session) => {
+  if (!session.lastRequestAt) return false
+  const lastRequestAt = Date.parse(session.lastRequestAt)
+  if (!Number.isFinite(lastRequestAt) || lastRequestAt <= 0) return false
+  return nowMs.value - lastRequestAt <= recentRequestWindowMs
 }
 
 const clampCooldownMs = (cooldown: number, max: number) =>
@@ -418,14 +461,15 @@ const queueHealth = computed(() => {
 
 const queueCards = computed(() =>
   bucketMeta
-    .filter((bucket) => bucket.key !== 'translation' || translationEnabled.value)
-    .map((bucket) => {
+    .filter(bucket => bucket.key !== 'translation' || translationEnabled.value)
+    .map(bucket => {
       const stats = queueStats.value?.buckets?.[bucket.key]
       const queue = stats?.queue ?? 0
       const inFlight = stats?.inFlight ?? 0
       const delayP50 = stats?.queueDelayP50Ms ?? null
       const durationP95 = stats?.durationP95Ms ?? null
-      const concurrency = bucketConfig.value[bucket.key as keyof typeof bucketConfig.value]?.concurrency ?? 0
+      const concurrency =
+        bucketConfig.value[bucket.key as keyof typeof bucketConfig.value]?.concurrency ?? 0
       const cooldownLeft = cooldownRemainingMs(bucket.key as keyof typeof bucketConfig.value)
       const concurrencyUsage = concurrency > 0 ? Math.min(1, inFlight / concurrency) : 0
       const status = cooldownLeft > 0 ? 'cooldown' : queue > 0 ? 'busy' : 'idle'
@@ -445,10 +489,9 @@ const queueCards = computed(() =>
     })
 )
 
-
 const activeSessions = computed(() =>
   sessions.value
-    .filter((session) => session.isActive && !session.isArchived)
+    .filter(session => !session.isArchived && (session.isRecording || hasRecentRequest(session)))
     .sort((a, b) => {
       const aTime = Date.parse(a.startedAt) || 0
       const bTime = Date.parse(b.startedAt) || 0
@@ -459,7 +502,7 @@ const activeSessions = computed(() =>
 const activeSessionCount = computed(() => activeSessions.value.length)
 const activeSessionPreviewLimit = 6
 const activeSessionPreview = computed(() =>
-  activeSessions.value.slice(0, activeSessionPreviewLimit).map((session) => {
+  activeSessions.value.slice(0, activeSessionPreviewLimit).map(session => {
     const startedAt = Date.parse(session.startedAt) || 0
     const endedAt = session.endedAt ? Date.parse(session.endedAt) : 0
     const duration = endedAt > 0 ? endedAt - startedAt : nowMs.value - startedAt
@@ -500,7 +543,10 @@ const systemMatrixRows = computed(() => {
       { key: 'asr', value: config.glmAsrConcurrency },
       { key: 'segment', value: config.glmTranscriptEventSegmentConcurrency },
       { key: 'rebuild', value: config.glmTranscriptEventSegmentRebuildConcurrency },
-      { key: 'translate', value: translateValue(config.glmTranscriptEventSegmentTranslationConcurrency) },
+      {
+        key: 'translate',
+        value: translateValue(config.glmTranscriptEventSegmentTranslationConcurrency),
+      },
       { key: 'analysis', value: config.glmTranscriptAnalysisConcurrency },
     ]),
     buildRow('最小间隔', [
@@ -508,21 +554,33 @@ const systemMatrixRows = computed(() => {
       { key: 'asr', value: formatMs(config.glmAsrMinIntervalMs) },
       { key: 'segment', value: formatMs(config.glmTranscriptEventSegmentMinIntervalMs) },
       { key: 'rebuild', value: formatMs(config.glmTranscriptEventSegmentRebuildMinIntervalMs) },
-      { key: 'translate', value: translateValue(config.glmTranscriptEventSegmentTranslationMinIntervalMs, formatMs) },
+      {
+        key: 'translate',
+        value: translateValue(config.glmTranscriptEventSegmentTranslationMinIntervalMs, formatMs),
+      },
       { key: 'analysis', value: formatMs(config.glmTranscriptAnalysisMinIntervalMs) },
     ]),
     buildRow('冷却时间', [
       { key: 'global', value: formatMs(config.glmGlobalRateLimitCooldownMs) },
       { key: 'asr', value: formatMs(config.glmAsrRateLimitCooldownMs) },
       { key: 'segment', value: formatMs(config.glmTranscriptEventSegmentRateLimitCooldownMs) },
-      { key: 'rebuild', value: formatMs(config.glmTranscriptEventSegmentRebuildRateLimitCooldownMs) },
-      { key: 'translate', value: translateValue(config.glmTranscriptEventSegmentTranslationRateLimitCooldownMs, formatMs) },
+      {
+        key: 'rebuild',
+        value: formatMs(config.glmTranscriptEventSegmentRebuildRateLimitCooldownMs),
+      },
+      {
+        key: 'translate',
+        value: translateValue(
+          config.glmTranscriptEventSegmentTranslationRateLimitCooldownMs,
+          formatMs
+        ),
+      },
       { key: 'analysis', value: formatMs(config.glmTranscriptAnalysisRateLimitCooldownMs) },
     ]),
   ]
-  return rows.map((row) => ({
+  return rows.map(row => ({
     label: row.label,
-    values: row.values.filter((item) => item.key !== 'translate' || translationEnabled.value),
+    values: row.values.filter(item => item.key !== 'translate' || translationEnabled.value),
   }))
 })
 
@@ -537,13 +595,16 @@ const systemRows = computed(() => {
     { label: '摘要模型', value: config.glmTranscriptSummaryModel || '--' },
     { label: '摘要最大 tokens', value: config.glmTranscriptSummaryMaxTokens },
     { label: '摘要思考模式', value: config.glmTranscriptSummaryThinking ? '开启' : '关闭' },
-    { label: '针对性思考模式', value: config.glmTranscriptSegmentAnalysisThinking ? '开启' : '关闭' },
+    {
+      label: '针对性思考模式',
+      value: config.glmTranscriptSegmentAnalysisThinking ? '开启' : '关闭',
+    },
     { label: '拆分并发上限', value: config.transcriptEventsSegmentMaxInFlight },
     { label: '拆分最大会话', value: config.transcriptEventsSegmentMaxPendingSessions },
     { label: '拆分过期阈值', value: formatMs(config.transcriptEventsSegmentMaxStalenessMs) },
     { label: '自动拆分间隔', value: formatMs(config.transcriptAutoSplitGapMs) },
   ]
-  return rows.filter((row) => row.value !== undefined && row.value !== null)
+  return rows.filter(row => row.value !== undefined && row.value !== null)
 })
 
 const lastRefreshLabel = computed(() => formatTime(lastRefreshAt.value))
@@ -583,8 +644,8 @@ const recordEvent = (message: string, level: 'info' | 'warn' = 'info') => {
 const analyzeQueueDelta = (next: GlmQueueStats, prev: GlmQueueStats | null) => {
   if (!prev) return
   const activeKeys = bucketMeta
-    .filter((bucket) => bucket.key !== 'translation' || translationEnabled.value)
-    .map((bucket) => bucket.key)
+    .filter(bucket => bucket.key !== 'translation' || translationEnabled.value)
+    .map(bucket => bucket.key)
   for (const key of activeKeys) {
     const nextBucket = next.buckets?.[key]
     const prevBucket = prev.buckets?.[key]
@@ -849,7 +910,8 @@ onBeforeUnmount(() => {
   padding: 24px 26px;
   color: var(--ink);
   font-family: 'IBM Plex Sans', 'Noto Sans SC', 'PingFang SC', sans-serif;
-  background: radial-gradient(circle at top, rgba(255, 246, 231, 0.95), transparent 58%),
+  background:
+    radial-gradient(circle at top, rgba(255, 246, 231, 0.95), transparent 58%),
     radial-gradient(circle at 90% 10%, rgba(213, 231, 219, 0.85), transparent 50%),
     linear-gradient(165deg, #f8f1e6, #f2f7f3 52%, #fff7e8);
   position: relative;
@@ -866,7 +928,8 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(rgba(23, 35, 39, 0.04) 1px, transparent 1px),
+  background-image:
+    linear-gradient(rgba(23, 35, 39, 0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(23, 35, 39, 0.04) 1px, transparent 1px);
   background-size: 48px 48px;
   opacity: 0.4;
@@ -1249,6 +1312,16 @@ onBeforeUnmount(() => {
   font-size: 10px;
 }
 
+.system-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .system-section {
   display: grid;
   gap: 8px;
@@ -1315,7 +1388,8 @@ onBeforeUnmount(() => {
 }
 
 .session-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   flex: 1;
   min-height: 0;
@@ -1360,7 +1434,8 @@ onBeforeUnmount(() => {
 }
 
 .event-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   flex: 1;
   min-height: 0;
@@ -1470,9 +1545,20 @@ onBeforeUnmount(() => {
 }
 
 .task-log-body {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.pulse-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
   min-height: 0;
   overflow: auto;
   padding-right: 4px;

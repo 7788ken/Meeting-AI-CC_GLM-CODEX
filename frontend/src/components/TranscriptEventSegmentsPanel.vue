@@ -1,5 +1,5 @@
 <template>
-  <div ref="panelRef" class="event-segments-panel" v-loading="loading" @scroll="handleScroll">
+  <div ref="panelRef" v-loading="loading" class="event-segments-panel" @scroll="handleScroll">
     <div v-if="!loading && segments.length === 0" class="empty">
       <el-empty description="暂无语句拆分结果" />
     </div>
@@ -7,7 +7,9 @@
     <div v-else class="segment-list">
       <div v-if="progressBadge" class="segment-item progress-item is-disabled" aria-disabled="true">
         <div class="segment-header">
-          <span class="segment-seq">#{{ progressBadge.sequenceText }} {{ progressBadge.title }}</span>
+          <span class="segment-seq"
+            >#{{ progressBadge.sequenceText }} {{ progressBadge.title }}</span
+          >
           <span class="segment-range">
             {{ progressBadge.rangeText }}
             {{ progressBadge.meta }}
@@ -16,17 +18,18 @@
         <div class="segment-content">
           <div class="progress-copy">
             <span class="progress-title"></span>
-           
           </div>
 
           <div v-if="progressBadge.percent != null" class="progress-bar" aria-hidden="true">
             <div class="progress-bar-fill" :style="{ width: `${progressBadge.percent}%` }" />
           </div>
-
-          
         </div>
       </div>
-      <div v-if="progressErrorBadge" class="segment-item error-item is-disabled" aria-disabled="true">
+      <div
+        v-if="progressErrorBadge"
+        class="segment-item error-item is-disabled"
+        aria-disabled="true"
+      >
         <div class="segment-header">
           <span class="segment-seq">#{{ progressErrorBadge.sequenceText }}</span>
           <span class="segment-range">
@@ -47,18 +50,19 @@
       >
         <div class="segment-header">
           <div class="segment-header-left">
-            <span class="segment-seq">@{{ segment.sequence }} ｜
-            <!-- 事件 范围 -->
+            <span class="segment-seq"
+              >@{{ segment.sequence }} ｜
+              <!-- 事件 范围 -->
               #{{ getDisplayStartIndex(segment) }}-#{{ getDisplayEndIndex(segment) }}
             </span>
           </div>
           <el-button
             size="small"
             class="target-analysis-btn"
-            :icon="Search"
+            :icon="ArrowRight"
             @click="handleTargetAnalysis($event, segment)"
           >
-            针对性分析
+            快分析
           </el-button>
         </div>
         <div class="segment-content">{{ getDisplayContent(segment) }}</div>
@@ -69,7 +73,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { Search } from '@element-plus/icons-vue'
+import { ArrowRight } from '@element-plus/icons-vue'
 import type { TranscriptEventSegment } from '@/services/api'
 import type { TranscriptEventSegmentationProgressData } from '@/services/websocket'
 
@@ -84,7 +88,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'select-range', payload: { start: number; end: number; startOffset?: number; endOffset?: number }): void
+  (
+    e: 'select-range',
+    payload: { start: number; end: number; startOffset?: number; endOffset?: number }
+  ): void
   (e: 'target-analysis', segment: TranscriptEventSegment): void
 }>()
 
@@ -106,7 +113,8 @@ function getDisplayContent(segment: TranscriptEventSegment): string {
   const translationEnabled = props.translationEnabled === true
   const displayMode = props.displayMode ?? (translationEnabled ? 'translated' : 'source')
   if (!translationEnabled || displayMode !== 'translated') return segment.content
-  const translated = typeof segment.translatedContent === 'string' ? segment.translatedContent.trim() : ''
+  const translated =
+    typeof segment.translatedContent === 'string' ? segment.translatedContent.trim() : ''
   return translated ? translated : segment.content
 }
 
@@ -140,7 +148,9 @@ function handleTargetAnalysis(event: Event, segment: TranscriptEventSegment): vo
 }
 
 function isInFlightStage(stage: TranscriptEventSegmentationProgressData['stage']): boolean {
-  return stage === 'queued' || stage === 'calling_llm' || stage === 'parsing' || stage === 'persisting'
+  return (
+    stage === 'queued' || stage === 'calling_llm' || stage === 'parsing' || stage === 'persisting'
+  )
 }
 
 function getStageText(stage: TranscriptEventSegmentationProgressData['stage']): string {
@@ -265,7 +275,7 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
   width: 100%;
   text-align: left;
   padding: 10px 12px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.64);
   cursor: pointer;
@@ -288,7 +298,7 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
 
 .progress-item {
   border-style: dashed;
-  background: rgba(217, 119, 6, 0.10);
+  background: rgba(217, 119, 6, 0.1);
 }
 
 .progress-copy {
@@ -326,8 +336,12 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
 .progress-bar-fill {
   height: 100%;
   border-radius: 999px;
-  background:
-    linear-gradient(90deg, rgba(47, 107, 255, 0.25), rgba(47, 107, 255, 0.58), rgba(47, 107, 255, 0.25));
+  background: linear-gradient(
+    90deg,
+    rgba(47, 107, 255, 0.25),
+    rgba(47, 107, 255, 0.58),
+    rgba(47, 107, 255, 0.25)
+  );
   background-size: 220% 100%;
   animation: shimmer 1.3s linear infinite;
 }
@@ -340,8 +354,12 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
 .skeleton-line {
   height: 10px;
   border-radius: 999px;
-  background:
-    linear-gradient(90deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.12), rgba(15, 23, 42, 0.06));
+  background: linear-gradient(
+    90deg,
+    rgba(15, 23, 42, 0.06),
+    rgba(15, 23, 42, 0.12),
+    rgba(15, 23, 42, 0.06)
+  );
   background-size: 240% 100%;
   animation: shimmer 1.2s linear infinite;
 }
@@ -355,7 +373,7 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
 }
 
 .error-item {
-  border-color: rgba(220, 38, 38, 0.20);
+  border-color: rgba(220, 38, 38, 0.2);
   background: rgba(220, 38, 38, 0.08);
 }
 
@@ -377,10 +395,10 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
 
 /* 针对性分析按钮 */
 .target-analysis-btn {
-  padding: 4px 10px;
+  height: 24px;
+  padding: 0 8px;
   font-size: 12px;
-  height: auto;
-  border-radius: 6px;
+  border-radius: 999px;
   background: rgba(47, 107, 255, 0.08);
   border-color: rgba(47, 107, 255, 0.25);
   color: var(--brand-600);
@@ -390,7 +408,7 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
 
 .target-analysis-btn:hover {
   background: rgba(47, 107, 255, 0.15);
-  border-color: rgba(47, 107, 255, 0.40);
+  border-color: rgba(47, 107, 255, 0.4);
   color: var(--brand-700);
   transform: translateY(-1px);
 }
@@ -399,9 +417,18 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
   font-size: 13px;
 }
 
+@media (max-width: 480px) {
+  .target-analysis-btn {
+    height: 22px;
+    padding: 0 6px;
+    font-size: 11px;
+  }
+}
+
 .segment-seq {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    'Courier New', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
   font-size: 12px;
   color: var(--ink-500);
 }
@@ -428,5 +455,4 @@ watch([latestSequence, normalizedOrder], ([nextSequence]) => {
   background: rgba(47, 107, 255, 0.12);
   box-shadow: 0 0 0 3px rgba(47, 107, 255, 0.15);
 }
-
 </style>

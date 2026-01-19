@@ -15,7 +15,12 @@ export type MessageHandler = (data: any) => void
 export type ConnectionHandler = () => void
 export type ErrorHandler = (error: Event) => void
 
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
+export type ConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'failed'
 
 export interface ConnectionStatus {
   state: ConnectionState
@@ -109,7 +114,10 @@ export type TranscriptMessage =
   | { type: 'transcript_event_upsert'; data: TranscriptEventData }
   | { type: 'transcript_event_segment_upsert'; data: TranscriptEventSegmentUpsertData }
   | { type: 'transcript_event_segment_reset'; data: TranscriptEventSegmentResetData }
-  | { type: 'transcript_event_segmentation_progress'; data: TranscriptEventSegmentationProgressData }
+  | {
+      type: 'transcript_event_segmentation_progress'
+      data: TranscriptEventSegmentationProgressData
+    }
 
 export class WebSocketService {
   private ws: WebSocket | null = null
@@ -211,7 +219,7 @@ export class WebSocketService {
           this.connectPromise = null
         }
 
-        this.ws.onmessage = (event) => {
+        this.ws.onmessage = event => {
           try {
             const data = JSON.parse(event.data)
             for (const listener of this.messageListeners) {
@@ -240,7 +248,7 @@ export class WebSocketService {
           this.connectPromise = null
         }
 
-        this.ws.onerror = (error) => {
+        this.ws.onerror = error => {
           console.error('[WebSocket] 错误:', error)
           this.onErrorCallback?.(error)
           if (!settled) {
@@ -376,7 +384,7 @@ export class WebSocketService {
     })
 
     this.reconnectTimer = setTimeout(() => {
-      this.connect().catch((error) => {
+      this.connect().catch(error => {
         console.error('[WebSocket] 重连失败:', error)
       })
     }, delayMs)

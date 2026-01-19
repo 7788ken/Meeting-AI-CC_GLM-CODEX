@@ -1,4 +1,13 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common'
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Public } from '../auth/decorators/public.decorator'
 import { SettingsPasswordGuard } from '../app-config/guards/settings-password.guard'

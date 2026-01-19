@@ -66,6 +66,13 @@ pnpm build:backend
 
 详细文档请查看 [Readme/](./Readme/) 目录。
 
-Codex 审阅文档请查看 [`codex 审阅文档.md`](./codex%20%E5%AE%A1%E9%98%85%E6%96%87%E6%A1%A3.md)。
+Codex 审阅文档请查看 [`docs/codex 审阅文档.md`](./docs/codex%20%E5%AE%A1%E9%98%85%E6%96%87%E6%A1%A3.md)。
 
-MVP 任务清单请查看 [`MVP任务清单.md`](./MVP%E4%BB%BB%E5%8A%A1%E6%B8%85%E5%8D%95.md)。
+MVP 任务清单请查看 [`docs/MVP任务清单.md`](./docs/MVP%E4%BB%BB%E5%8A%A1%E6%B8%85%E5%8D%95.md)。
+
+## 参与与合规
+
+- 贡献指南：[CONTRIBUTING.md](./CONTRIBUTING.md)
+- 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- 安全策略：[SECURITY.md](./SECURITY.md)
+- 许可证：[LICENSE](./LICENSE)

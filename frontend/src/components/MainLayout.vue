@@ -19,6 +19,8 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
   background: transparent;
   overflow: hidden;
 }
@@ -65,11 +67,32 @@
 @media (max-width: 768px) {
   .meeting-main {
     flex-direction: column;
+    padding: 10px 8px calc(16px + var(--app-bottom-inset) + env(safe-area-inset-bottom, 0px));
   }
 
   .meeting-header {
-    margin: 10px 10px 0;
+    padding: 8px 10px;
+    margin: 8px 8px 0;
     top: 10px;
+  }
+
+  .meeting-header-inner {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .meeting-header-inner :deep(.header-left) {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .meeting-header-inner :deep(.header-right) {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .meeting-main-inner {
+    gap: 10px;
   }
 }
 </style>

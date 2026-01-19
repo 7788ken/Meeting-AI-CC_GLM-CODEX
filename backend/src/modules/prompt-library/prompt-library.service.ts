@@ -127,9 +127,7 @@ export class PromptLibraryService implements OnModuleInit {
   findByContent(type: PromptTemplateType, content: string): PromptTemplate | undefined {
     const normalized = content.trim()
     if (!normalized) return undefined
-    return this.prompts.find(
-      prompt => prompt.type === type && prompt.content.trim() === normalized
-    )
+    return this.prompts.find(prompt => prompt.type === type && prompt.content.trim() === normalized)
   }
 
   async findOrCreateByContent(
@@ -275,9 +273,7 @@ export class PromptLibraryService implements OnModuleInit {
 
     const sameType = this.prompts.filter(prompt => prompt.type === target.type)
     if (sameType.length <= 1) {
-      throw new BadRequestException(
-        `至少保留一个${PROMPT_TEMPLATE_TYPE_LABELS[target.type]}提示词`
-      )
+      throw new BadRequestException(`至少保留一个${PROMPT_TEMPLATE_TYPE_LABELS[target.type]}提示词`)
     }
 
     let next = this.prompts.filter(prompt => prompt.id !== normalizedId)
@@ -392,9 +388,10 @@ export class PromptLibraryService implements OnModuleInit {
     return next
   }
 
-  private ensureBuiltInPrompts(
+  private ensureBuiltInPrompts(list: PromptTemplate[]): {
     list: PromptTemplate[]
-  ): { list: PromptTemplate[]; changed: boolean } {
+    changed: boolean
+  } {
     if (BUILTIN_PROMPT_DEFINITIONS.length === 0) {
       return { list, changed: false }
     }
@@ -426,7 +423,7 @@ export class PromptLibraryService implements OnModuleInit {
       }
 
       const current = next[existingIndex]
-      let updated = { ...current }
+      const updated = { ...current }
       let updatedFlag = false
 
       if (current.name !== def.name) {

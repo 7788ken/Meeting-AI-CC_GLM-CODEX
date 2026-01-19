@@ -1,4 +1,13 @@
-import { BadRequestException, Body, Controller, Get, Post, Put, UnauthorizedException, UseGuards } from '@nestjs/common'
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Public } from '../auth/decorators/public.decorator'
 import { AppConfigService } from './app-config.service'
@@ -163,11 +172,7 @@ export class AppConfigController {
         field.min != null && field.max != null
           ? (value: number) => value >= field.min! && value <= field.max!
           : undefined
-      return this.appConfigService.getNumber(
-        field.key,
-        Number(field.defaultValue),
-        validator
-      )
+      return this.appConfigService.getNumber(field.key, Number(field.defaultValue), validator)
     }
     return this.appConfigService.getString(field.key, String(field.defaultValue))
   }

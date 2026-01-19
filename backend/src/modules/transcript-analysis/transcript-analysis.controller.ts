@@ -69,7 +69,9 @@ export class TranscriptAnalysisController {
   @Get('session/:sessionId/summary')
   @ApiOperation({ summary: '获取会话已生成的 Markdown 总结（若存在）' })
   @ApiResponse({ status: 200 })
-  async getStoredSummary(@Param('sessionId') sessionId: string): Promise<TranscriptSummaryDTO | null> {
+  async getStoredSummary(
+    @Param('sessionId') sessionId: string
+  ): Promise<TranscriptSummaryDTO | null> {
     const normalized = sessionId?.trim()
     if (!normalized) {
       throw new BadRequestException('sessionId is required')

@@ -150,7 +150,11 @@ export class AudioCaptureService {
   private normalizeGetUserMediaError(error: unknown): Error {
     if (error instanceof Error && error.message) {
       // 透传明确的运行时错误（如“不支持”），便于排查。
-      if (error.message.includes('不支持') || error.message.includes('AudioContext') || error.message.includes('getUserMedia')) {
+      if (
+        error.message.includes('不支持') ||
+        error.message.includes('AudioContext') ||
+        error.message.includes('getUserMedia')
+      ) {
         return new Error(error.message)
       }
       if (error.message.includes('共享音频') || error.message.includes('音轨')) {
@@ -230,7 +234,7 @@ export class AudioCaptureService {
       this.resetResampler(this.audioContext.sampleRate, this.targetSampleRate)
 
       // 处理音频数据
-      this.processor.onaudioprocess = (event) => {
+      this.processor.onaudioprocess = event => {
         if (!this.isCapturing) return
 
         const inputData = event.inputBuffer.getChannelData(0)
@@ -305,9 +309,17 @@ export class AudioCaptureService {
     }
   }
 
-  private resampleToTarget(input: Float32Array, sourceRate: number, targetRate: number): Float32Array {
+  private resampleToTarget(
+    input: Float32Array,
+    sourceRate: number,
+    targetRate: number
+  ): Float32Array {
     if (input.length < 2) return new Float32Array()
-    if (!this.resampleState || this.resampleState.sourceRate !== sourceRate || this.resampleState.targetRate !== targetRate) {
+    if (
+      !this.resampleState ||
+      this.resampleState.sourceRate !== sourceRate ||
+      this.resampleState.targetRate !== targetRate
+    ) {
       this.resetResampler(sourceRate, targetRate)
     }
     if (!this.resampleState) return input
@@ -370,11 +382,7 @@ export class AudioCaptureService {
   /**
    * 检测静音 (F1015)
    */
-  static detectSilence(
-    float32Array: Float32Array,
-    threshold = 0.01,
-    duration = 1000
-  ): boolean {
+  static detectSilence(float32Array: Float32Array, threshold = 0.01, duration = 1000): boolean {
     let silenceCount = 0
     const samplesToCheck = (duration * 16000) / 1000 // 假设 16kHz
 
@@ -440,11 +448,11 @@ export class AudioCaptureService {
 
   private cleanupStreamsOnly(): void {
     if (this.micStream) {
-      this.micStream.getTracks().forEach((track) => track.stop())
+      this.micStream.getTracks().forEach(track => track.stop())
       this.micStream = null
     }
     if (this.displayStream) {
-      this.displayStream.getTracks().forEach((track) => track.stop())
+      this.displayStream.getTracks().forEach(track => track.stop())
       this.displayStream = null
     }
   }

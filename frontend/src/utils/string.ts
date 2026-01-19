@@ -145,7 +145,10 @@ export function truncateByBytes(str: string, maxBytes: number, suffix = '...'): 
 /**
  * 生成随机字符串
  */
-export function randomString(length: number, charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'): string {
+export function randomString(
+  length: number,
+  charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+): string {
   let result = ''
   for (let i = 0; i < length; i++) {
     result += charset.charAt(Math.floor(Math.random() * charset.length))
@@ -197,7 +200,11 @@ export function formatFileSize(bytes: number): string {
 /**
  * 高亮匹配关键词
  */
-export function highlightKeywords(text: string, keywords: string[], className = 'highlight'): string {
+export function highlightKeywords(
+  text: string,
+  keywords: string[],
+  className = 'highlight'
+): string {
   let result = text
   keywords.forEach(keyword => {
     const regex = new RegExp(`(${escapeRegExp(keyword)})`, 'gi')

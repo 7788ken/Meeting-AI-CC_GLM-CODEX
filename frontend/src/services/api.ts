@@ -13,6 +13,8 @@ export interface Session {
   duration: number | null
   isActive: boolean
   isArchived: boolean
+  lastRequestAt?: string | null
+  isRecording?: boolean
 }
 
 // 发言记录类型
@@ -279,57 +281,48 @@ export const sessionApi = {
     post<ApiResponse<Session>>('/sessions', { settings: data }),
 
   // 结束会话
-  end: (sessionId: string) =>
-    post<ApiResponse<Session>>(`/sessions/${sessionId}/end`),
+  end: (sessionId: string) => post<ApiResponse<Session>>(`/sessions/${sessionId}/end`),
 
   // 存档会话
-  archive: (sessionId: string) =>
-    post<ApiResponse<Session>>(`/sessions/${sessionId}/archive`),
+  archive: (sessionId: string) => post<ApiResponse<Session>>(`/sessions/${sessionId}/archive`),
 
   // 取消存档
-  unarchive: (sessionId: string) =>
-    post<ApiResponse<Session>>(`/sessions/${sessionId}/unarchive`),
+  unarchive: (sessionId: string) => post<ApiResponse<Session>>(`/sessions/${sessionId}/unarchive`),
 
   // 获取会话详情
-  get: (sessionId: string) =>
-    get<ApiResponse<Session>>(`/sessions/${sessionId}`),
+  get: (sessionId: string) => get<ApiResponse<Session>>(`/sessions/${sessionId}`),
 
   // 获取所有会话
-  list: () =>
-    get<ApiResponse<Session[]>>('/sessions'),
+  list: () => get<ApiResponse<Session[]>>('/sessions'),
 
   // 删除会话
-  remove: (sessionId: string) =>
-    del<ApiResponse<{ deleted: boolean }>>(`/sessions/${sessionId}`),
+  remove: (sessionId: string) => del<ApiResponse<{ deleted: boolean }>>(`/sessions/${sessionId}`),
 
   // 更新会话状态
   updateStatus: (sessionId: string, status: string) =>
     put<ApiResponse<Session>>(`/sessions/${sessionId}/status`, { status }),
-
 }
 
 // ==================== 发言记录 API ====================
 
 export const speechApi = {
   // 创建发言记录
-  create: (data: Partial<Speech>) =>
-    post<ApiResponse<Speech>>('/speeches', data),
+  create: (data: Partial<Speech>) => post<ApiResponse<Speech>>('/speeches', data),
 
   // 批量创建发言记录
-  batchCreate: (data: Partial<Speech>[]) =>
-    post<ApiResponse<Speech[]>>('/speeches/batch', data),
+  batchCreate: (data: Partial<Speech>[]) => post<ApiResponse<Speech[]>>('/speeches/batch', data),
 
   // 获取发言详情
-  get: (speechId: string) =>
-    get<ApiResponse<Speech>>(`/speeches/${speechId}`),
+  get: (speechId: string) => get<ApiResponse<Speech>>(`/speeches/${speechId}`),
 
   // 获取会话的所有发言
-  list: (sessionId: string) =>
-    get<ApiResponse<Speech[]>>(`/speeches/session/${sessionId}`),
+  list: (sessionId: string) => get<ApiResponse<Speech[]>>(`/speeches/session/${sessionId}`),
 
   // 搜索发言记录
   search: (sessionId: string, keyword: string) =>
-    get<ApiResponse<Speech[]>>(`/speeches/session/${sessionId}/search?keyword=${encodeURIComponent(keyword)}`),
+    get<ApiResponse<Speech[]>>(
+      `/speeches/session/${sessionId}/search?keyword=${encodeURIComponent(keyword)}`
+    ),
 
   // 更新发言
   update: (speechId: string, data: Partial<Speech>) =>
@@ -340,15 +333,16 @@ export const speechApi = {
     put<ApiResponse<Speech>>(`/speeches/${speechId}/mark`, { marked, reason }),
 
   // 删除会话的所有发言
-  deleteBySession: (sessionId: string) =>
-    del(`/speeches/session/${sessionId}`),
+  deleteBySession: (sessionId: string) => del(`/speeches/session/${sessionId}`),
 }
 
 export const transcriptStreamApi = {
   // 获取会话原文事件流快照（用于刷新恢复）
   getSnapshot: (sessionId: string, limit?: number) => {
     const query = limit == null ? '' : `?limit=${encodeURIComponent(String(limit))}`
-    return get<ApiResponse<TranscriptStreamSnapshot>>(`/transcript-stream/session/${sessionId}${query}`)
+    return get<ApiResponse<TranscriptStreamSnapshot>>(
+      `/transcript-stream/session/${sessionId}${query}`
+    )
   },
 }
 
@@ -397,11 +391,9 @@ export const transcriptAnalysisConfigApi = {
       { headers: getSettingsAuthHeaders() }
     ),
   update: (data: Partial<TranscriptAnalysisConfig>) =>
-    put<ApiResponse<TranscriptAnalysisConfig>>(
-      '/transcript-analysis/config',
-      data,
-      { headers: getSettingsAuthHeaders() }
-    ),
+    put<ApiResponse<TranscriptAnalysisConfig>>('/transcript-analysis/config', data, {
+      headers: getSettingsAuthHeaders(),
+    }),
 }
 
 export const promptLibraryApi = {
@@ -424,8 +416,7 @@ export const promptLibraryApi = {
 }
 
 export const appConfigApi = {
-  get: () =>
-    get<ApiResponse<BackendConfig>>('/app-config', { headers: getSettingsAuthHeaders() }),
+  get: () => get<ApiResponse<BackendConfig>>('/app-config', { headers: getSettingsAuthHeaders() }),
   update: (data: Partial<BackendConfig>) =>
     put<ApiResponse<BackendConfig>>('/app-config', data, { headers: getSettingsAuthHeaders() }),
 }
@@ -438,8 +429,7 @@ export const appConfigQueueStatsApi = {
 }
 
 export const appConfigSecurityApi = {
-  getStatus: () =>
-    get<ApiResponse<AppConfigSecurityStatus>>('/app-config/security/status'),
+  getStatus: () => get<ApiResponse<AppConfigSecurityStatus>>('/app-config/security/status'),
   verify: (password: string) =>
     post<ApiResponse<AppConfigSecurityVerifyResult>>('/app-config/security/verify', { password }),
   updatePassword: (data: { password: string; currentPassword?: string }) =>
@@ -447,7 +437,10 @@ export const appConfigSecurityApi = {
 }
 
 export const appConfigRemarksApi = {
-  get: () => get<ApiResponse<AppConfigRemark[]>>('/app-config/remarks', { headers: getSettingsAuthHeaders() }),
+  get: () =>
+    get<ApiResponse<AppConfigRemark[]>>('/app-config/remarks', {
+      headers: getSettingsAuthHeaders(),
+    }),
 }
 
 export const transcriptAnalysisApi = {
@@ -471,8 +464,7 @@ export const debugErrorApi = {
   listBySession: (sessionId: string) =>
     get<ApiResponse<DebugError[]>>(`/debug-errors/session/${sessionId}`),
   // 获取单条调试错误详情
-  getById: (id: string) =>
-    get<ApiResponse<DebugError>>(`/debug-errors/${id}`),
+  getById: (id: string) => get<ApiResponse<DebugError>>(`/debug-errors/${id}`),
   // 清空会话的调试错误列表
   clearBySession: (sessionId: string) =>
     del<ApiResponse<{ deletedCount: number }>>(`/debug-errors/session/${sessionId}`),
@@ -484,14 +476,18 @@ export const appLogsApi = {
     if (type) query.set('type', type)
     if (Number.isFinite(limit)) query.set('limit', String(limit))
     const suffix = query.toString()
-    const url = suffix ? `/app-logs/session/${sessionId}?${suffix}` : `/app-logs/session/${sessionId}`
+    const url = suffix
+      ? `/app-logs/session/${sessionId}?${suffix}`
+      : `/app-logs/session/${sessionId}`
     return get<ApiResponse<AppLog[]>>(url)
   },
   clearBySession: (sessionId: string, type?: AppLogType) => {
     const query = new URLSearchParams()
     if (type) query.set('type', type)
     const suffix = query.toString()
-    const url = suffix ? `/app-logs/session/${sessionId}?${suffix}` : `/app-logs/session/${sessionId}`
+    const url = suffix
+      ? `/app-logs/session/${sessionId}?${suffix}`
+      : `/app-logs/session/${sessionId}`
     return del<ApiResponse<{ deletedCount: number }>>(url)
   },
 }

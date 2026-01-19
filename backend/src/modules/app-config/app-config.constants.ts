@@ -69,13 +69,14 @@ export const APP_CONFIG_SEED_KEYS = [
 
 export const APP_CONFIG_SECURITY_PASSWORD_KEY = 'SYSTEM_SECURITY_PASSWORD_HASH'
 
-export type AppConfigSeedKey = typeof APP_CONFIG_SEED_KEYS[number]
+export type AppConfigSeedKey = (typeof APP_CONFIG_SEED_KEYS)[number]
 
 export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
   GLM_API_KEY: 'GLM 平台 API Key，用于所有 GLM 请求鉴权（敏感信息，建议仅在可信环境配置）。',
   GLM_ENDPOINT: 'GLM Chat Completions 接口地址（http/https）。',
   GLM_GLOBAL_CONCURRENCY: '全局 GLM 并发上限：所有 GLM 请求共享同一个队列/限流器。',
-  GLM_GLOBAL_MIN_INTERVAL_MS: '全局 GLM 启动请求最小间隔（ms），用于控制 QPS（0 表示不做间隔限制）。',
+  GLM_GLOBAL_MIN_INTERVAL_MS:
+    '全局 GLM 启动请求最小间隔（ms），用于控制 QPS（0 表示不做间隔限制）。',
   GLM_GLOBAL_RATE_LIMIT_COOLDOWN_MS: '遇到 429 后的全局冷却时间（ms），冷却期间会延后调度请求。',
   GLM_GLOBAL_RATE_LIMIT_MAX_MS: '全局冷却时间上限（ms），用于限制指数退避的最大延迟。',
   GLM_ASR_CONCURRENCY: 'ASR 模块专用 GLM 并发上限；未配置时回退全局并发上限。',
@@ -116,7 +117,8 @@ export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
   GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL: '语句拆分任务使用的 GLM 模型名称；为空会导致语句拆分不可用。',
   GLM_TRANSCRIPT_SEGMENT_TRANSLATION_MODEL:
     '语句翻译任务使用的 GLM 模型名称；为空时回退语句拆分模型。',
-  GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS: '语句拆分：单次请求的 max_tokens 上限（影响输出长度与成本）。',
+  GLM_TRANSCRIPT_EVENT_SEGMENT_MAX_TOKENS:
+    '语句拆分：单次请求的 max_tokens 上限（影响输出长度与成本）。',
   GLM_TRANSCRIPT_EVENT_SEGMENT_BUMP_MAX_TOKENS:
     '语句拆分：当 finish_reason=length（截断）时，二次请求提升 max_tokens 的目标值。',
   GLM_TRANSCRIPT_EVENT_SEGMENT_JSON_MODE:
@@ -166,14 +168,12 @@ export const APP_CONFIG_REMARKS: Record<AppConfigSeedKey, string> = {
     '语句翻译：翻译目标语言（如“简体中文”“English”），用于控制翻译输出语言。',
   TRANSCRIPT_ANALYSIS_LANGUAGE_ENABLED:
     'AI 分析：是否强制输出指定语言结果（关闭则不强制输出语言）。',
-  TRANSCRIPT_ANALYSIS_LANGUAGE:
-    'AI 分析：输出目标语言（如“简体中文”“English”）。',
+  TRANSCRIPT_ANALYSIS_LANGUAGE: 'AI 分析：输出目标语言（如“简体中文”“English”）。',
   TRANSCRIPT_ANALYSIS_SUMMARY_SYSTEM_PROMPT:
     'AI 分析：会议总结系统提示词（影响总体总结风格与结构）。',
   TRANSCRIPT_ANALYSIS_CHUNK_SUMMARY_SYSTEM_PROMPT:
     'AI 分析：分片总结系统提示词（用于长会话拆分提炼）。',
-  TRANSCRIPT_ANALYSIS_SEGMENT_SYSTEM_PROMPT:
-    'AI 分析：针对性分析系统提示词（用于单句/单段分析）。',
+  TRANSCRIPT_ANALYSIS_SEGMENT_SYSTEM_PROMPT: 'AI 分析：针对性分析系统提示词（用于单句/单段分析）。',
   TRANSCRIPT_MAX_BUFFER_DURATION_SOFT_MS:
     'SmartAudioBuffer：软上限（ms），满足“有静音”条件时触发 flush。',
   TRANSCRIPT_MAX_BUFFER_DURATION_HARD_MS:
@@ -539,5 +539,5 @@ export const APP_CONFIG_FIELDS = [
   },
 ] as const
 
-export type AppConfigField = typeof APP_CONFIG_FIELDS[number]['field']
-export type AppConfigFieldConfig = typeof APP_CONFIG_FIELDS[number]
+export type AppConfigField = (typeof APP_CONFIG_FIELDS)[number]['field']
+export type AppConfigFieldConfig = (typeof APP_CONFIG_FIELDS)[number]

@@ -286,10 +286,7 @@ export class GlmRateLimiter {
       typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs)
         ? Math.max(retryAfterMs, this.getCooldownMs(bucket))
         : this.getCooldownMs(bucket)
-    const cooldown = Math.max(
-      0,
-      Math.min(this.getMaxCooldownMs(bucket), Math.floor(rawCooldown))
-    )
+    const cooldown = Math.max(0, Math.min(this.getMaxCooldownMs(bucket), Math.floor(rawCooldown)))
     const nextBlockedUntil = now + cooldown
 
     if (nextBlockedUntil > state.blockedUntil) {
@@ -466,12 +463,7 @@ export class GlmRateLimiter {
   }
 
   private getMaxConcurrency(bucket: GlmRateLimiterBucket): number {
-    return this.readBucketNumber(
-      bucket,
-      'concurrency',
-      1,
-      value => value >= 1 && value <= 50
-    )
+    return this.readBucketNumber(bucket, 'concurrency', 1, value => value >= 1 && value <= 50)
   }
 
   private getMinIntervalMs(bucket: GlmRateLimiterBucket): number {
@@ -484,12 +476,7 @@ export class GlmRateLimiter {
   }
 
   private getCooldownMs(bucket: GlmRateLimiterBucket): number {
-    return this.readBucketNumber(
-      bucket,
-      'cooldownMs',
-      2000,
-      value => value >= 0 && value <= 120000
-    )
+    return this.readBucketNumber(bucket, 'cooldownMs', 2000, value => value >= 0 && value <= 120000)
   }
 
   private getMaxCooldownMs(bucket: GlmRateLimiterBucket): number {

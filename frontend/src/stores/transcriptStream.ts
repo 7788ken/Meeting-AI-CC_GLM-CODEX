@@ -110,7 +110,11 @@ export const useTranscriptStreamStore = defineStore('transcriptStream', () => {
 
   function getEventDurationMs(eventIndex: number): number | null {
     const event = eventsByIndex.value.get(eventIndex)
-    if (event && typeof event.audioDurationMs === 'number' && Number.isFinite(event.audioDurationMs)) {
+    if (
+      event &&
+      typeof event.audioDurationMs === 'number' &&
+      Number.isFinite(event.audioDurationMs)
+    ) {
       const normalized = Math.max(0, Math.floor(event.audioDurationMs))
       return normalized > 0 ? normalized : null
     }

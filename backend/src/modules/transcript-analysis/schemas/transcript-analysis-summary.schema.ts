@@ -29,5 +29,5 @@ export class TranscriptAnalysisSummary {
 }
 
 export type TranscriptAnalysisSummaryDocument = HydratedDocument<TranscriptAnalysisSummary>
-export const TranscriptAnalysisSummarySchema = SchemaFactory.createForClass(TranscriptAnalysisSummary)
-
+export const TranscriptAnalysisSummarySchema =
+  SchemaFactory.createForClass(TranscriptAnalysisSummary)

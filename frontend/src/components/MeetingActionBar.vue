@@ -1,7 +1,7 @@
 <template>
   <div ref="hostRef" class="actionbar-host" :aria-hidden="!enabled">
     <div v-if="enabled" class="actionbar app-surface">
-      <div v-if="!compact" class="left" >
+      <div v-if="!compact" class="left">
         <el-button
           size="small"
           type="danger"
@@ -79,12 +79,7 @@
       </div>
     </div>
 
-    <el-dialog
-      v-model="helpVisible"
-      title="快捷键"
-      width="min(92vw, 560px)"
-      append-to-body
-    >
+    <el-dialog v-model="helpVisible" title="快捷键" width="min(92vw, 560px)" append-to-body>
       <div class="help-grid">
         <div class="help-row">
           <kbd>R</kbd>
@@ -107,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref } from 'vue'
 import {
   VideoPlay,
   VideoPause,
@@ -116,66 +111,66 @@ import {
   CircleClose,
   Key,
   MoreFilled,
-} from "@element-plus/icons-vue";
+} from '@element-plus/icons-vue'
 
-type RecordingStatus = "idle" | "connecting" | "recording" | "paused" | "error";
+type RecordingStatus = 'idle' | 'connecting' | 'recording' | 'paused' | 'error'
 
-const hostRef = ref<HTMLElement | null>(null);
+const hostRef = ref<HTMLElement | null>(null)
 
 const props = defineProps<{
-  enabled: boolean;
-  compact: boolean;
-  disabled: boolean;
-  ending: boolean;
-  isSessionEnded: boolean;
-  recordingStatus: RecordingStatus;
-  isPaused: boolean;
-}>();
+  enabled: boolean
+  compact: boolean
+  disabled: boolean
+  ending: boolean
+  isSessionEnded: boolean
+  recordingStatus: RecordingStatus
+  isPaused: boolean
+}>()
 
 const emit = defineEmits<{
-  (e: "toggle-recording"): void;
-  (e: "toggle-mute"): void;
-  (e: "end-session"): void;
-  (e: "toggle-realtime"): void;
-}>();
+  (e: 'toggle-recording'): void
+  (e: 'toggle-mute'): void
+  (e: 'end-session'): void
+  (e: 'toggle-realtime'): void
+}>()
 
-const helpVisible = ref(false);
-const moreVisible = ref(false);
+const helpVisible = ref(false)
+const moreVisible = ref(false)
 function openHelp(): void {
-  helpVisible.value = true;
+  helpVisible.value = true
 }
 
-defineExpose({ openHelp, hostEl: hostRef });
+defineExpose({ openHelp, hostEl: hostRef })
 
 function handleMoreCommand(command: string): void {
   switch (command) {
-    case "toggleRealtime":
-      emit("toggle-realtime");
-      break;
-    case "showShortcuts":
-      helpVisible.value = true;
-      break;
+    case 'toggleRealtime':
+      emit('toggle-realtime')
+      break
+    case 'showShortcuts':
+      helpVisible.value = true
+      break
     default:
-      break;
+      break
   }
 }
 
 const canToggleMute = computed(
-  () => props.recordingStatus === "recording" || props.recordingStatus === "paused"
-);
+  () => props.recordingStatus === 'recording' || props.recordingStatus === 'paused'
+)
 const recordButtonIcon = computed(() =>
-  props.recordingStatus === "recording" ? VideoPause : VideoPlay
-);
-const muteButtonIcon = computed(() => (props.isPaused ? Microphone : Mute));
+  props.recordingStatus === 'recording' ? VideoPause : VideoPlay
+)
+const muteButtonIcon = computed(() => (props.isPaused ? Microphone : Mute))
 
 const recordButtonText = computed(() => {
-  if (props.isSessionEnded) return "会话已结束";
-  if (props.recordingStatus === "recording") return "停止录音";
-  if (props.recordingStatus === "connecting") return "连接中...";
-  return "开始录音";
-});
+  if (props.isSessionEnded) return '会话已结束'
+  if (props.recordingStatus === 'recording') return '停止录音'
+  if (props.recordingStatus === 'connecting') return '连接中...'
+  return '开始录音'
+})
 
-const muteButtonText = computed(() => (props.isPaused ? "继续" : "切麦/闭麦"));
+const muteButtonText = computed(() => (props.isPaused ? '继续' : '切麦/闭麦'))
 </script>
 
 <style scoped>

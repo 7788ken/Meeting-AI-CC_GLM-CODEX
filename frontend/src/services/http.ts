@@ -28,21 +28,21 @@ export const getApiBaseUrl = () => http.defaults.baseURL || '/api'
 
 // 请求拦截器
 http.interceptors.request.use(
-  (config) => {
+  config => {
     // 可在此添加token等认证信息
     return config
   },
-  (error) => {
+  error => {
     return Promise.reject(error)
   }
 )
 
 // 响应拦截器
 http.interceptors.response.use(
-  (response) => {
+  response => {
     return response.data
   },
-  (error) => {
+  error => {
     const message = error.response?.data?.message || error.message || '请求失败'
     console.error('[API Error]', message)
     return Promise.reject(new Error(message))
@@ -50,9 +50,7 @@ http.interceptors.response.use(
 )
 
 // 通用请求方法
-export const request = async <T = unknown>(
-  config: AxiosRequestConfig
-): Promise<T> => {
+export const request = async <T = unknown>(config: AxiosRequestConfig): Promise<T> => {
   return http.request<T>(config) as Promise<T>
 }
 

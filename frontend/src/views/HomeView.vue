@@ -8,10 +8,8 @@
         </div>
       </div>
       <div class="header-right">
-        <el-button plain @click="openConcurrencyDashboard">
-          运行中控大屏
-        </el-button>
-        <el-button type="primary" @click="createMeeting" :loading="loading">
+        <el-button plain @click="openConcurrencyDashboard"> 运行中控大屏 </el-button>
+        <el-button type="primary" :loading="loading" @click="createMeeting">
           + 创建新会议
         </el-button>
       </div>
@@ -62,10 +60,7 @@
               <template #header>
                 <div class="card-header" @click="openMeeting(meeting.id)">
                   <span class="meeting-title">{{ meeting.title || '未命名会议' }}</span>
-                  <el-tag
-                    :type="getMeetingStatusType(meeting)"
-                    size="small"
-                  >
+                  <el-tag :type="getMeetingStatusType(meeting)" size="small">
                     {{ getMeetingStatusText(meeting) }}
                   </el-tag>
                 </div>
@@ -94,8 +89,8 @@
                   v-if="activeTab === 'active'"
                   type="warning"
                   size="small"
-                  @click.stop="handleEnd(meeting.id)"
                   :loading="actionLoading[meeting.id]"
+                  @click.stop="handleEnd(meeting.id)"
                 >
                   结束
                 </el-button>
@@ -104,16 +99,16 @@
                   <el-button
                     type="primary"
                     size="small"
-                    @click.stop="handleArchive(meeting.id)"
                     :loading="actionLoading[meeting.id]"
+                    @click.stop="handleArchive(meeting.id)"
                   >
                     存档
                   </el-button>
                   <el-button
                     type="danger"
                     size="small"
-                    @click.stop="handleDelete(meeting.id)"
                     :loading="actionLoading[meeting.id]"
+                    @click.stop="handleDelete(meeting.id)"
                   >
                     删除
                   </el-button>
@@ -123,16 +118,16 @@
                   <el-button
                     type="info"
                     size="small"
-                    @click.stop="handleUnarchive(meeting.id)"
                     :loading="actionLoading[meeting.id]"
+                    @click.stop="handleUnarchive(meeting.id)"
                   >
                     取消存档
                   </el-button>
                   <el-button
                     type="danger"
                     size="small"
-                    @click.stop="handleDelete(meeting.id)"
                     :loading="actionLoading[meeting.id]"
+                    @click.stop="handleDelete(meeting.id)"
                   >
                     删除
                   </el-button>
@@ -175,15 +170,9 @@ const filteredMeetings = computed(() => {
 })
 
 // 统计各类型会议数量
-const activeCount = computed(() =>
-  meetings.value.filter(m => !m.endedAt && !m.isArchived).length
-)
-const endedCount = computed(() =>
-  meetings.value.filter(m => !!m.endedAt && !m.isArchived).length
-)
-const archivedCount = computed(() =>
-  meetings.value.filter(m => m.isArchived).length
-)
+const activeCount = computed(() => meetings.value.filter(m => !m.endedAt && !m.isArchived).length)
+const endedCount = computed(() => meetings.value.filter(m => !!m.endedAt && !m.isArchived).length)
+const archivedCount = computed(() => meetings.value.filter(m => m.isArchived).length)
 
 // 空状态描述
 const emptyDescription = computed(() => {
@@ -476,6 +465,10 @@ function getMeetingStatusText(meeting: Session): string {
   backdrop-filter: blur(14px);
 }
 
+.meeting-list :deep(.el-row) {
+  row-gap: 16px;
+}
+
 .meeting-card {
   cursor: pointer;
   transition:
@@ -486,7 +479,7 @@ function getMeetingStatusText(meeting: Session): string {
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-md);
-  border-color: rgba(15, 23, 42, 0.10);
+  border-color: rgba(15, 23, 42, 0.1);
   animation: rise-in 420ms var(--ease-out) both;
   animation-delay: calc(var(--stagger, 0) * 48ms);
 }
@@ -559,15 +552,23 @@ function getMeetingStatusText(meeting: Session): string {
 
   .header-right {
     width: 100%;
-    justify-content: flex-end;
+    justify-content: center;
   }
 
   .card-actions {
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
   }
 
   .card-actions .el-button {
-    width: 100%;
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  :deep(.el-button + .el-button) {
+    margin-left: 0 !important;
   }
 }
 </style>

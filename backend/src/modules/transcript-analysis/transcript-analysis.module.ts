@@ -37,6 +37,10 @@ import {
     ]),
   ],
   controllers: [TranscriptAnalysisController],
-  providers: [TranscriptAnalysisService, TranscriptAnalysisConfigService, TranscriptAnalysisGlmClient],
+  providers: [
+    TranscriptAnalysisService,
+    TranscriptAnalysisConfigService,
+    TranscriptAnalysisGlmClient,
+  ],
 })
 export class TranscriptAnalysisModule {}

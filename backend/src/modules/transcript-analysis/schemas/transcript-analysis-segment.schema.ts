@@ -40,7 +40,4 @@ export const TranscriptAnalysisSegmentAnalysisSchema = SchemaFactory.createForCl
   TranscriptAnalysisSegmentAnalysis
 )
 
-TranscriptAnalysisSegmentAnalysisSchema.index(
-  { sessionId: 1, segmentId: 1 },
-  { unique: true }
-)
+TranscriptAnalysisSegmentAnalysisSchema.index({ sessionId: 1, segmentId: 1 }, { unique: true })

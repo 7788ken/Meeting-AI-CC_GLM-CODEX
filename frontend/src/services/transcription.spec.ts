@@ -5,7 +5,7 @@ import * as websocketModule from './websocket'
 import type { Speech } from './api'
 
 // Mock dependencies
-vi.mock('./audioCapture', async (importOriginal) => {
+vi.mock('./audioCapture', async importOriginal => {
   const actual = await importOriginal<typeof import('./audioCapture')>()
   return {
     ...actual,
@@ -299,12 +299,12 @@ describe('TranscriptionService', () => {
     it('应该将 Float32 转换为 PCM16', async () => {
       let audioDataCallback: ((data: any) => void) | null = null
 
-      vi.mocked(audioCaptureModule.audioCapture).startCapture = vi.fn().mockImplementation(
-        (onData, onError) => {
+      vi.mocked(audioCaptureModule.audioCapture).startCapture = vi
+        .fn()
+        .mockImplementation((onData, onError) => {
           audioDataCallback = onData
           return Promise.resolve()
-        }
-      )
+        })
 
       await service.start({
         ...mockConfig,
@@ -331,12 +331,12 @@ describe('TranscriptionService', () => {
     it('应该处理音频溢出', async () => {
       let audioDataCallback: ((data: any) => void) | null = null
 
-      vi.mocked(audioCaptureModule.audioCapture).startCapture = vi.fn().mockImplementation(
-        (onData, onError) => {
+      vi.mocked(audioCaptureModule.audioCapture).startCapture = vi
+        .fn()
+        .mockImplementation((onData, onError) => {
           audioDataCallback = onData
           return Promise.resolve()
-        }
-      )
+        })
 
       await service.start({
         ...mockConfig,
@@ -360,14 +360,13 @@ describe('TranscriptionService', () => {
       expect(sentData[0]).toBeLessThanOrEqual(32767)
       expect(sentData[1]).toBeGreaterThanOrEqual(-32768)
     })
-
   })
 
   describe('转写结果处理', () => {
     it('应该处理最终转写结果', async () => {
       let messageCallback: ((data: any) => void) | null = null
 
-      mockWebsocket.onMessage = vi.fn().mockImplementation((callback) => {
+      mockWebsocket.onMessage = vi.fn().mockImplementation(callback => {
         messageCallback = callback
       })
 
@@ -407,7 +406,7 @@ describe('TranscriptionService', () => {
     it('应该处理非最终结果（增量更新）', async () => {
       let messageCallback: ((data: any) => void) | null = null
 
-      mockWebsocket.onMessage = vi.fn().mockImplementation((callback) => {
+      mockWebsocket.onMessage = vi.fn().mockImplementation(callback => {
         messageCallback = callback
       })
 
@@ -440,7 +439,7 @@ describe('TranscriptionService', () => {
     it('应该处理错误消息', async () => {
       let messageCallback: ((data: any) => void) | null = null
 
-      mockWebsocket.onMessage = vi.fn().mockImplementation((callback) => {
+      mockWebsocket.onMessage = vi.fn().mockImplementation(callback => {
         messageCallback = callback
       })
 

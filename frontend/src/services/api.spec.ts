@@ -90,7 +90,6 @@ describe('API Services', () => {
         expect(put).toHaveBeenCalledWith('/sessions/session-1/status', { status: 'paused' })
       })
     })
-
   })
 
   describe('speechApi', () => {
@@ -113,10 +112,7 @@ describe('API Services', () => {
 
     describe('batchCreate', () => {
       it('应该批量创建发言记录', async () => {
-        const speechesData = [
-          { content: '发言1' },
-          { content: '发言2' },
-        ]
+        const speechesData = [{ content: '发言1' }, { content: '发言2' }]
         vi.mocked(post).mockResolvedValue({
           data: [{ id: 'speech-1' }, { id: 'speech-2' }],
         })
@@ -232,5 +228,4 @@ describe('API Services', () => {
       })
     })
   })
-
 })

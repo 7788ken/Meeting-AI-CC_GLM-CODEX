@@ -193,7 +193,11 @@ export class UpdateAppConfigDto {
   @Max(50)
   glmAsrConcurrency?: number
 
-  @ApiPropertyOptional({ description: 'GLM ASR 启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  @ApiPropertyOptional({
+    description: 'GLM ASR 启动请求最小间隔（ms）',
+    minimum: 0,
+    maximum: 60000,
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -228,14 +232,22 @@ export class UpdateAppConfigDto {
   @Max(50)
   glmTranscriptEventSegmentRebuildConcurrency?: number
 
-  @ApiPropertyOptional({ description: '语句拆分启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  @ApiPropertyOptional({
+    description: '语句拆分启动请求最小间隔（ms）',
+    minimum: 0,
+    maximum: 60000,
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
   @Max(60000)
   glmTranscriptEventSegmentMinIntervalMs?: number
 
-  @ApiPropertyOptional({ description: '语句重建拆分启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  @ApiPropertyOptional({
+    description: '语句重建拆分启动请求最小间隔（ms）',
+    minimum: 0,
+    maximum: 60000,
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -263,7 +275,11 @@ export class UpdateAppConfigDto {
   @Max(300000)
   glmTranscriptEventSegmentRateLimitMaxMs?: number
 
-  @ApiPropertyOptional({ description: '语句重建拆分冷却时间上限（ms）', minimum: 0, maximum: 300000 })
+  @ApiPropertyOptional({
+    description: '语句重建拆分冷却时间上限（ms）',
+    minimum: 0,
+    maximum: 300000,
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -277,7 +293,11 @@ export class UpdateAppConfigDto {
   @Max(50)
   glmTranscriptEventSegmentTranslationConcurrency?: number
 
-  @ApiPropertyOptional({ description: '语句翻译启动请求最小间隔（ms）', minimum: 0, maximum: 60000 })
+  @ApiPropertyOptional({
+    description: '语句翻译启动请求最小间隔（ms）',
+    minimum: 0,
+    maximum: 60000,
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -340,7 +360,11 @@ export class UpdateAppConfigDto {
   @Max(5000)
   transcriptEventsSegmentMaxPendingSessions?: number
 
-  @ApiPropertyOptional({ description: '语句拆分待处理最大滞留时间（ms）', minimum: 1000, maximum: 300000 })
+  @ApiPropertyOptional({
+    description: '语句拆分待处理最大滞留时间（ms）',
+    minimum: 1000,
+    maximum: 300000,
+  })
   @IsOptional()
   @IsInt()
   @Min(1000)

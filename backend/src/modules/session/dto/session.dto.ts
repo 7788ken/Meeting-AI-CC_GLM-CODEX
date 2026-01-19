@@ -42,4 +42,10 @@ export class SessionDto {
 
   @ApiProperty({ description: '是否已存档' })
   isArchived: boolean
+
+  @ApiPropertyOptional({ description: '最近请求时间', required: false })
+  lastRequestAt?: Date | null
+
+  @ApiPropertyOptional({ description: '是否录音中', required: false })
+  isRecording?: boolean
 }

@@ -21,6 +21,7 @@ import { TranscriptEventSegmentationConfigService } from './modules/transcript-e
 import { TranscriptEventSegmentTranslationService } from './modules/transcript-event-segmentation/transcript-event-segment-translation.service'
 import { AppConfigService } from './modules/app-config/app-config.service'
 import { AppLogService } from './modules/app-log/app-log.service'
+import { SessionActivityService } from './modules/ops/session-activity.service'
 import { randomBytes } from 'crypto'
 import { SpeechService } from './modules/speech/speech.service'
 import { isSegmentKeyRollback } from './modules/transcript/segment-key'
@@ -37,6 +38,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService)
   const appConfigService = app.get(AppConfigService)
   const appLogService = app.get(AppLogService)
+  const sessionActivityService = app.get(SessionActivityService)
   const logger = new Logger('Bootstrap')
 
   // 进程级异常兜底，避免未处理异常直接导致服务退出
@@ -279,6 +281,10 @@ async function bootstrap() {
 
               const previousSessionId = clientSessions.get(ws)
               if (previousSessionId && previousSessionId !== nextSessionId) {
+                const currentClientId = getClientId(ws)
+                if (currentClientId) {
+                  sessionActivityService.markRecordingStop(previousSessionId, currentClientId)
+                }
                 removeClientFromSession(previousSessionId, ws)
                 segmentKeyToEventIndexBySessionClient.delete(
                   getSegmentKeyMapKey(previousSessionId, clientId)
@@ -313,6 +319,10 @@ async function bootstrap() {
             {
               const clientId = getClientId(ws)
               if (clientId) {
+                const sessionId = clientSessions.get(ws)
+                if (sessionId) {
+                  sessionActivityService.markRecordingStart(sessionId, clientId)
+                }
                 const asrConfig = readAsrConfig(message)
                 smartAudioBufferService.updateConfig(clientId, asrConfig)
               }
@@ -331,6 +341,7 @@ async function bootstrap() {
               if (clientId) {
                 const sessionId = clientSessions.get(ws)
                 if (sessionId) {
+                  sessionActivityService.markRecordingStop(sessionId, clientId)
                   const flushed = smartAudioBufferService.flush(clientId, { force: true })
                   if (flushed.buffer) {
                     await enqueueGlmTranscription(
@@ -390,6 +401,7 @@ async function bootstrap() {
         }
 
         try {
+          sessionActivityService.recordAudio(sessionId, clientId)
           if (!audioStarted.has(ws)) {
             audioStarted.add(ws)
             wsLogger.log(`Audio streaming started, clientId=${clientId}, sessionId=${sessionId}`)
@@ -432,6 +444,9 @@ async function bootstrap() {
         segmentKeyAudioDurationMsBySessionClient.delete(getSegmentKeyMapKey(sessionId, clientId))
       }
       if (sessionId) {
+        if (clientId) {
+          sessionActivityService.markRecordingStop(sessionId, clientId)
+        }
         removeClientFromSession(sessionId, ws)
         void appLogService.recordSystemLog({
           sessionId,
@@ -974,7 +989,7 @@ async function bootstrap() {
     const revision =
       typeof input.revision === 'number'
         ? Math.max(0, Math.floor(input.revision))
-        : transcriptEventSegmentationLatestRevisionBySession.get(sessionId) ?? 0
+        : (transcriptEventSegmentationLatestRevisionBySession.get(sessionId) ?? 0)
 
     const existing = transcriptEventSegmentationPendingBySession.get(sessionId)
     const shouldUpdateMeta = !existing || input.force || revision >= existing.revision
@@ -1025,9 +1040,7 @@ async function bootstrap() {
     }
 
     if (dropped) {
-      wsLogger.warn(
-        `Transcript event segmentation pending overflow, dropped sessionId=${dropped}`
-      )
+      wsLogger.warn(`Transcript event segmentation pending overflow, dropped sessionId=${dropped}`)
       cleanupTranscriptEventSegmentationSession(dropped)
     }
   }
@@ -1081,9 +1094,7 @@ async function bootstrap() {
       const maxStalenessMs = getSegmentationMaxStalenessMs()
       if (maxStalenessMs > 0 && Date.now() - pending.enqueuedAt > maxStalenessMs) {
         transcriptEventSegmentationPendingBySession.delete(sessionId)
-        wsLogger.warn(
-          `Transcript event segmentation pending stale, dropped sessionId=${sessionId}`
-        )
+        wsLogger.warn(`Transcript event segmentation pending stale, dropped sessionId=${sessionId}`)
         cleanupTranscriptEventSegmentationSession(sessionId)
         continue
       }
@@ -1241,11 +1252,7 @@ async function bootstrap() {
   }
 
   function getAutoSplitGapMs(): number {
-    return appConfigService.getNumber(
-      'TRANSCRIPT_AUTO_SPLIT_GAP_MS',
-      2500,
-      value => value >= 0
-    )
+    return appConfigService.getNumber('TRANSCRIPT_AUTO_SPLIT_GAP_MS', 2500, value => value >= 0)
   }
 
   // 启动服务器

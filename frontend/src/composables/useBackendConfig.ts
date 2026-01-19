@@ -90,10 +90,7 @@ function normalizeText(value: unknown, fallback: string): string {
   return value.trim()
 }
 
-function normalizeBackendConfig(
-  input: Partial<BackendConfig>,
-  base: BackendConfig
-): BackendConfig {
+function normalizeBackendConfig(input: Partial<BackendConfig>, base: BackendConfig): BackendConfig {
   const transcriptMaxBufferDurationSoftMs = normalizeNumberInRange(
     input.transcriptMaxBufferDurationSoftMs,
     base.transcriptMaxBufferDurationSoftMs,
@@ -290,21 +287,17 @@ function normalizeBackendConfig(
       input.appLogRequestResponseEnabled,
       base.appLogRequestResponseEnabled
     ),
-    appLogErrorEnabled: normalizeBoolean(
-      input.appLogErrorEnabled,
-      base.appLogErrorEnabled
-    ),
-    appLogSystemEnabled: normalizeBoolean(
-      input.appLogSystemEnabled,
-      base.appLogSystemEnabled
-    ),
+    appLogErrorEnabled: normalizeBoolean(input.appLogErrorEnabled, base.appLogErrorEnabled),
+    appLogSystemEnabled: normalizeBoolean(input.appLogSystemEnabled, base.appLogSystemEnabled),
     transcriptSegmentTranslationEnabled: normalizeBoolean(
       input.transcriptSegmentTranslationEnabled,
       base.transcriptSegmentTranslationEnabled
     ),
     transcriptSegmentTranslationLanguage:
-      normalizeText(input.transcriptSegmentTranslationLanguage, base.transcriptSegmentTranslationLanguage) ||
-      base.transcriptSegmentTranslationLanguage,
+      normalizeText(
+        input.transcriptSegmentTranslationLanguage,
+        base.transcriptSegmentTranslationLanguage
+      ) || base.transcriptSegmentTranslationLanguage,
     glmTranscriptSegmentTranslationModel: normalizeText(
       input.glmTranscriptSegmentTranslationModel,
       base.glmTranscriptSegmentTranslationModel

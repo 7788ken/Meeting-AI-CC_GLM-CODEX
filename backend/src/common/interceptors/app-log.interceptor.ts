@@ -3,10 +3,14 @@ import type { Request, Response } from 'express'
 import { Observable } from 'rxjs'
 import { tap } from 'rxjs/operators'
 import { AppLogService } from '../../modules/app-log/app-log.service'
+import { SessionActivityService } from '../../modules/ops/session-activity.service'
 
 @Injectable()
 export class AppLogInterceptor implements NestInterceptor {
-  constructor(private readonly appLogService: AppLogService) {}
+  constructor(
+    private readonly appLogService: AppLogService,
+    private readonly sessionActivityService: SessionActivityService
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     if (context.getType() !== 'http') {
@@ -18,6 +22,9 @@ export class AppLogInterceptor implements NestInterceptor {
     const response = httpContext.getResponse<Response>()
     const startAt = Date.now()
     const sessionId = extractSessionId(request)
+    if (sessionId) {
+      this.sessionActivityService.recordActivity(sessionId)
+    }
 
     return next.handle().pipe(
       tap({

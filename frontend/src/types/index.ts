@@ -8,9 +8,7 @@ export interface SelectOption {
 // AI模型类型
 export type AIModel = 'glm'
 
-export const AI_MODELS: SelectOption[] = [
-  { label: 'GLM', value: 'glm' },
-]
+export const AI_MODELS: SelectOption[] = [{ label: 'GLM', value: 'glm' }]
 
 // ASR 配置
 export type AsrLanguage = 'zh' | 'en' | 'yue' | 'auto'

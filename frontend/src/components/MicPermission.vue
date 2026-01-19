@@ -20,12 +20,7 @@
       <template v-else-if="permissionStatus === 'denied'">
         <p class="permission-text permission-denied">麦克风权限已被拒绝</p>
         <p class="permission-hint">请在浏览器设置中允许麦克风访问，然后刷新页面</p>
-        <el-alert
-          title="如何开启麦克风权限"
-          type="info"
-          :closable="false"
-          show-icon
-        >
+        <el-alert title="如何开启麦克风权限" type="info" :closable="false" show-icon>
           <template #default>
             <ol class="permission-steps">
               <li>点击浏览器地址栏左侧的锁图标</li>
@@ -83,7 +78,7 @@ const props = withDefaults(
   }>(),
   {
     autoCheck: true,
-  },
+  }
 )
 
 const emit = defineEmits<{
@@ -98,7 +93,7 @@ const requesting = ref(false)
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val),
+  set: val => emit('update:modelValue', val),
 })
 
 /**
@@ -136,7 +131,7 @@ async function requestPermission(): Promise<boolean> {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 
     // 立即停止流，只是检查权限
-    stream.getTracks().forEach((track) => track.stop())
+    stream.getTracks().forEach(track => track.stop())
 
     permissionStatus.value = 'granted'
     emit('granted')
@@ -190,7 +185,7 @@ function handleContinue() {
  */
 watch(
   () => props.modelValue,
-  async (opened) => {
+  async opened => {
     if (opened && props.autoCheck) {
       const status = await checkPermission()
       if (status === 'granted') {
@@ -200,7 +195,7 @@ watch(
       }
     }
   },
-  { immediate: true },
+  { immediate: true }
 )
 
 // 导出方法供父组件调用

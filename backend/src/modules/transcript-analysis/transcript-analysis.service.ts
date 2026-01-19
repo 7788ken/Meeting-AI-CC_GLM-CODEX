@@ -290,8 +290,7 @@ export class TranscriptAnalysisService {
     }
 
     if (events.length === 0) {
-      const markdown =
-        `# 会议分析总结\n\n## 一句话结论\n暂无可分析的原文。\n\n## 议题与结论\n- 未明确\n\n## 关键要点\n- 未明确\n\n## 决策\n- 未明确\n\n## 行动项（TODO）\n- 未明确\n\n## 风险与阻塞\n- 未明确\n\n## 待澄清问题\n- 未明确\n\n## 附：原文引用（可选）\n- 无\n`
+      const markdown = `# 会议分析总结\n\n## 一句话结论\n暂无可分析的原文。\n\n## 议题与结论\n- 未明确\n\n## 关键要点\n- 未明确\n\n## 决策\n- 未明确\n\n## 行动项（TODO）\n- 未明确\n\n## 风险与阻塞\n- 未明确\n\n## 待澄清问题\n- 未明确\n\n## 附：原文引用（可选）\n- 无\n`
       markdownBuffer = markdown
       yield { type: 'delta', data: markdown }
       const generatedAt = new Date().toISOString()
@@ -784,9 +783,8 @@ export class TranscriptAnalysisService {
       legacyEnabled
     )
     if (!enabled) return basePrompt
-    const targetLanguage = this.appConfigService
-      .getString('TRANSCRIPT_ANALYSIS_LANGUAGE', '')
-      .trim() || '简体中文'
+    const targetLanguage =
+      this.appConfigService.getString('TRANSCRIPT_ANALYSIS_LANGUAGE', '').trim() || '简体中文'
     return `${basePrompt}\n\n输出语言要求：${targetLanguage}。`
   }
 

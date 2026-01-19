@@ -3,7 +3,7 @@
     <template #header>
       <AppHeader
         title="AI会议助手"
-        :showBackButton="true"
+        :show-back-button="true"
         :status="sessionInfo?.isActive ? 'active' : 'ended'"
         @back="router.push('/')"
       />
@@ -74,35 +74,49 @@
 
     <div :class="['workspace-grid', { 'realtime-collapsed': realtimeCollapsed }]">
       <!-- 上部：原文流（GLM 语音识别） -->
-      <section :class="['realtime-transcript-bar', { collapsed: realtimeCollapsed }]" class="app-surface">
+      <section
+        :class="['realtime-transcript-bar', { collapsed: realtimeCollapsed }]"
+        class="app-surface"
+      >
         <div class="realtime-header">
           <div class="realtime-title">
             <h3>语音转写</h3>
-          <el-button
-            size="small"
-            class="ghost-button"
-            :aria-label="realtimeCollapsed ? '展开语音转写' : '折叠语音转写'"
-            @click="realtimeCollapsed = !realtimeCollapsed"
-          >
-            <el-icon>
-              <component :is="realtimeCollapsed ? ArrowRight : ArrowLeft" />
-            </el-icon>
-          </el-button>
+            <el-button
+              size="small"
+              class="ghost-button"
+              :aria-label="realtimeCollapsed ? '展开语音转写' : '折叠语音转写'"
+              @click="realtimeCollapsed = !realtimeCollapsed"
+            >
+              <el-icon>
+                <component :is="realtimeCollapsed ? ArrowRight : ArrowLeft" />
+              </el-icon>
+            </el-button>
           </div>
-  	        <div class="realtime-status">
-  	           
-  	          <el-tag type="info" size="small">事件数: {{ transcriptStreamStore.events.length }}</el-tag>
-  	          
-  	          <el-tag v-if="segmentationStageText" :type="segmentationStageTagType" size="small">
-  	            LLM: {{ segmentationStageText }}
-  	          </el-tag>
-  	        </div>
-  	      </div>
-  	      <div v-show="!realtimeCollapsed" class="realtime-content">
+          <div class="realtime-status">
+            <el-tag type="info" size="small" class="meta-tag">
+              事件数: {{ transcriptStreamStore.events.length }}
+            </el-tag>
+
+            <el-tag
+              v-if="segmentationStageText"
+              :type="segmentationStageTagType"
+              size="small"
+              class="meta-tag"
+            >
+              LLM: {{ segmentationStageText }}
+            </el-tag>
+          </div>
+        </div>
+        <div v-show="!realtimeCollapsed" class="realtime-content">
           <div v-if="transcriptStreamStore.events.length === 0" class="realtime-placeholder">
             暂无实时转写内容
           </div>
-          <div v-else ref="realtimeScrollRef" class="realtime-stream-scroll" @scroll="handleRealtimeScroll">
+          <div
+            v-else
+            ref="realtimeScrollRef"
+            class="realtime-stream-scroll"
+            @scroll="handleRealtimeScroll"
+          >
             <div class="realtime-stream" role="article" aria-label="原文流内容">
               <span
                 v-for="(event, index) in transcriptStreamStore.events"
@@ -127,12 +141,20 @@
                   </span>
                 </span>
                 <span class="event-text">
-                  <template v-if="getEventHighlightParts(event.eventIndex, event.content)?.mode === 'partial'">
-                    <span>{{ getEventHighlightParts(event.eventIndex, event.content)?.before }}</span>
+                  <template
+                    v-if="
+                      getEventHighlightParts(event.eventIndex, event.content)?.mode === 'partial'
+                    "
+                  >
+                    <span>{{
+                      getEventHighlightParts(event.eventIndex, event.content)?.before
+                    }}</span>
                     <span class="event-text-highlight">
                       {{ getEventHighlightParts(event.eventIndex, event.content)?.highlight }}
                     </span>
-                    <span>{{ getEventHighlightParts(event.eventIndex, event.content)?.after }}</span>
+                    <span>{{
+                      getEventHighlightParts(event.eventIndex, event.content)?.after
+                    }}</span>
                   </template>
                   <template v-else>
                     {{ event.content }}
@@ -147,221 +169,311 @@
 
       <!-- 下部：左右分栏 -->
       <div class="content-area" :class="{ narrow: isNarrow }">
-      <!-- 下左：GLM 拆分后的独立发言 -->
-	      <section class="transcript-panel app-surface">
-	      <div class="panel-header">
-        <div class="panel-title-row">
-          <h2>语句拆分</h2>
-          <el-radio-group
-            v-model="segmentDisplayMode"
-            size="small"
-            class="segment-display-toggle"
-            :disabled="!transcriptSegmentTranslationAvailable"
-            @change="segmentDisplayTouched = true"
+        <div v-if="isNarrow" class="mobile-pane-switch" role="tablist" aria-label="内容切换">
+          <button
+            type="button"
+            role="tab"
+            class="pane-tab"
+            :class="{ 'is-active': mobilePane === 'transcript' }"
+            :aria-selected="mobilePane === 'transcript'"
+            @click="mobilePane = 'transcript'"
           >
-            <el-radio-button value="source">原文</el-radio-button>
-            <el-radio-button value="translated">翻译</el-radio-button>
-          </el-radio-group>
-          <el-tag
-	            v-if="transcriptEventSegmentationStore.pointerEventIndex != null"
-	            :type="transcriptEventSegmentationStore.isInFlight ? 'warning' : 'info'"
-	            size="small"
-	          >
-	            {{ transcriptEventSegmentationStore.isInFlight ? '拆分中' : '拆分进度' }}:
-	            #{{ transcriptEventSegmentationStore.pointerEventIndex }}
-	            <template v-if="maxAvailableEventIndex != null">
-	              /#{{ maxAvailableEventIndex }}
-	            </template>
-	          </el-tag>
-          </div>
-	        <div class="panel-actions">
-          <el-button
-            v-if="showRebuildButton"
-            size="small"
-            type="danger"
-            plain
-            :icon="Refresh"
-            :loading="rebuildingTranscriptSegments"
-            :disabled="!sessionId || rebuildingTranscriptSegments"
-            @click="rebuildTranscriptSegments"
+            语句拆分
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="pane-tab"
+            :class="{ 'is-active': mobilePane === 'analysis' }"
+            :aria-selected="mobilePane === 'analysis'"
+            @click="mobilePane = 'analysis'"
           >
-	            重拆
-	          </el-button>
-	          <el-tooltip
-	            :content="transcriptSegmentOrder === 'desc' ? '切换为正序（旧→新）' : '切换为倒序（新→旧）'"
-	            placement="bottom"
-	          >
-            <el-button
-              size="small"
-              class="segment-order-trigger"
-              :icon="transcriptSegmentOrder === 'desc' ? SortDown : SortUp"
-              @click="transcriptSegmentOrder = transcriptSegmentOrder === 'desc' ? 'asc' : 'desc'"
-            >
-              {{ transcriptSegmentOrder === 'desc' ? '倒序' : '正序' }}
-            </el-button>
-          </el-tooltip>
+            {{ analysisMode === 'target' ? '针对性分析' : 'AI 分析' }}
+          </button>
         </div>
-      </div>
+        <!-- 下左：GLM 拆分后的独立发言 -->
+        <section v-show="showTranscriptPanel" class="transcript-panel app-surface">
+          <div class="panel-header">
+            <div class="panel-title-row">
+              <h2>语句拆分</h2>
+              <el-radio-group
+                v-model="segmentDisplayMode"
+                size="small"
+                class="segment-display-toggle"
+                :disabled="!transcriptSegmentTranslationAvailable"
+                @change="segmentDisplayTouched = true"
+              >
+                <el-radio-button value="source">原文</el-radio-button>
+                <el-radio-button value="translated">翻译</el-radio-button>
+              </el-radio-group>
+              <el-tooltip
+                v-if="transcriptEventSegmentationStore.pointerEventIndex != null"
+                :content="segmentationProgressText"
+                placement="bottom"
+              >
+                <el-tag
+                  :type="transcriptEventSegmentationStore.isInFlight ? 'warning' : 'info'"
+                  size="small"
+                  class="meta-tag meta-tag-icon"
+                  :aria-label="segmentationProgressText"
+                >
+                  <el-icon
+                    :class="{
+                      'is-spinning': transcriptEventSegmentationStore.isInFlight,
+                    }"
+                  >
+                    <component :is="segmentationProgressIcon" />
+                  </el-icon>
+                  <span class="meta-tag-text">{{ segmentationProgressRatio }}</span>
+                </el-tag>
+              </el-tooltip>
+            </div>
+            <div class="panel-actions">
+              <el-tooltip v-if="showRebuildButton" content="重拆语句拆分" placement="bottom">
+                <el-button
+                  size="small"
+                  type="danger"
+                  plain
+                  circle
+                  :icon="Refresh"
+                  :loading="rebuildingTranscriptSegments"
+                  :disabled="!sessionId || rebuildingTranscriptSegments"
+                  aria-label="重拆语句拆分"
+                  @click="rebuildTranscriptSegments"
+                />
+              </el-tooltip>
+              <el-tooltip
+                :content="
+                  transcriptSegmentOrder === 'desc' ? '切换为正序（旧→新）' : '切换为倒序（新→旧）'
+                "
+                placement="bottom"
+              >
+                <el-button
+                  size="small"
+                  class="segment-order-trigger"
+                  circle
+                  :icon="transcriptSegmentOrder === 'desc' ? SortDown : SortUp"
+                  :aria-label="
+                    transcriptSegmentOrder === 'desc'
+                      ? '切换为正序（旧→新）'
+                      : '切换为倒序（新→旧）'
+                  "
+                  @click="
+                    transcriptSegmentOrder = transcriptSegmentOrder === 'desc' ? 'asc' : 'desc'
+                  "
+                />
+              </el-tooltip>
+            </div>
+          </div>
 
-	      <div class="transcript-content">
-	        <TranscriptEventSegmentsPanel
-          :segments="transcriptEventSegmentationStore.segments"
-          :order="transcriptSegmentOrder"
-          :loading="transcriptEventSegmentationStore.isLoadingSnapshot"
-          :progress="transcriptEventSegmentationStore.progress"
-          :translation-enabled="transcriptSegmentTranslationAvailable"
-          :display-mode="segmentDisplayMode"
-          :highlighted-segment-id="analysisMode === 'target' ? targetSegment?.id : null"
-          @select-range="focusRealtimeRange"
-          @target-analysis="handleTargetAnalysis"
-	        />
-	      </div>
-	    </section>
+          <div class="transcript-content">
+            <TranscriptEventSegmentsPanel
+              :segments="transcriptEventSegmentationStore.segments"
+              :order="transcriptSegmentOrder"
+              :loading="transcriptEventSegmentationStore.isLoadingSnapshot"
+              :progress="transcriptEventSegmentationStore.progress"
+              :translation-enabled="transcriptSegmentTranslationAvailable"
+              :display-mode="segmentDisplayMode"
+              :highlighted-segment-id="analysisMode === 'target' ? targetSegment?.id : null"
+              @select-range="focusRealtimeRange"
+              @target-analysis="handleTargetAnalysis"
+            />
+          </div>
+        </section>
 
-	    <!-- 通用分析总结面板 -->
-	    <section v-show="analysisMode === 'general'" class="analysis-panel app-surface">
-	      <div class="panel-header">
-	        <div class="panel-title-row">
-	          <h2>{{ analysisPanelTitle }}</h2>
-	          <el-tag v-if="hasAnalysisContent" type="success" size="small">
-	            已分析
-	          </el-tag>
-	        </div>
-	        <div class="panel-actions">
-	          <el-button
-	            v-if="hasAnalysisContent && !isAnalyzing"
-	            size="small"
-	            type="danger"
-	            plain
-	            @click="clearAnalysis"
-	          >
-	            清空
-	          </el-button>
-	          <el-button
-	            size="small"
-	            type="primary"
-	            :icon="MagicStick"
-	            :loading="isAnalyzing"
-	            :disabled="!sessionId || transcriptStreamStore.nextEventIndex === 0"
-	            @click="startAnalysis"
-	          >
-	            {{ isAnalyzing ? '分析中...' : (hasAnalysisContent ? '重新分析' : '开始分析') }}
-	          </el-button>
-	        </div>
-	      </div>
+        <!-- 通用分析总结面板 -->
+        <section
+          v-show="analysisMode === 'general' && showAnalysisPanel"
+          class="analysis-panel app-surface"
+        >
+          <div class="panel-header">
+            <div class="panel-title-row">
+              <h2>{{ analysisPanelTitle }}</h2>
+              <el-icon v-if="hasAnalysisContent" class="analysis-status-icon" aria-label="已分析">
+                <CircleCheck />
+              </el-icon>
+            </div>
+            <div class="panel-actions">
+              <el-button
+                v-if="hasAnalysisContent && !isAnalyzing"
+                size="small"
+                type="danger"
+                plain
+                circle
+                class="analysis-action-button analysis-icon-button"
+                :icon="Delete"
+                aria-label="清空"
+                @click="clearAnalysis"
+              />
+              <el-tooltip :content="analysisActionText" placement="bottom">
+                <el-button
+                  size="small"
+                  type="primary"
+                  circle
+                  :icon="analysisActionIcon"
+                  class="analysis-action-button analysis-icon-button"
+                  :class="{ 'is-analyzing': isAnalyzing }"
+                  :loading="isAnalyzing"
+                  :disabled="!sessionId || transcriptStreamStore.nextEventIndex === 0"
+                  :aria-label="analysisActionText"
+                  @click="startAnalysis"
+                />
+              </el-tooltip>
+            </div>
+          </div>
 
-	      <div class="analysis-content" ref="analysisScrollRef">
-	        <!-- 空状态占位符 -->
-	        <div v-if="!hasAnalysisContent && !isAnalyzing && !analysisError" class="analysis-empty">
-	          <div class="empty-icon">
-	            <el-icon :size="48"><Document /></el-icon>
-	          </div>
-	          <p class="empty-text">等待分析</p>
-	          <p class="empty-hint">点击右上角"开始分析"按钮生成会议总结</p>
-	        </div>
+          <div ref="analysisScrollRef" class="analysis-content">
+            <!-- 空状态占位符 -->
+            <div
+              v-if="!hasAnalysisContent && !isAnalyzing && !analysisError"
+              class="analysis-empty"
+            >
+              <div class="empty-icon">
+                <el-icon :size="48"><Document /></el-icon>
+              </div>
+              <p class="empty-text">等待分析</p>
+              <p class="empty-hint">点击右上角"开始分析"按钮生成会议总结</p>
+            </div>
 
-	        <!-- 加载状态 -->
-	        <div v-if="isAnalyzing && !hasAnalysisContent" class="analysis-loading" role="status" aria-live="polite">
-	          <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
-	          <p class="analysis-loading-text">
-	            正在分析中，请稍候
-	            <span class="loading-dots" aria-hidden="true">
-	              <span class="loading-dot" />
-	              <span class="loading-dot" />
-	              <span class="loading-dot" />
-	            </span>
-	          </p>
-	          <p v-if="analysisProgress" class="analysis-progress">{{ analysisProgress }}</p>
-	        </div>
+            <!-- 加载状态 -->
+            <div
+              v-if="isAnalyzing && !hasAnalysisContent"
+              class="analysis-loading"
+              role="status"
+              aria-live="polite"
+            >
+              <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
+              <p class="analysis-loading-text">
+                正在分析中，请稍候
+                <span class="loading-dots" aria-hidden="true">
+                  <span class="loading-dot" />
+                  <span class="loading-dot" />
+                  <span class="loading-dot" />
+                </span>
+              </p>
+              <p v-if="analysisProgress" class="analysis-progress">
+                {{ analysisProgress }}
+              </p>
+            </div>
 
-	        <div v-if="isAnalyzing && hasAnalysisContent && analysisProgress" class="analysis-stream-status">
-	          {{ analysisProgress }}
-	        </div>
+            <div
+              v-if="isAnalyzing && hasAnalysisContent && analysisProgress"
+              class="analysis-stream-status"
+            >
+              {{ analysisProgress }}
+            </div>
 
-	        <!-- 错误状态 -->
-	        <div v-if="analysisError && !isAnalyzing" class="analysis-error">
-	          <p>{{ analysisError }}</p>
-	          <el-button size="small" @click="startAnalysis">重试</el-button>
-	        </div>
+            <!-- 错误状态 -->
+            <div v-if="analysisError && !isAnalyzing" class="analysis-error">
+              <p>{{ analysisError }}</p>
+              <el-button size="small" @click="startAnalysis">重试</el-button>
+            </div>
 
-	        <!-- 分析结果 -->
-	        <div v-if="hasAnalysisContent" class="analysis-result" v-html="renderedAnalysisResult" />
-	      </div>
-	    </section>
+            <!-- 分析结果 -->
+            <div
+              v-if="hasAnalysisContent"
+              class="analysis-result"
+              v-html="renderedAnalysisResult"
+            />
+          </div>
+        </section>
 
-	    <!-- 针对性分析面板 -->
-	    <section v-show="analysisMode === 'target'" class="target-analysis-panel app-surface">
-	      <div class="panel-header">
-	        <div class="panel-title-row">
-	          <h2>{{ targetAnalysisPanelTitle }}</h2>
-	          <el-tag v-if="hasTargetAnalysisContent" type="success" size="small">
-	            已分析
-	          </el-tag>
-	        </div>
-	        <div class="panel-actions">
-	          <el-button
-	            size="small"
-	            class="ghost-button"
-	            @click="switchToGeneralAnalysis"
-	          >
-	            返回总结
-	          </el-button>
-	          <el-button
-	            v-if="hasTargetAnalysisContent && !isTargetAnalyzing"
-	            size="small"
-	            type="primary"
-	            plain
-	            :icon="Refresh"
-	            @click="startTargetAnalysis({ force: true })"
-	          >
-	            重新分析
-	          </el-button>
-	        </div>
-	      </div>
+        <!-- 针对性分析面板 -->
+        <section
+          v-show="analysisMode === 'target' && showAnalysisPanel"
+          class="target-analysis-panel app-surface"
+        >
+          <div class="panel-header">
+            <div class="panel-title-row">
+              <el-tooltip content="返回总结" placement="bottom">
+                <el-button
+                  size="small"
+                  class="ghost-button analysis-action-button"
+                  circle
+                  :icon="ArrowLeft"
+                  aria-label="返回总结"
+                  @click="switchToGeneralAnalysis"
+                />
+              </el-tooltip>
+              <h2>{{ targetAnalysisPanelTitle }}</h2>
+              <el-icon
+                v-if="hasTargetAnalysisContent"
+                class="analysis-status-icon"
+                aria-label="已分析"
+              >
+                <CircleCheck />
+              </el-icon>
+            </div>
+            <div class="panel-actions">
+              <el-button
+                v-if="hasTargetAnalysisContent && !isTargetAnalyzing"
+                size="small"
+                type="primary"
+                plain
+                :icon="Refresh"
+                circle
+                class="analysis-action-button analysis-icon-button"
+                aria-label="重新分析"
+                @click="startTargetAnalysis({ force: true })"
+              />
+            </div>
+          </div>
 
-	      <div class="analysis-content">
-	        <!-- 空状态占位符 -->
-	        <div v-if="!hasTargetAnalysisContent && !isTargetAnalyzing && !targetAnalysisError" class="analysis-empty">
-	          <div class="empty-icon">
-	            <el-icon :size="48"><Document /></el-icon>
-	          </div>
-	          <p class="empty-text">等待分析</p>
-	          <p class="empty-hint">点击语句卡片上的"针对性分析"按钮生成分析</p>
-	          <div class="empty-actions">
-	            <el-button size="small" type="primary" plain @click="startTargetAnalysis({ force: true })">
-	              重试
-	            </el-button>
-	          </div>
-	        </div>
+          <div class="analysis-content">
+            <!-- 空状态占位符 -->
+            <div
+              v-if="!hasTargetAnalysisContent && !isTargetAnalyzing && !targetAnalysisError"
+              class="analysis-empty"
+            >
+              <div class="empty-icon">
+                <el-icon :size="48"><Document /></el-icon>
+              </div>
+              <p class="empty-text">等待分析</p>
+              <p class="empty-hint">点击语句卡片上的"针对性分析"按钮生成分析</p>
+              <div class="empty-actions">
+                <el-button
+                  size="small"
+                  type="primary"
+                  plain
+                  @click="startTargetAnalysis({ force: true })"
+                >
+                  重试
+                </el-button>
+              </div>
+            </div>
 
-	        <!-- 加载状态 -->
-	        <div
-	          v-if="isTargetAnalyzing && !hasTargetAnalysisContent"
-	          class="analysis-loading"
-	          role="status"
-	          aria-live="polite"
-	        >
-	          <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
-	          <p class="analysis-loading-text">
-	            正在针对性分析中，请稍候
-	            <span class="loading-dots" aria-hidden="true">
-	              <span class="loading-dot" />
-	              <span class="loading-dot" />
-	              <span class="loading-dot" />
-	            </span>
-	          </p>
-	        </div>
+            <!-- 加载状态 -->
+            <div
+              v-if="isTargetAnalyzing && !hasTargetAnalysisContent"
+              class="analysis-loading"
+              role="status"
+              aria-live="polite"
+            >
+              <el-icon class="is-spinning" :size="32"><Loading /></el-icon>
+              <p class="analysis-loading-text">
+                正在针对性分析中，请稍候
+                <span class="loading-dots" aria-hidden="true">
+                  <span class="loading-dot" />
+                  <span class="loading-dot" />
+                  <span class="loading-dot" />
+                </span>
+              </p>
+            </div>
 
-	        <!-- 错误状态 -->
-	        <div v-if="targetAnalysisError && !isTargetAnalyzing" class="analysis-error">
-	          <p>{{ targetAnalysisError }}</p>
-	          <el-button size="small" @click="startTargetAnalysis">重试</el-button>
-	        </div>
+            <!-- 错误状态 -->
+            <div v-if="targetAnalysisError && !isTargetAnalyzing" class="analysis-error">
+              <p>{{ targetAnalysisError }}</p>
+              <el-button size="small" @click="startTargetAnalysis">重试</el-button>
+            </div>
 
-	        <!-- 分析结果 -->
-	        <div v-if="hasTargetAnalysisContent" class="analysis-result" v-html="renderedTargetAnalysisResult" />
-	      </div>
-	    </section>
+            <!-- 分析结果 -->
+            <div
+              v-if="hasTargetAnalysisContent"
+              class="analysis-result"
+              v-html="renderedTargetAnalysisResult"
+            />
+          </div>
+        </section>
       </div>
     </div>
 
@@ -371,9 +483,9 @@
       :compact="isNarrow"
       :disabled="!sessionId"
       :ending="endingSession"
-      :isSessionEnded="isSessionEnded"
-      :recordingStatus="recordingStatus"
-      :isPaused="isPaused"
+      :is-session-ended="isSessionEnded"
+      :recording-status="recordingStatus"
+      :is-paused="isPaused"
       @toggle-recording="toggleRecording"
       @toggle-mute="pauseRecording"
       @end-session="endSession"
@@ -382,7 +494,6 @@
 
     <SettingsDrawer v-model="settingsDrawerVisible" />
     <DebugDrawer v-model="debugDrawerVisible" :session-id="sessionId" />
-
   </MainLayout>
 </template>
 
@@ -405,6 +516,8 @@ import {
   SortUp,
   Document,
   MagicStick,
+  CircleCheck,
+  Delete,
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -421,9 +534,17 @@ import {
   type TranscriptEventSegment,
 } from '@/services/api'
 import { getApiBaseUrl } from '@/services/http'
-import { clearSettingsPassword, getSettingsPassword, setSettingsPassword } from '@/services/settingsSecurity'
+import {
+  clearSettingsPassword,
+  getSettingsPassword,
+  setSettingsPassword,
+} from '@/services/settingsSecurity'
 import { transcription } from '@/services/transcription'
-import { websocket, type ConnectionStatus, type TranscriptEventSegmentationProgressData } from '@/services/websocket'
+import {
+  websocket,
+  type ConnectionStatus,
+  type TranscriptEventSegmentationProgressData,
+} from '@/services/websocket'
 import { useAppSettings } from '@/composables/useAppSettings'
 import { useBackendConfig } from '@/composables/useBackendConfig'
 import { useTranscriptStreamStore } from '@/stores/transcriptStream'
@@ -466,277 +587,278 @@ const aiQueueStatus = ref<'idle' | 'ready' | 'unauthorized' | 'error'>('idle')
 const aiQueueError = ref('')
 const aiQueuePollIntervalMs = 2500
 let aiQueueTimer: ReturnType<typeof setInterval> | null = null
-	const debugDrawerVisible = ref(false)
-	const settingsDrawerVisible = ref(false)
-  const openingSettingsDrawer = ref(false)
-	const transcriptSegmentOrder = ref<'asc' | 'desc'>('desc')
-	const rebuildingTranscriptSegments = ref(false)
-	const realtimeCollapsed = ref(false)
-	const isNarrow = ref(false)
-	const actionBarEnabled = computed(() => true)
-	type MeetingActionBarExpose = { openHelp: () => void; hostEl?: { value: HTMLElement | null } }
-	const actionBarRef = ref<MeetingActionBarExpose | null>(null)
-	const actionBarInsetPx = ref(0)
-	const appBottomInsetStyle = computed(() => `${actionBarInsetPx.value}px`)
-	const transcriptStreamStore = useTranscriptStreamStore()
-	const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
-  const { settings: appSettings } = useAppSettings()
-  const { backendConfig, refreshBackendConfig } = useBackendConfig()
-  const transcriptSegmentTranslationEnabled = computed(
-    () => backendConfig.value.transcriptSegmentTranslationEnabled === true
-  )
-  const showRebuildButton = computed(() => recordingStatus.value === 'idle')
-  const transcriptSegmentTranslationAvailable = computed(() => {
-    if (transcriptSegmentTranslationEnabled.value) return true
-    return transcriptEventSegmentationStore.segments.some(segment => {
-      if (typeof segment.translatedContent !== 'string') return false
-      return segment.translatedContent.trim().length > 0
-    })
+const debugDrawerVisible = ref(false)
+const settingsDrawerVisible = ref(false)
+const openingSettingsDrawer = ref(false)
+const transcriptSegmentOrder = ref<'asc' | 'desc'>('desc')
+const rebuildingTranscriptSegments = ref(false)
+const realtimeCollapsed = ref(false)
+const isNarrow = ref(false)
+const mobilePane = ref<'transcript' | 'analysis'>('transcript')
+const showTranscriptPanel = computed(() => !isNarrow.value || mobilePane.value === 'transcript')
+const showAnalysisPanel = computed(() => !isNarrow.value || mobilePane.value === 'analysis')
+const actionBarEnabled = computed(() => true)
+type MeetingActionBarExpose = { openHelp: () => void; hostEl?: { value: HTMLElement | null } }
+const actionBarRef = ref<MeetingActionBarExpose | null>(null)
+const actionBarInsetPx = ref(0)
+const appBottomInsetStyle = computed(() => `${actionBarInsetPx.value}px`)
+const transcriptStreamStore = useTranscriptStreamStore()
+const transcriptEventSegmentationStore = useTranscriptEventSegmentationStore()
+const { settings: appSettings } = useAppSettings()
+const { backendConfig, refreshBackendConfig } = useBackendConfig()
+const transcriptSegmentTranslationEnabled = computed(
+  () => backendConfig.value.transcriptSegmentTranslationEnabled === true
+)
+const showRebuildButton = computed(() => recordingStatus.value === 'idle')
+const transcriptSegmentTranslationAvailable = computed(() => {
+  if (transcriptSegmentTranslationEnabled.value) return true
+  return transcriptEventSegmentationStore.segments.some(segment => {
+    if (typeof segment.translatedContent !== 'string') return false
+    return segment.translatedContent.trim().length > 0
   })
-  const segmentDisplayMode = ref<'source' | 'translated'>('source')
-  const segmentDisplayTouched = ref(false)
-  const aiQueueDisplay = computed(() => {
-    if (!aiQueueStats.value) return '--'
-    return String(aiQueueStats.value.totalPending)
-  })
-  const aiQueueTagType = computed(() => {
-    if (aiQueueStatus.value === 'ready') return 'info'
-    return 'warning'
-  })
-  const aiQueueTooltip = computed(() => {
-    if (aiQueueStats.value) {
-      const instance = aiQueueStats.value.instanceId || '--'
-      return `口径：global.queue + global.inFlight（单实例）；实例：${instance}；不含上游 pending`
-    }
-    if (aiQueueStatus.value === 'unauthorized') {
-      return '未授权：请先验证系统设置密码'
-    }
-    if (aiQueueError.value) {
-      return `队列统计不可用：${aiQueueError.value}`
-    }
-    return '队列统计不可用'
-  })
-
-  function startAiQueueTimer(): void {
-    if (aiQueueTimer) return
-    aiQueueTimer = setInterval(() => {
-      void refreshAiQueueStats()
-    }, aiQueuePollIntervalMs)
+})
+const segmentDisplayMode = ref<'source' | 'translated'>('source')
+const segmentDisplayTouched = ref(false)
+const aiQueueDisplay = computed(() => {
+  if (!aiQueueStats.value) return '--'
+  return String(aiQueueStats.value.totalPending)
+})
+const aiQueueTagType = computed(() => {
+  if (aiQueueStatus.value === 'ready') return 'info'
+  return 'warning'
+})
+const aiQueueTooltip = computed(() => {
+  if (aiQueueStats.value) {
+    const instance = aiQueueStats.value.instanceId || '--'
+    return `口径：global.queue + global.inFlight（单实例）；实例：${instance}；不含上游 pending`
   }
-
-  function stopAiQueueTimer(): void {
-    if (!aiQueueTimer) return
-    clearInterval(aiQueueTimer)
-    aiQueueTimer = null
+  if (aiQueueStatus.value === 'unauthorized') {
+    return '未授权：请先验证系统设置密码'
   }
-
-  watch(
-    transcriptSegmentTranslationAvailable,
-    available => {
-      if (!available) {
-        segmentDisplayMode.value = 'source'
-        return
-      }
-      if (!segmentDisplayTouched.value) {
-        segmentDisplayMode.value = 'translated'
-      }
-    },
-    { immediate: true }
-  )
-
-  async function verifySettingsPassword(password: string): Promise<boolean> {
-    try {
-      await appConfigSecurityApi.verify(password)
-      return true
-    } catch {
-      return false
-    }
+  if (aiQueueError.value) {
+    return `队列统计不可用：${aiQueueError.value}`
   }
+  return '队列统计不可用'
+})
 
-  async function initAiQueuePolling(): Promise<void> {
+function startAiQueueTimer(): void {
+  if (aiQueueTimer) return
+  aiQueueTimer = setInterval(() => {
     void refreshAiQueueStats()
-    startAiQueueTimer()
-  }
+  }, aiQueuePollIntervalMs)
+}
 
-  function resumeAiQueuePolling(): void {
-    aiQueueStatus.value = 'idle'
-    aiQueueError.value = ''
-    void refreshAiQueueStats()
-    startAiQueueTimer()
-  }
+function stopAiQueueTimer(): void {
+  if (!aiQueueTimer) return
+  clearInterval(aiQueueTimer)
+  aiQueueTimer = null
+}
 
-  async function openSettingsDrawer(): Promise<void> {
-    if (openingSettingsDrawer.value) return
-    openingSettingsDrawer.value = true
-    try {
-      const status = await appConfigSecurityApi.getStatus()
-      const enabled = status?.data?.enabled === true
-      if (!enabled) {
-        resumeAiQueuePolling()
-        settingsDrawerVisible.value = true
-        return
-      }
-      const cachedPassword = getSettingsPassword().trim()
-      if (cachedPassword) {
-        const verified = await verifySettingsPassword(cachedPassword)
-        if (verified) {
-          resumeAiQueuePolling()
-          settingsDrawerVisible.value = true
-          return
-        }
-        clearSettingsPassword()
-      }
-      try {
-        const { value } = await ElMessageBox.prompt('请输入系统设置密码', '验证', {
-          inputType: 'password',
-          confirmButtonText: '确认',
-          cancelButtonText: '取消',
-        })
-        const password = String(value ?? '').trim()
-        if (!password) {
-          ElMessage.warning('密码不能为空')
-          return
-        }
-        const verified = await verifySettingsPassword(password)
-        if (!verified) {
-          ElMessage.error('密码错误')
-          return
-        }
-        setSettingsPassword(password)
-        resumeAiQueuePolling()
-        settingsDrawerVisible.value = true
-      } catch {
-        // 用户取消
-      }
-    } catch (error) {
-      ElMessage.error(error instanceof Error ? error.message : '获取系统设置状态失败')
-    } finally {
-      openingSettingsDrawer.value = false
-    }
-  }
-
-  async function refreshAiQueueStats(): Promise<void> {
-    if (aiQueueStatus.value === 'unauthorized' && !getSettingsPassword().trim()) {
+watch(
+  transcriptSegmentTranslationAvailable,
+  available => {
+    if (!available) {
+      segmentDisplayMode.value = 'source'
       return
     }
-    try {
-      const response = await appConfigQueueStatsApi.get()
-      const data = response?.data ?? null
-      aiQueueStats.value = data
-      aiQueueStatus.value = data ? 'ready' : 'error'
-      aiQueueError.value = ''
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '请求失败'
-      const normalized = message.toLowerCase()
-      const isUnauthorized =
-        message.includes('未授权') ||
-        message.includes('Settings password') ||
-        normalized.includes('unauthorized')
-      aiQueueStats.value = null
-      aiQueueError.value = message
-      aiQueueStatus.value = isUnauthorized ? 'unauthorized' : 'error'
-      if (isUnauthorized) {
-        clearSettingsPassword()
-        stopAiQueueTimer()
+    if (!segmentDisplayTouched.value) {
+      segmentDisplayMode.value = 'translated'
+    }
+  },
+  { immediate: true }
+)
+
+async function verifySettingsPassword(password: string): Promise<boolean> {
+  try {
+    await appConfigSecurityApi.verify(password)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function initAiQueuePolling(): Promise<void> {
+  void refreshAiQueueStats()
+  startAiQueueTimer()
+}
+
+function resumeAiQueuePolling(): void {
+  aiQueueStatus.value = 'idle'
+  aiQueueError.value = ''
+  void refreshAiQueueStats()
+  startAiQueueTimer()
+}
+
+async function openSettingsDrawer(): Promise<void> {
+  if (openingSettingsDrawer.value) return
+  openingSettingsDrawer.value = true
+  try {
+    const status = await appConfigSecurityApi.getStatus()
+    const enabled = status?.data?.enabled === true
+    if (!enabled) {
+      resumeAiQueuePolling()
+      settingsDrawerVisible.value = true
+      return
+    }
+    const cachedPassword = getSettingsPassword().trim()
+    if (cachedPassword) {
+      const verified = await verifySettingsPassword(cachedPassword)
+      if (verified) {
+        resumeAiQueuePolling()
+        settingsDrawerVisible.value = true
+        return
       }
+      clearSettingsPassword()
+    }
+    try {
+      const { value } = await ElMessageBox.prompt('请输入系统设置密码', '验证', {
+        inputType: 'password',
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+      })
+      const password = String(value ?? '').trim()
+      if (!password) {
+        ElMessage.warning('密码不能为空')
+        return
+      }
+      const verified = await verifySettingsPassword(password)
+      if (!verified) {
+        ElMessage.error('密码错误')
+        return
+      }
+      setSettingsPassword(password)
+      resumeAiQueuePolling()
+      settingsDrawerVisible.value = true
+    } catch {
+      // 用户取消
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '获取系统设置状态失败')
+  } finally {
+    openingSettingsDrawer.value = false
+  }
+}
+
+async function refreshAiQueueStats(): Promise<void> {
+  if (aiQueueStatus.value === 'unauthorized' && !getSettingsPassword().trim()) {
+    return
+  }
+  try {
+    const response = await appConfigQueueStatsApi.get()
+    const data = response?.data ?? null
+    aiQueueStats.value = data
+    aiQueueStatus.value = data ? 'ready' : 'error'
+    aiQueueError.value = ''
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '请求失败'
+    const normalized = message.toLowerCase()
+    const isUnauthorized =
+      message.includes('未授权') ||
+      message.includes('Settings password') ||
+      normalized.includes('unauthorized')
+    aiQueueStats.value = null
+    aiQueueError.value = message
+    aiQueueStatus.value = isUnauthorized ? 'unauthorized' : 'error'
+    if (isUnauthorized) {
+      clearSettingsPassword()
+      stopAiQueueTimer()
     }
   }
+}
 
-	// 分析总结状态
-	const analysisScrollRef = ref<HTMLElement | null>(null)
-	const analysisResult = ref<string>('')
-	const isAnalyzing = ref(false)
-	const analysisError = ref<string>('')
-	const analysisProgress = ref<string>('')
-	const summaryPromptName = ref('')
-	let analysisEventSource: EventSource | null = null
-	const targetAnalysisStreams = new Map<string, EventSource>()
+// 分析总结状态
+const analysisScrollRef = ref<HTMLElement | null>(null)
+const analysisResult = ref<string>('')
+const isAnalyzing = ref(false)
+const analysisError = ref<string>('')
+const analysisProgress = ref<string>('')
+const summaryPromptName = ref('')
+let analysisEventSource: EventSource | null = null
+const targetAnalysisStreams = new Map<string, EventSource>()
 
-	// 针对性分析状态
-	const analysisMode = ref<'general' | 'target'>('general')
-	const targetSegment = ref<TranscriptEventSegment | null>(null)
-	type TargetAnalysisCacheEntry = {
-	  markdown: string
-	  sourceRevision: number
-	  promptName?: string
-	}
-	const targetAnalysisCache = reactive(new Map<string, TargetAnalysisCacheEntry>())
-	const targetAnalysisErrors = reactive(new Map<string, string>())
-	const targetAnalysisInFlight = reactive(new Set<string>())
+// 针对性分析状态
+const analysisMode = ref<'general' | 'target'>('general')
+const targetSegment = ref<TranscriptEventSegment | null>(null)
+type TargetAnalysisCacheEntry = {
+  markdown: string
+  sourceRevision: number
+  promptName?: string
+}
+const targetAnalysisCache = reactive(new Map<string, TargetAnalysisCacheEntry>())
+const targetAnalysisErrors = reactive(new Map<string, string>())
+const targetAnalysisInFlight = reactive(new Set<string>())
 
-	// 全局防抖：避免重复点击触发多个分析/重拆任务
-	const globalActionDebounceMs = 800
-	let lastGlobalActionAt = 0
-	const canTriggerGlobalAction = (): boolean => {
-	  const now = Date.now()
-	  if (now - lastGlobalActionAt < globalActionDebounceMs) {
-	    ElMessage.warning('操作过于频繁，请稍后再试')
-	    return false
-	  }
-	  lastGlobalActionAt = now
-	  return true
-	}
+// 全局防抖：避免重复点击触发多个分析/重拆任务
+const globalActionDebounceMs = 800
+let lastGlobalActionAt = 0
+const canTriggerGlobalAction = (): boolean => {
+  const now = Date.now()
+  if (now - lastGlobalActionAt < globalActionDebounceMs) {
+    ElMessage.warning('操作过于频繁，请稍后再试')
+    return false
+  }
+  lastGlobalActionAt = now
+  return true
+}
 
-	const ACTION_BAR_BOTTOM_OFFSET_PX = 12
-	let actionBarResizeObserver: ResizeObserver | null = null
-	function updateActionBarInset(): void {
-	  if (!actionBarEnabled.value) {
-	    actionBarInsetPx.value = 0
-	    return
-	  }
-	  const hostEl = actionBarRef.value?.hostEl?.value
-	  if (!hostEl) {
-	    actionBarInsetPx.value = 0
-	    return
-	  }
-	  const height = hostEl.getBoundingClientRect().height
-	  actionBarInsetPx.value = height > 0 ? Math.ceil(height + ACTION_BAR_BOTTOM_OFFSET_PX) : 0
-	}
+const ACTION_BAR_BOTTOM_OFFSET_PX = 12
+let actionBarResizeObserver: ResizeObserver | null = null
+function updateActionBarInset(): void {
+  if (!actionBarEnabled.value) {
+    actionBarInsetPx.value = 0
+    return
+  }
+  const hostEl = actionBarRef.value?.hostEl?.value
+  if (!hostEl) {
+    actionBarInsetPx.value = 0
+    return
+  }
+  const height = hostEl.getBoundingClientRect().height
+  actionBarInsetPx.value = height > 0 ? Math.ceil(height + ACTION_BAR_BOTTOM_OFFSET_PX) : 0
+}
 
-	let mediaQuery: MediaQueryList | null = null
-	function updateIsNarrow(): void {
-	  if (!mediaQuery) return
-	  isNarrow.value = mediaQuery.matches
-	}
+let mediaQuery: MediaQueryList | null = null
+function updateIsNarrow(): void {
+  if (!mediaQuery) return
+  isNarrow.value = mediaQuery.matches
+}
 
-	function isEditableTarget(target: EventTarget | null): boolean {
-	  const el = target as HTMLElement | null
-	  if (!el) return false
-	  if (el.isContentEditable) return true
-	  const tag = el.tagName?.toLowerCase()
-	  if (!tag) return false
-	  return tag === 'input' || tag === 'textarea' || tag === 'select'
-	}
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  if (el.isContentEditable) return true
+  const tag = el.tagName?.toLowerCase()
+  if (!tag) return false
+  return tag === 'input' || tag === 'textarea' || tag === 'select'
+}
 
-	function handleGlobalKeydown(event: KeyboardEvent): void {
-	  if (event.defaultPrevented) return
-	  if (event.altKey || event.metaKey || event.ctrlKey) return
-	  if (isEditableTarget(event.target)) return
+function handleGlobalKeydown(event: KeyboardEvent): void {
+  if (event.defaultPrevented) return
+  if (event.altKey || event.metaKey || event.ctrlKey) return
+  if (isEditableTarget(event.target)) return
 
-	  const key = event.key?.toLowerCase()
-	  if (key === 'm') {
-	    if (recordingStatus.value === 'recording' || recordingStatus.value === 'paused') {
-	      event.preventDefault()
-	      pauseRecording()
-	    } else {
-	      ElMessage.info('未录音，无法切麦/闭麦')
-	    }
-	    return
-	  }
+  const key = event.key?.toLowerCase()
+  if (key === 'm') {
+    if (recordingStatus.value === 'recording' || recordingStatus.value === 'paused') {
+      event.preventDefault()
+      pauseRecording()
+    } else {
+      ElMessage.info('未录音，无法切麦/闭麦')
+    }
+    return
+  }
 
-	  if (key === 'r') {
-	    event.preventDefault()
-	    void toggleRecording()
-	    return
-	  }
+  if (key === 'r') {
+    event.preventDefault()
+    void toggleRecording()
+    return
+  }
 
-	  if (event.key === '?') {
-	    event.preventDefault()
-	    actionBarRef.value?.openHelp()
-	  }
-	}
-
-
+  if (event.key === '?') {
+    event.preventDefault()
+    actionBarRef.value?.openHelp()
+  }
+}
 
 async function focusRealtimeRange(payload: {
   start: number
@@ -760,23 +882,23 @@ async function focusRealtimeRange(payload: {
   await focusRealtimeEventIndex(normalizedStart)
 }
 
-	async function focusRealtimeEventIndex(eventIndex: number): Promise<void> {
-	  const normalized = Math.max(0, Math.floor(Number(eventIndex) || 0))
-	  realtimeCollapsed.value = false
-	  await nextTick()
-	  const container = realtimeScrollRef.value
-	  if (!container) return
-	  const target = container.querySelector(`[data-event-index="${normalized}"]`) as HTMLElement | null
-	  if (!target) return
+async function focusRealtimeEventIndex(eventIndex: number): Promise<void> {
+  const normalized = Math.max(0, Math.floor(Number(eventIndex) || 0))
+  realtimeCollapsed.value = false
+  await nextTick()
+  const container = realtimeScrollRef.value
+  if (!container) return
+  const target = container.querySelector(`[data-event-index="${normalized}"]`) as HTMLElement | null
+  if (!target) return
 
-	  focusedEventIndex.value = normalized
-	  target.scrollIntoView({ block: 'center', behavior: 'smooth' })
-	  window.setTimeout(() => {
-	    if (focusedEventIndex.value === normalized) {
-	      focusedEventIndex.value = null
-	    }
-	  }, 1200)
-	}
+  focusedEventIndex.value = normalized
+  target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  window.setTimeout(() => {
+    if (focusedEventIndex.value === normalized) {
+      focusedEventIndex.value = null
+    }
+  }, 1200)
+}
 
 function isEventFullyHighlighted(eventIndex: number, content: string): boolean {
   const parts = getEventHighlightParts(eventIndex, content)
@@ -853,12 +975,12 @@ function getEventHighlightParts(
   return { mode: 'full', before: '', highlight: '', after: '' }
 }
 
-	function handleRealtimeScroll(): void {
-	  const el = realtimeScrollRef.value
-	  if (!el) return
-	  const distanceToBottom = el.scrollHeight - (el.scrollTop + el.clientHeight)
-	  realtimeStickToBottom.value = distanceToBottom < 80
-	}
+function handleRealtimeScroll(): void {
+  const el = realtimeScrollRef.value
+  if (!el) return
+  const distanceToBottom = el.scrollHeight - (el.scrollTop + el.clientHeight)
+  realtimeStickToBottom.value = distanceToBottom < 80
+}
 
 // 计算属性
 const isSessionEnded = computed(() => {
@@ -902,8 +1024,7 @@ const recordingIndicatorIcon = computed(() => {
   return VideoCamera
 })
 
-
-	const wsReconnectTag = computed(() => {
+const wsReconnectTag = computed(() => {
   const status = wsConnectionStatus.value
   if (!status) return null
 
@@ -924,62 +1045,90 @@ const recordingIndicatorIcon = computed(() => {
   }
 
   return null
-	})
+})
 
-	const wsRetryVisible = computed(() => {
-	  if (isSessionEnded.value || !sessionId.value) return false
-	  if (recordingStatus.value !== 'error') return false
-	  const state = wsConnectionStatus.value?.state
-	  return !state || state === 'failed' || state === 'disconnected'
-	})
+const wsRetryVisible = computed(() => {
+  if (isSessionEnded.value || !sessionId.value) return false
+  if (recordingStatus.value !== 'error') return false
+  const state = wsConnectionStatus.value?.state
+  return !state || state === 'failed' || state === 'disconnected'
+})
 
-	const segmentationStageText = computed(() => {
-	  const stage = transcriptEventSegmentationStore.progress?.stage
-	  if (!stage) return ''
-	  const map: Record<string, string> = {
-	    queued: '排队中',
-	    calling_llm: '调用中',
-	    parsing: '解析中',
-	    persisting: '落库中',
-	    completed: '已完成',
-	    failed: '失败',
-	  }
-	  return map[stage] || stage
-	})
+const segmentationStageText = computed(() => {
+  const stage = transcriptEventSegmentationStore.progress?.stage
+  if (!stage) return ''
+  const map: Record<string, string> = {
+    queued: '排队中',
+    calling_llm: '调用中',
+    parsing: '解析中',
+    persisting: '落库中',
+    completed: '已完成',
+    failed: '失败',
+  }
+  return map[stage] || stage
+})
 
-	const segmentationStageTagType = computed(() => {
-	  const stage = transcriptEventSegmentationStore.progress?.stage
-	  if (!stage) return 'info'
-	  if (stage === 'failed') return 'danger'
-	  if (stage === 'completed') return 'success'
-	  if (stage === 'queued' || stage === 'calling_llm' || stage === 'parsing' || stage === 'persisting') {
-	    return 'warning'
-	  }
-	  return 'info'
-	})
+const segmentationStageTagType = computed(() => {
+  const stage = transcriptEventSegmentationStore.progress?.stage
+  if (!stage) return 'info'
+  if (stage === 'failed') return 'danger'
+  if (stage === 'completed') return 'success'
+  if (
+    stage === 'queued' ||
+    stage === 'calling_llm' ||
+    stage === 'parsing' ||
+    stage === 'persisting'
+  ) {
+    return 'warning'
+  }
+  return 'info'
+})
 
-	const maxAvailableEventIndex = computed(() => {
-	  const next = transcriptStreamStore.nextEventIndex
-	  if (!Number.isFinite(next) || next <= 0) return null
-	  return next - 1
-	})
+const segmentationProgressIcon = computed(() => {
+  const stage = transcriptEventSegmentationStore.progress?.stage
+  if (stage === 'failed') return WarningFilled
+  return Loading
+})
 
-	let hasInitializedSession = false
+const maxAvailableEventIndex = computed(() => {
+  const next = transcriptStreamStore.nextEventIndex
+  if (!Number.isFinite(next) || next <= 0) return null
+  return next - 1
+})
 
-	async function ensureWebSocketSessionBound(targetSessionId: string): Promise<void> {
-	  const normalized = typeof targetSessionId === 'string' ? targetSessionId.trim() : ''
-	  if (!normalized) return
-	  try {
-	    await websocket.connect()
-	    websocket.setSession(normalized)
-	  } catch (error) {
-	    console.error('WebSocket 连接失败:', error)
-	  }
-	}
+const segmentationProgressText = computed(() => {
+  const pointer = transcriptEventSegmentationStore.pointerEventIndex
+  if (pointer == null) return ''
+  const prefix = transcriptEventSegmentationStore.isInFlight ? '拆分中' : '拆分进度'
+  const max = maxAvailableEventIndex.value
+  if (max != null) return `${prefix}: #${pointer} / #${max}`
+  return `${prefix}: #${pointer}`
+})
 
-	watch(
+const segmentationProgressRatio = computed(() => {
+  const pointer = transcriptEventSegmentationStore.pointerEventIndex
+  if (pointer == null) return ''
+  const max = maxAvailableEventIndex.value
+  if (max != null) return `${pointer}/${max}`
+  return `${pointer}`
+})
+
+let hasInitializedSession = false
+
+async function ensureWebSocketSessionBound(targetSessionId: string): Promise<void> {
+  const normalized = typeof targetSessionId === 'string' ? targetSessionId.trim() : ''
+  if (!normalized) return
+  try {
+    await websocket.connect()
+    websocket.setSession(normalized)
+  } catch (error) {
+    console.error('WebSocket 连接失败:', error)
+  }
+}
+
+watch(
   () => route.params.id,
-  async (nextId) => {
+  async nextId => {
     const paramId = Array.isArray(nextId) ? nextId[0] : nextId
     const queryId = Array.isArray(route.query.id) ? route.query.id[0] : route.query.id
     const nextSessionId = (paramId as string) || (queryId as string) || ''
@@ -996,72 +1145,72 @@ const recordingIndicatorIcon = computed(() => {
       stopRecording()
     }
 
-	    sessionId.value = nextSessionId
-	    transcriptStreamStore.reset()
-	    transcriptEventSegmentationStore.reset()
-	    clearAnalysis()
-	    clearTargetAnalysis()
-	    analysisMode.value = 'general'
-	    targetSegment.value = null
-	    focusedEventIndex.value = null
-	    highlightedRange.value = null
-	    realtimeStickToBottom.value = true
+    sessionId.value = nextSessionId
+    transcriptStreamStore.reset()
+    transcriptEventSegmentationStore.reset()
+    clearAnalysis()
+    clearTargetAnalysis()
+    analysisMode.value = 'general'
+    targetSegment.value = null
+    focusedEventIndex.value = null
+    highlightedRange.value = null
+    realtimeStickToBottom.value = true
 
     if (!sessionId.value) return
 
-	    // 重新绑定 WebSocket（reset 会解绑，需要重新绑定）
-	    transcriptStreamStore.bindWebSocket()
-	    transcriptEventSegmentationStore.bindWebSocket()
-	    void ensureWebSocketSessionBound(sessionId.value)
+    // 重新绑定 WebSocket（reset 会解绑，需要重新绑定）
+    transcriptStreamStore.bindWebSocket()
+    transcriptEventSegmentationStore.bindWebSocket()
+    void ensureWebSocketSessionBound(sessionId.value)
 
     await loadSession()
     await loadSpeeches()
     await transcriptStreamStore.loadSnapshot(sessionId.value)
     await transcriptEventSegmentationStore.loadSnapshot(sessionId.value)
   },
-  { immediate: true },
+  { immediate: true }
 )
 
-	watch(
-	  () => transcriptStreamStore.events.length,
-	  async () => {
-	    if (!realtimeStickToBottom.value) return
-	    if (realtimeCollapsed.value) return
-	    await nextTick()
-	    const el = realtimeScrollRef.value
-	    if (!el) return
-	    el.scrollTop = el.scrollHeight
-	  },
-	)
+watch(
+  () => transcriptStreamStore.events.length,
+  async () => {
+    if (!realtimeStickToBottom.value) return
+    if (realtimeCollapsed.value) return
+    await nextTick()
+    const el = realtimeScrollRef.value
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }
+)
 
 // 初始化
-  onMounted(async () => {
-    void refreshBackendConfig()
-    void initAiQueuePolling()
-	  mediaQuery = window.matchMedia('(max-width: 960px)')
-	  updateIsNarrow()
-	  mediaQuery.addEventListener('change', updateIsNarrow)
-	  window.addEventListener('keydown', handleGlobalKeydown, true)
+onMounted(async () => {
+  void refreshBackendConfig()
+  void initAiQueuePolling()
+  mediaQuery = window.matchMedia('(max-width: 960px)')
+  updateIsNarrow()
+  mediaQuery.addEventListener('change', updateIsNarrow)
+  window.addEventListener('keydown', handleGlobalKeydown, true)
 
-	  await nextTick()
-	  const hostEl = actionBarRef.value?.hostEl?.value
-	  if (hostEl) {
-	    actionBarResizeObserver = new ResizeObserver(updateActionBarInset)
-	    actionBarResizeObserver.observe(hostEl)
-	    updateActionBarInset()
-	  }
+  await nextTick()
+  const hostEl = actionBarRef.value?.hostEl?.value
+  if (hostEl) {
+    actionBarResizeObserver = new ResizeObserver(updateActionBarInset)
+    actionBarResizeObserver.observe(hostEl)
+    updateActionBarInset()
+  }
 
-	  sessionId.value = route.params.id as string || route.query.id as string || ''
-	  if (sessionId.value) {
-	    await loadSession()
-	    await loadSpeeches()
-	    transcriptStreamStore.bindWebSocket()
-	    void ensureWebSocketSessionBound(sessionId.value)
-	    await transcriptStreamStore.loadSnapshot(sessionId.value)
-	    transcriptEventSegmentationStore.bindWebSocket()
-	    await transcriptEventSegmentationStore.loadSnapshot(sessionId.value)
-	  }
-	})
+  sessionId.value = (route.params.id as string) || (route.query.id as string) || ''
+  if (sessionId.value) {
+    await loadSession()
+    await loadSpeeches()
+    transcriptStreamStore.bindWebSocket()
+    void ensureWebSocketSessionBound(sessionId.value)
+    await transcriptStreamStore.loadSnapshot(sessionId.value)
+    transcriptEventSegmentationStore.bindWebSocket()
+    await transcriptEventSegmentationStore.loadSnapshot(sessionId.value)
+  }
+})
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalKeydown, true)
@@ -1109,92 +1258,88 @@ async function loadSpeeches() {
   }
 }
 
-	// 结束会话
-	async function endSession() {
-	  if (!sessionId.value || isSessionEnded.value) return
+// 结束会话
+async function endSession() {
+  if (!sessionId.value || isSessionEnded.value) return
 
-	  try {
-	    await ElMessageBox.confirm(
-	      '确定要结束当前会话吗？结束后将无法继续录音。',
-	      '结束会话确认',
-	      {
-	        confirmButtonText: '结束会话',
-	        cancelButtonText: '取消',
-	        type: 'warning',
-	      },
-	    )
-	  } catch {
-	    return
-	  }
+  try {
+    await ElMessageBox.confirm('确定要结束当前会话吗？结束后将无法继续录音。', '结束会话确认', {
+      confirmButtonText: '结束会话',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
 
-	  try {
-	    endingSession.value = true
+  try {
+    endingSession.value = true
 
-	    if (recordingStatus.value !== 'idle') {
-	      transcription.stop()
-	      recordingStatus.value = 'idle'
-	      isPaused.value = false
-	      wsConnectionStatus.value = null
-	    }
+    if (recordingStatus.value !== 'idle') {
+      transcription.stop()
+      recordingStatus.value = 'idle'
+      isPaused.value = false
+      wsConnectionStatus.value = null
+    }
 
-	    await sessionApi.end(sessionId.value)
-	    sessionEndedOverride.value = true
-	    await loadSession()
-	    ElMessage.success('会话已结束')
-	  } catch (error) {
-	    console.error('结束会话失败:', error)
-	    ElMessage.error('结束会话失败')
-	  } finally {
-	    endingSession.value = false
-	  }
-	}
+    await sessionApi.end(sessionId.value)
+    sessionEndedOverride.value = true
+    await loadSession()
+    ElMessage.success('会话已结束')
+  } catch (error) {
+    console.error('结束会话失败:', error)
+    ElMessage.error('结束会话失败')
+  } finally {
+    endingSession.value = false
+  }
+}
 
-		async function rebuildTranscriptSegments(): Promise<void> {
-		if (!sessionId.value) return
-		if (rebuildingTranscriptSegments.value) return
-		if (!canTriggerGlobalAction()) return
+async function rebuildTranscriptSegments(): Promise<void> {
+  if (!sessionId.value) return
+  if (rebuildingTranscriptSegments.value) return
+  if (!canTriggerGlobalAction()) return
 
-	  try {
-	    await ElMessageBox.confirm(
-	      '这将清空当前会话的语句拆分结果，并从事件 1 重新生成。确定继续吗？',
-	      '重拆确认',
-	      {
-	        confirmButtonText: '重拆',
-	        cancelButtonText: '取消',
-	        type: 'warning',
-	      },
-	    )
-	  } catch {
-	    return
-	  }
+  try {
+    await ElMessageBox.confirm(
+      '重拆会清空当前语句拆分结果，并从事件 1 重新生成，用于修正拆分或模型配置变更后的重算。确定继续吗？',
+      '重拆确认',
+      {
+        confirmButtonText: '重拆',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+  } catch {
+    return
+  }
 
-		  try {
-		    rebuildingTranscriptSegments.value = true
-		    await ensureWebSocketSessionBound(sessionId.value)
-		    const maxAvailable = maxAvailableEventIndex.value ?? 0
-		    const optimisticProgress: TranscriptEventSegmentationProgressData = {
-		      sessionId: sessionId.value,
-		      taskId: 'local-rebuild',
-		      mode: 'rebuild',
-		      stage: 'queued',
-		      pointerEventIndex: 0,
-		      windowStartEventIndex: 0,
-		      windowEndEventIndex: 0,
-		      maxEventIndex: Math.max(0, maxAvailable),
-		      sequence: 1,
-		      updatedAt: new Date().toISOString(),
-		    }
-		    transcriptEventSegmentationStore.clearSegments()
-		    transcriptEventSegmentationStore.progress = optimisticProgress
-		    await transcriptEventSegmentationApi.rebuild(sessionId.value)
-		    ElMessage.success('已开始重拆')
-		  } catch (error) {
-	    console.error('重拆失败:', error)
-	    ElMessage.error('重拆失败')
-	  } finally {
-	    rebuildingTranscriptSegments.value = false
-	  }
-	}
+  try {
+    rebuildingTranscriptSegments.value = true
+    await ensureWebSocketSessionBound(sessionId.value)
+    const maxAvailable = maxAvailableEventIndex.value ?? 0
+    const optimisticProgress: TranscriptEventSegmentationProgressData = {
+      sessionId: sessionId.value,
+      taskId: 'local-rebuild',
+      mode: 'rebuild',
+      stage: 'queued',
+      pointerEventIndex: 0,
+      windowStartEventIndex: 0,
+      windowEndEventIndex: 0,
+      maxEventIndex: Math.max(0, maxAvailable),
+      sequence: 1,
+      updatedAt: new Date().toISOString(),
+    }
+    transcriptEventSegmentationStore.clearSegments()
+    transcriptEventSegmentationStore.progress = optimisticProgress
+    await transcriptEventSegmentationApi.rebuild(sessionId.value)
+    ElMessage.success('已开始重拆')
+  } catch (error) {
+    console.error('重拆失败:', error)
+    ElMessage.error('重拆失败')
+  } finally {
+    rebuildingTranscriptSegments.value = false
+  }
+}
 
 // 切换录音
 async function toggleRecording() {
@@ -1233,7 +1378,9 @@ async function startRecording() {
           ? { captureMode: 'mix' as const, deviceId: appSettings.value.micDeviceId }
           : { captureMode: 'mix' as const }
       }
-      return appSettings.value.micDeviceId ? { captureMode: 'mic' as const, deviceId: appSettings.value.micDeviceId } : { captureMode: 'mic' as const }
+      return appSettings.value.micDeviceId
+        ? { captureMode: 'mic' as const, deviceId: appSettings.value.micDeviceId }
+        : { captureMode: 'mic' as const }
     }
 
     // 设置转写服务回调
@@ -1241,7 +1388,7 @@ async function startRecording() {
       sessionId: sessionId.value,
       audio: buildAudioConfig(),
       onTranscript: (transcript: Speech) => {
-        const index = speeches.value.findIndex((item) => item.id === transcript.id)
+        const index = speeches.value.findIndex(item => item.id === transcript.id)
         if (index >= 0) {
           speeches.value.splice(index, 1, transcript)
         } else {
@@ -1253,10 +1400,10 @@ async function startRecording() {
         const normalizedMessage = rawMessage.replace(/^(转写错误:\s*)+/g, '')
         ElMessage.error(`转写错误: ${normalizedMessage}`)
       },
-      onStatusChange: (status) => {
+      onStatusChange: status => {
         recordingStatus.value = status
       },
-      onConnectionStatusChange: (status) => {
+      onConnectionStatusChange: status => {
         wsConnectionStatus.value = status
         if (recordingStatus.value === 'idle') {
           wsLastNotifiedState.value = status.state
@@ -1279,7 +1426,7 @@ async function startRecording() {
         }
         wsLastNotifiedState.value = status.state
       },
-      onStatusMessage: (payload) => {
+      onStatusMessage: payload => {
         if (payload?.status !== 'session_set') return
         if (payload.sessionId && payload.sessionId !== sessionId.value) return
         if (sessionSetNotified.value) return
@@ -1409,6 +1556,15 @@ const renderedAnalysisResult = computed(() => {
 })
 
 const hasAnalysisContent = computed(() => !!analysisResult.value)
+const analysisActionText = computed(() => {
+  if (isAnalyzing.value) return '分析中...'
+  return hasAnalysisContent.value ? '重新分析' : '开始分析'
+})
+
+const analysisActionIcon = computed(() => {
+  if (isAnalyzing.value) return Loading
+  return hasAnalysisContent.value ? Refresh : MagicStick
+})
 
 // 针对性分析相关
 const activeTargetAnalysis = computed(() => {
@@ -1429,7 +1585,7 @@ const isTargetAnalyzing = computed(() => {
 
 const targetAnalysisError = computed(() => {
   const segId = targetSegment.value?.id
-  return segId ? targetAnalysisErrors.get(segId) ?? '' : ''
+  return segId ? (targetAnalysisErrors.get(segId) ?? '') : ''
 })
 
 const renderedTargetAnalysisResult = computed(() => {
@@ -1511,29 +1667,29 @@ async function startAnalysis(): Promise<void> {
   }
 
   const baseUrl = String(getApiBaseUrl() || '/api').replace(/\/+$/, '')
-	const streamUrl = `${baseUrl}/transcript-analysis/session/${encodeURIComponent(
-		sessionId.value
-	)}/summary/stream`
+  const streamUrl = `${baseUrl}/transcript-analysis/session/${encodeURIComponent(
+    sessionId.value
+  )}/summary/stream`
 
-	let finished = false
-	let hadAnyDelta = false
-	let errorProbeInFlight = false
-	let consecutiveErrorCount = 0
-	analysisEventSource = new EventSource(streamUrl)
+  let finished = false
+  let hadAnyDelta = false
+  let errorProbeInFlight = false
+  let consecutiveErrorCount = 0
+  analysisEventSource = new EventSource(streamUrl)
 
-	const isNearBottom = (el: HTMLElement, thresholdPx: number): boolean => {
-		const threshold = Math.max(0, Math.floor(thresholdPx))
-		const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
-		return remaining <= threshold
-	}
+  const isNearBottom = (el: HTMLElement, thresholdPx: number): boolean => {
+    const threshold = Math.max(0, Math.floor(thresholdPx))
+    const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
+    return remaining <= threshold
+  }
 
-	const scrollToBottomIfNeeded = async (shouldStick: boolean): Promise<void> => {
-		if (!shouldStick) return
-		await nextTick()
-		const el = analysisScrollRef.value
-		if (!el) return
-		el.scrollTop = el.scrollHeight
-	}
+  const scrollToBottomIfNeeded = async (shouldStick: boolean): Promise<void> => {
+    if (!shouldStick) return
+    await nextTick()
+    const el = analysisScrollRef.value
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }
 
   const finishOnce = (payload?: { ok?: boolean; message?: string }) => {
     if (finished) return
@@ -1553,14 +1709,14 @@ async function startAnalysis(): Promise<void> {
     }
   }
 
-  analysisEventSource.addEventListener('progress', (event) => {
+  analysisEventSource.addEventListener('progress', event => {
     const message = (event as MessageEvent).data
     if (typeof message === 'string' && message.trim()) {
       analysisProgress.value = message
     }
   })
 
-  analysisEventSource.addEventListener('meta', (event) => {
+  analysisEventSource.addEventListener('meta', event => {
     const raw = (event as MessageEvent).data
     let data: any = raw
     if (typeof raw === 'string') {
@@ -1575,119 +1731,119 @@ async function startAnalysis(): Promise<void> {
     }
   })
 
-	analysisEventSource.addEventListener('delta', (event) => {
-		const el = analysisScrollRef.value
-		const shouldStick = el ? isNearBottom(el, 120) : true
-		const text = (event as MessageEvent).data
-		if (typeof text === 'string' && text) {
-			hadAnyDelta = true
-			analysisResult.value += text
-			void scrollToBottomIfNeeded(shouldStick)
-		}
-	})
+  analysisEventSource.addEventListener('delta', event => {
+    const el = analysisScrollRef.value
+    const shouldStick = el ? isNearBottom(el, 120) : true
+    const text = (event as MessageEvent).data
+    if (typeof text === 'string' && text) {
+      hadAnyDelta = true
+      analysisResult.value += text
+      void scrollToBottomIfNeeded(shouldStick)
+    }
+  })
 
-	analysisEventSource.addEventListener('done', () => {
-		finishOnce({ ok: true })
-	})
+  analysisEventSource.addEventListener('done', () => {
+    finishOnce({ ok: true })
+  })
 
-	analysisEventSource.onmessage = (event) => {
-		const raw = (event as MessageEvent).data
-		if (typeof raw !== 'string' || !raw.trim()) return
+  analysisEventSource.onmessage = event => {
+    const raw = (event as MessageEvent).data
+    if (typeof raw !== 'string' || !raw.trim()) return
 
-		const el = analysisScrollRef.value
-		const shouldStick = el ? isNearBottom(el, 120) : true
+    const el = analysisScrollRef.value
+    const shouldStick = el ? isNearBottom(el, 120) : true
 
-		if (!raw.trimStart().startsWith('{')) {
-			hadAnyDelta = true
-			analysisResult.value += raw
-			void scrollToBottomIfNeeded(shouldStick)
-			return
-		}
+    if (!raw.trimStart().startsWith('{')) {
+      hadAnyDelta = true
+      analysisResult.value += raw
+      void scrollToBottomIfNeeded(shouldStick)
+      return
+    }
 
-		try {
-			const parsed = JSON.parse(raw)
-			const type = parsed?.type
-			const data = parsed?.data
-			if (type === 'meta' && data) {
-				if (typeof data.promptName === 'string' && data.promptName.trim()) {
-					summaryPromptName.value = data.promptName.trim()
-				}
-				return
-			}
-			if (type === 'progress' && typeof data === 'string') {
-				analysisProgress.value = data
-				return
-			}
-			if (type === 'delta' && typeof data === 'string') {
-				hadAnyDelta = true
-				analysisResult.value += data
-				void scrollToBottomIfNeeded(shouldStick)
-				return
-			}
-			if (type === 'done') {
-				finishOnce({ ok: true })
-				return
-			}
-			if (type === 'server_error') {
-				const message = data?.message ? String(data.message) : '分析失败'
-				finishOnce({ ok: false, message })
-			}
-		} catch {
-			// ignore
-		}
-	}
+    try {
+      const parsed = JSON.parse(raw)
+      const type = parsed?.type
+      const data = parsed?.data
+      if (type === 'meta' && data) {
+        if (typeof data.promptName === 'string' && data.promptName.trim()) {
+          summaryPromptName.value = data.promptName.trim()
+        }
+        return
+      }
+      if (type === 'progress' && typeof data === 'string') {
+        analysisProgress.value = data
+        return
+      }
+      if (type === 'delta' && typeof data === 'string') {
+        hadAnyDelta = true
+        analysisResult.value += data
+        void scrollToBottomIfNeeded(shouldStick)
+        return
+      }
+      if (type === 'done') {
+        finishOnce({ ok: true })
+        return
+      }
+      if (type === 'server_error') {
+        const message = data?.message ? String(data.message) : '分析失败'
+        finishOnce({ ok: false, message })
+      }
+    } catch {
+      // ignore
+    }
+  }
 
-	analysisEventSource.addEventListener('server_error', (event) => {
-		const raw = (event as MessageEvent).data
-		try {
-			const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+  analysisEventSource.addEventListener('server_error', event => {
+    const raw = (event as MessageEvent).data
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
       const message = parsed?.message ? String(parsed.message) : '分析失败'
       finishOnce({ ok: false, message })
     } catch {
       finishOnce({ ok: false, message: typeof raw === 'string' ? raw : '分析失败' })
-		}
-	})
+    }
+  })
 
-	analysisEventSource.onerror = async () => {
-		if (finished) return
-		consecutiveErrorCount += 1
-		analysisProgress.value = '分析连接中断，正在重连…'
+  analysisEventSource.onerror = async () => {
+    if (finished) return
+    consecutiveErrorCount += 1
+    analysisProgress.value = '分析连接中断，正在重连…'
 
-		const readyState = analysisEventSource?.readyState
-		console.error('[analysis SSE error]', { streamUrl, readyState, consecutiveErrorCount })
+    const readyState = analysisEventSource?.readyState
+    console.error('[analysis SSE error]', { streamUrl, readyState, consecutiveErrorCount })
 
-		if (consecutiveErrorCount < 3) {
-			return
-		}
+    if (consecutiveErrorCount < 3) {
+      return
+    }
 
-		if (!errorProbeInFlight) {
-			errorProbeInFlight = true
-			try {
-				const controller = new AbortController()
-				const timer = window.setTimeout(() => controller.abort(), 3000)
-				const resp = await fetch(streamUrl, {
-					method: 'GET',
-					headers: { Accept: 'text/event-stream' },
-					signal: controller.signal,
-				})
-				window.clearTimeout(timer)
+    if (!errorProbeInFlight) {
+      errorProbeInFlight = true
+      try {
+        const controller = new AbortController()
+        const timer = window.setTimeout(() => controller.abort(), 3000)
+        const resp = await fetch(streamUrl, {
+          method: 'GET',
+          headers: { Accept: 'text/event-stream' },
+          signal: controller.signal,
+        })
+        window.clearTimeout(timer)
 
-				if (!resp.ok) {
-					const text = await resp.text().catch(() => '')
-					const detail = text ? ` ${text.slice(0, 300)}` : ''
-					finishOnce({ ok: false, message: `分析流式接口返回异常：HTTP ${resp.status}.${detail}` })
-					return
-				}
-			} catch (error) {
-				console.error('[analysis SSE probe failed]', error)
-			} finally {
-				errorProbeInFlight = false
-			}
-		}
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '')
+          const detail = text ? ` ${text.slice(0, 300)}` : ''
+          finishOnce({ ok: false, message: `分析流式接口返回异常：HTTP ${resp.status}.${detail}` })
+          return
+        }
+      } catch (error) {
+        console.error('[analysis SSE probe failed]', error)
+      } finally {
+        errorProbeInFlight = false
+      }
+    }
 
-		const suffix = hadAnyDelta ? '（已接收部分内容）' : ''
-		finishOnce({ ok: false, message: `分析连接中断，请重试${suffix}` })
-	}
+    const suffix = hadAnyDelta ? '（已接收部分内容）' : ''
+    finishOnce({ ok: false, message: `分析连接中断，请重试${suffix}` })
+  }
 }
 
 async function loadStoredSummary(): Promise<void> {
@@ -1741,6 +1897,9 @@ function stopTargetAnalysisStream(segmentId?: string): void {
 function handleTargetAnalysis(segment: TranscriptEventSegment): void {
   targetSegment.value = segment
   analysisMode.value = 'target'
+  if (isNarrow.value) {
+    mobilePane.value = 'analysis'
+  }
   // 自动开始针对性分析
   void startTargetAnalysis()
 }
@@ -1885,7 +2044,7 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
     }
   }
 
-  targetAnalysisEventSource.addEventListener('meta', (event) => {
+  targetAnalysisEventSource.addEventListener('meta', event => {
     if (finished) return
     if (hadAnyDelta && markdownBuffer) {
       markdownBuffer = ''
@@ -1906,7 +2065,7 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
     updateCache()
   })
 
-  targetAnalysisEventSource.addEventListener('delta', (event) => {
+  targetAnalysisEventSource.addEventListener('delta', event => {
     if (finished) return
     const text = (event as MessageEvent).data
     if (typeof text === 'string' && text) {
@@ -1920,7 +2079,7 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
     finishOnce({ ok: true })
   })
 
-  targetAnalysisEventSource.onmessage = (event) => {
+  targetAnalysisEventSource.onmessage = event => {
     if (finished) return
     const raw = (event as MessageEvent).data
     if (typeof raw !== 'string' || !raw.trim()) return
@@ -1966,7 +2125,7 @@ async function startTargetAnalysis(options?: { force?: boolean }): Promise<void>
     }
   }
 
-  targetAnalysisEventSource.addEventListener('server_error', (event) => {
+  targetAnalysisEventSource.addEventListener('server_error', event => {
     if (finished) return
     const raw = (event as MessageEvent).data
     try {
@@ -2022,9 +2181,46 @@ function clearTargetAnalysis(): void {
 .header-icon-group :deep(.el-button + .el-button) {
   margin-left: 0;
 }
+:deep(.el-button + .el-button) {
+  margin-left: 0;
+}
 
-.queue-tag {
+.queue-tag,
+.meta-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: transparent;
+  color: var(--ink-700);
   white-space: nowrap;
+}
+
+.meta-tag-icon {
+  padding: 0 6px;
+}
+
+.meta-tag-icon :deep(.el-tag__content) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.meta-tag-icon :deep(.el-icon) {
+  font-size: 14px;
+}
+
+.meta-tag-text {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta-tag-icon :deep(.is-spinning) {
+  animation: indicator-spin 1s linear infinite;
 }
 
 .recording-indicator {
@@ -2039,8 +2235,12 @@ function clearTargetAnalysis(): void {
   color: var(--indicator-color);
   border-radius: 10px;
   backdrop-filter: blur(10px);
-  transition: border-color 0.2s var(--ease-out), background 0.2s var(--ease-out),
-    color 0.2s var(--ease-out), border-radius 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+  transition:
+    border-color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out),
+    color 0.2s var(--ease-out),
+    border-radius 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
 }
 
 .recording-indicator.is-recording {
@@ -2128,6 +2328,15 @@ function clearTargetAnalysis(): void {
   .header-icon-button :deep(.el-icon) {
     font-size: 14px;
   }
+
+  .queue-tag,
+  .meta-tag {
+    height: 22px;
+  }
+
+  .meta-tag-icon :deep(.el-icon) {
+    font-size: 13px;
+  }
 }
 
 .ghost-button {
@@ -2153,7 +2362,7 @@ function clearTargetAnalysis(): void {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
   background: rgba(255, 255, 255, 0.42);
   backdrop-filter: blur(10px);
 }
@@ -2223,7 +2432,7 @@ function clearTargetAnalysis(): void {
 }
 
 .realtime-event-item.is-focused {
-  box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.10);
+  box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.1);
   border-radius: 8px;
 }
 
@@ -2240,7 +2449,7 @@ function clearTargetAnalysis(): void {
   flex-shrink: 0;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(47, 107, 255, 0.10);
+  background: rgba(47, 107, 255, 0.1);
   color: var(--brand-700);
   font-size: 12px;
   font-weight: 500;
@@ -2270,13 +2479,7 @@ function clearTargetAnalysis(): void {
   background: rgba(15, 23, 42, 0.06);
   color: #475569;
   font-size: 11px;
-  font-family:
-    "JetBrains Mono",
-    "SFMono-Regular",
-    ui-monospace,
-    "SF Mono",
-    Menlo,
-    monospace;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 .event-sep {
@@ -2313,7 +2516,7 @@ function clearTargetAnalysis(): void {
 
 .pane-tab {
   flex: 1;
-  border: 1px solid rgba(15, 23, 42, 0.10);
+  border: 1px solid rgba(15, 23, 42, 0.1);
   background: rgba(255, 255, 255, 0.55);
   border-radius: 999px;
   padding: 8px 10px;
@@ -2333,7 +2536,7 @@ function clearTargetAnalysis(): void {
 
 .pane-tab.is-active {
   background: rgba(47, 107, 255, 0.14);
-  border-color: rgba(47, 107, 255, 0.30);
+  border-color: rgba(47, 107, 255, 0.3);
   color: var(--ink-900);
 }
 
@@ -2348,7 +2551,7 @@ function clearTargetAnalysis(): void {
 .transcript-content {
   flex: 1;
   overflow: hidden;
-  padding:10px 0;
+  padding: 10px 0;
 }
 
 .panel-header {
@@ -2356,8 +2559,8 @@ function clearTargetAnalysis(): void {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
-  background: rgba(255, 255, 255, 0.40);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.4);
   backdrop-filter: blur(10px);
 }
 
@@ -2384,6 +2587,7 @@ function clearTargetAnalysis(): void {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
 .segment-order-trigger {
@@ -2393,11 +2597,10 @@ function clearTargetAnalysis(): void {
 }
 
 .segment-order-trigger:hover {
-  border-color: rgba(24, 144, 255, 0.40);
+  border-color: rgba(24, 144, 255, 0.4);
   color: #185abc;
   background: rgba(24, 144, 255, 0.06);
 }
-
 
 @media (min-width: 1201px) {
   .workspace-grid {
@@ -2455,7 +2658,61 @@ function clearTargetAnalysis(): void {
 /* 响应式 */
 @media (max-width: 768px) {
   .realtime-transcript-bar {
-    height: 190px;
+    height: clamp(220px, 36vh, 320px);
+  }
+}
+
+@media (max-width: 960px) {
+  .workspace-grid {
+    gap: 10px;
+  }
+
+  .content-area {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+    min-height: 0;
+  }
+
+  .mobile-pane-switch {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    padding: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(10px);
+  }
+
+  .pane-tab {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .panel-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .panel-title-row {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .panel-actions {
+    flex-wrap: wrap;
+  }
+
+  .transcript-panel,
+  .analysis-panel,
+  .target-analysis-panel {
+    height: 100%;
+  }
+
+  .transcript-content,
+  .analysis-content {
+    padding: 8px 0;
   }
 }
 
@@ -2472,6 +2729,43 @@ function clearTargetAnalysis(): void {
   flex: 1;
   overflow: auto;
   padding: 10px 0;
+}
+
+.analysis-status-icon {
+  font-size: 14px;
+}
+
+.analysis-action-button .action-text {
+  display: inline;
+}
+
+.analysis-icon-button {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+}
+
+.analysis-icon-button.is-analyzing :deep(.el-icon) {
+  animation: indicator-spin 1s linear infinite;
+}
+
+@media (max-width: 768px) {
+  .analysis-action-button .action-text {
+    display: none;
+  }
+
+  .analysis-action-button {
+    padding: 0 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .analysis-icon-button {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+  }
 }
 
 /* 原始语句预览 */
@@ -2668,7 +2962,7 @@ function clearTargetAnalysis(): void {
   font-weight: 650;
   margin: 0 0 16px;
   padding-bottom: 12px;
-  border-bottom: 2px solid rgba(15, 23, 42, 0.10);
+  border-bottom: 2px solid rgba(15, 23, 42, 0.1);
 }
 
 .analysis-result:deep(h2) {
@@ -2745,7 +3039,7 @@ function clearTargetAnalysis(): void {
 
 .analysis-result:deep(hr) {
   border: none;
-  border-top: 1px solid rgba(15, 23, 42, 0.10);
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
   margin: 20px 0;
 }
 
@@ -2775,7 +3069,7 @@ function clearTargetAnalysis(): void {
   margin: 12px 0;
   overflow: hidden;
   border-radius: 10px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
+  border: 1px solid rgba(15, 23, 42, 0.1);
 }
 
 .analysis-result:deep(th),
@@ -2795,7 +3089,7 @@ function clearTargetAnalysis(): void {
   border-bottom: none;
 }
 
-.analysis-result:deep(input[type="checkbox"]) {
+.analysis-result:deep(input[type='checkbox']) {
   margin-right: 6px;
   transform: translateY(1px);
 }

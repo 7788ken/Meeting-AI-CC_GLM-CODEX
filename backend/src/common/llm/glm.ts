@@ -6,7 +6,8 @@ export function extractGlmTextContent(
 ): string | null {
   const shouldTrim = options?.trim !== false
   const normalize = (value: string): string => (shouldTrim ? value.trim() : value)
-  const hasText = (value: string): boolean => (shouldTrim ? value.trim().length > 0 : value.length > 0)
+  const hasText = (value: string): boolean =>
+    shouldTrim ? value.trim().length > 0 : value.length > 0
 
   if (typeof content === 'string') {
     return hasText(content) ? normalize(content) : null

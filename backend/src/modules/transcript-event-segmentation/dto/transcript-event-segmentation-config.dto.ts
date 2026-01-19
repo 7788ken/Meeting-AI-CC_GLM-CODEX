@@ -26,7 +26,11 @@ export class TranscriptEventSegmentationConfigDto {
   @ApiProperty({ description: '是否启用 JSON 模式' })
   jsonMode: boolean
 
-  @ApiProperty({ description: '截断补偿 tokens（finish_reason=length 时提升上限）', minimum: 256, maximum: 8192 })
+  @ApiProperty({
+    description: '截断补偿 tokens（finish_reason=length 时提升上限）',
+    minimum: 256,
+    maximum: 8192,
+  })
   bumpMaxTokens: number
 
   @ApiProperty({ description: 'GLM 429 最大重试次数', minimum: 0, maximum: 10 })
@@ -92,7 +96,11 @@ export class UpdateTranscriptEventSegmentationConfigDto {
   @IsBoolean()
   jsonMode?: boolean
 
-  @ApiPropertyOptional({ description: '截断补偿 tokens（finish_reason=length 时提升上限）', minimum: 256, maximum: 8192 })
+  @ApiPropertyOptional({
+    description: '截断补偿 tokens（finish_reason=length 时提升上限）',
+    minimum: 256,
+    maximum: 8192,
+  })
   @IsOptional()
   @IsInt()
   @Min(256)
@@ -120,7 +128,9 @@ export class UpdateTranscriptEventSegmentationConfigDto {
   @Max(120000)
   retryMaxMs?: number
 
-  @ApiPropertyOptional({ description: '严格 JSON 解析失败时是否降级为 extractedText（不调用/不解析）' })
+  @ApiPropertyOptional({
+    description: '严格 JSON 解析失败时是否降级为 extractedText（不调用/不解析）',
+  })
   @IsOptional()
   @IsBoolean()
   degradeOnStrictFail?: boolean

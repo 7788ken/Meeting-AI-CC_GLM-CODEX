@@ -13,33 +13,33 @@
         <div class="header-title">
           <div class="title">会话调试台</div>
           <div class="subtitle">Session ID: {{ sessionId || '未绑定' }}</div>
-	        </div>
-	        <div class="header-actions">
-	          <el-button
-	            v-if="activeTab === 'errors'"
-	            size="small"
-	            class="ghost-button danger-button"
-	            :disabled="!sessionId || clearing"
-	            :loading="clearing"
-	            @click="clearErrors"
-	          >
-	            <el-icon><Delete /></el-icon>
-	            清空报错
-	          </el-button>
-	          <el-button
-	            v-if="activeTab !== 'errors'"
-	            size="small"
-	            class="ghost-button danger-button"
-	            :disabled="!sessionId || logsLoading"
-	            :loading="logsLoading"
-	            @click="clearLogs"
-	          >
-	            清空日志
-	          </el-button>
-	          <el-button size="small" class="ghost-button" @click="handleRefresh">
-	            <el-icon><Refresh /></el-icon>
-	            刷新
-	          </el-button>
+        </div>
+        <div class="header-actions">
+          <el-button
+            v-if="activeTab === 'errors'"
+            size="small"
+            class="ghost-button danger-button"
+            :disabled="!sessionId || clearing"
+            :loading="clearing"
+            @click="clearErrors"
+          >
+            <el-icon><Delete /></el-icon>
+            清空报错
+          </el-button>
+          <el-button
+            v-if="activeTab !== 'errors'"
+            size="small"
+            class="ghost-button danger-button"
+            :disabled="!sessionId || logsLoading"
+            :loading="logsLoading"
+            @click="clearLogs"
+          >
+            清空日志
+          </el-button>
+          <el-button size="small" class="ghost-button" @click="handleRefresh">
+            <el-icon><Refresh /></el-icon>
+            刷新
+          </el-button>
           <el-button size="small" class="ghost-button" @click="visibleProxy = false">
             关闭
           </el-button>
@@ -57,7 +57,7 @@
                   <span v-if="lastUpdated">更新于 {{ formatTimestamp(lastUpdated) }}</span>
                 </div>
               </div>
-              <div class="panel-content" v-loading="loading">
+              <div v-loading="loading" class="panel-content">
                 <div v-if="!loading && errors.length === 0" class="empty-block">
                   <el-empty description="当前会话暂无报错" :image-size="100" />
                 </div>
@@ -74,7 +74,9 @@
                       <span :class="['level-tag', levelClass(error.level)]">
                         {{ levelLabel(error.level) }}
                       </span>
-                      <span class="error-time">{{ formatTimestamp(error.occurredAt || error.createdAt) }}</span>
+                      <span class="error-time">{{
+                        formatTimestamp(error.occurredAt || error.createdAt)
+                      }}</span>
                     </div>
                     <div class="error-title">{{ error.message }}</div>
                     <div class="error-sub">
@@ -104,7 +106,9 @@
                     </div>
                     <div class="detail-item">
                       <span class="detail-label">发生时间</span>
-                      <span>{{ formatTimestamp(activeError.occurredAt || activeError.createdAt) }}</span>
+                      <span>{{
+                        formatTimestamp(activeError.occurredAt || activeError.createdAt)
+                      }}</span>
                     </div>
                     <div class="detail-item">
                       <span class="detail-label">来源</span>
@@ -114,7 +118,7 @@
                       <span class="detail-label">分类</span>
                       <span>{{ activeError.category || '未分类' }}</span>
                     </div>
-                    <div class="detail-item" v-if="activeError.errorCode">
+                    <div v-if="activeError.errorCode" class="detail-item">
                       <span class="detail-label">错误码</span>
                       <span>{{ activeError.errorCode }}</span>
                     </div>
@@ -125,25 +129,25 @@
                     <pre class="detail-code">{{ activeError.message }}</pre>
                   </div>
 
-		              <div v-if="activeError.stack" class="detail-block">
-		                <div class="detail-title">堆栈</div>
-		                <pre class="detail-code">{{ activeError.stack }}</pre>
-		              </div>
+                  <div v-if="activeError.stack" class="detail-block">
+                    <div class="detail-title">堆栈</div>
+                    <pre class="detail-code">{{ activeError.stack }}</pre>
+                  </div>
 
-		              <div v-if="glmSnippetText" class="detail-block">
-		                <div class="detail-title">GLM 返回</div>
-		                <pre class="detail-code">{{ glmSnippetText }}</pre>
-		              </div>
+                  <div v-if="glmSnippetText" class="detail-block">
+                    <div class="detail-title">GLM 返回</div>
+                    <pre class="detail-code">{{ glmSnippetText }}</pre>
+                  </div>
 
-		              <div v-if="promptSnippetText" class="detail-block">
-		                <div class="detail-title">LLM 提示词</div>
-		                <pre class="detail-code">{{ promptSnippetText }}</pre>
-		              </div>
+                  <div v-if="promptSnippetText" class="detail-block">
+                    <div class="detail-title">LLM 提示词</div>
+                    <pre class="detail-code">{{ promptSnippetText }}</pre>
+                  </div>
 
-		              <div v-if="activeError.context" class="detail-block">
-		                <div class="detail-title">上下文</div>
-		                <pre class="detail-code">{{ formatContext(activeError.context) }}</pre>
-		              </div>
+                  <div v-if="activeError.context" class="detail-block">
+                    <div class="detail-title">上下文</div>
+                    <pre class="detail-code">{{ formatContext(activeError.context) }}</pre>
+                  </div>
                 </div>
                 <div v-else class="empty-detail">
                   <div class="empty-title">选择一条报错查看详情</div>
@@ -154,12 +158,7 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane
-          v-for="tab in logTabs"
-          :key="tab.name"
-          :name="tab.name"
-          :label="tab.label"
-        >
+        <el-tab-pane v-for="tab in logTabs" :key="tab.name" :name="tab.name" :label="tab.label">
           <div class="debug-body">
             <section class="panel log-list-panel">
               <div class="panel-top">
@@ -171,7 +170,7 @@
                   </span>
                 </div>
               </div>
-              <div class="panel-content" v-loading="logsLoading">
+              <div v-loading="logsLoading" class="panel-content">
                 <div class="log-filters">
                   <el-select
                     v-model="logFilters[tab.type].selected"
@@ -203,7 +202,10 @@
                     class="log-filter-input"
                   />
                 </div>
-                <div v-if="!logsLoading && getFilteredLogs(tab.type).length === 0" class="empty-block">
+                <div
+                  v-if="!logsLoading && getFilteredLogs(tab.type).length === 0"
+                  class="empty-block"
+                >
                   <el-empty description="当前会话暂无日志" :image-size="100" />
                 </div>
                 <div v-else class="log-list">
@@ -224,7 +226,9 @@
                     <div class="error-title">{{ log.message }}</div>
                     <div class="error-sub">
                       <span>{{ logTypeLabel(tab.type) }}</span>
-                      <span v-if="getLogMeta(log).statusCode">· {{ getLogMeta(log).statusCode }}</span>
+                      <span v-if="getLogMeta(log).statusCode"
+                        >· {{ getLogMeta(log).statusCode }}</span
+                      >
                     </div>
                   </button>
                 </div>
@@ -251,19 +255,19 @@
                       <span class="detail-label">记录时间</span>
                       <span>{{ formatTimestamp(getActiveLog(tab.type)?.createdAt) }}</span>
                     </div>
-                    <div class="detail-item" v-if="getLogMeta(getActiveLog(tab.type)).method">
+                    <div v-if="getLogMeta(getActiveLog(tab.type)).method" class="detail-item">
                       <span class="detail-label">方法</span>
                       <span>{{ getLogMeta(getActiveLog(tab.type)).method }}</span>
                     </div>
-                    <div class="detail-item" v-if="getLogMeta(getActiveLog(tab.type)).path">
+                    <div v-if="getLogMeta(getActiveLog(tab.type)).path" class="detail-item">
                       <span class="detail-label">路径</span>
                       <span>{{ getLogMeta(getActiveLog(tab.type)).path }}</span>
                     </div>
-                    <div class="detail-item" v-if="getLogMeta(getActiveLog(tab.type)).statusCode">
+                    <div v-if="getLogMeta(getActiveLog(tab.type)).statusCode" class="detail-item">
                       <span class="detail-label">状态码</span>
                       <span>{{ getLogMeta(getActiveLog(tab.type)).statusCode }}</span>
                     </div>
-                    <div class="detail-item" v-if="getLogMeta(getActiveLog(tab.type)).durationMs">
+                    <div v-if="getLogMeta(getActiveLog(tab.type)).durationMs" class="detail-item">
                       <span class="detail-label">耗时</span>
                       <span>{{ getLogMeta(getActiveLog(tab.type)).durationMs }} ms</span>
                     </div>
@@ -276,7 +280,9 @@
 
                   <div v-if="getActiveLog(tab.type)?.payload" class="detail-block">
                     <div class="detail-title">详情</div>
-                    <pre class="detail-code">{{ formatPayload(getActiveLog(tab.type)?.payload) }}</pre>
+                    <pre class="detail-code">{{
+                      formatPayload(getActiveLog(tab.type)?.payload)
+                    }}</pre>
                   </div>
                 </div>
                 <div v-else class="empty-detail">
@@ -293,10 +299,16 @@
 </template>
 
 <script setup lang="ts">
-		import { computed, reactive, ref, watch } from 'vue'
-		import { ElMessage, ElMessageBox } from 'element-plus'
-		import { Delete, Refresh } from '@element-plus/icons-vue'
-		import { appLogsApi, debugErrorApi, type AppLog, type AppLogType, type DebugError } from '@/services/api'
+import { computed, reactive, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete, Refresh } from '@element-plus/icons-vue'
+import {
+  appLogsApi,
+  debugErrorApi,
+  type AppLog,
+  type AppLogType,
+  type DebugError,
+} from '@/services/api'
 
 const props = withDefaults(
   defineProps<{
@@ -314,48 +326,48 @@ const emit = defineEmits<{
 
 const visibleProxy = computed({
   get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value),
+  set: value => emit('update:modelValue', value),
 })
 
-	const activeTab = ref<'errors' | 'request_response' | 'error_logs' | 'system_logs'>('errors')
+const activeTab = ref<'errors' | 'request_response' | 'error_logs' | 'system_logs'>('errors')
 
-	const errors = ref<DebugError[]>([])
-	const loading = ref(false)
-	const clearing = ref(false)
-	const selectedId = ref('')
-	const lastUpdated = ref('')
+const errors = ref<DebugError[]>([])
+const loading = ref(false)
+const clearing = ref(false)
+const selectedId = ref('')
+const lastUpdated = ref('')
 
-	const logTabs = [
-	  { name: 'request_response', label: '请求/回复', type: 'llm' as AppLogType },
-	  { name: 'error_logs', label: '错误日志', type: 'error' as AppLogType },
-	  { name: 'system_logs', label: '系统日志', type: 'system' as AppLogType },
-	]
+const logTabs = [
+  { name: 'request_response', label: '请求/回复', type: 'llm' as AppLogType },
+  { name: 'error_logs', label: '错误日志', type: 'error' as AppLogType },
+  { name: 'system_logs', label: '系统日志', type: 'system' as AppLogType },
+]
 
-	const logsByType = reactive<Record<AppLogType, AppLog[]>>({
-	  request_response: [],
-	  llm: [],
-	  error: [],
-	  system: [],
-	})
-	const logsLoading = ref(false)
-	const logsUpdatedAt = reactive<Record<AppLogType, string>>({
-	  request_response: '',
-	  llm: '',
-	  error: '',
-	  system: '',
-	})
-	const selectedLogId = reactive<Record<AppLogType, string>>({
-	  request_response: '',
-	  llm: '',
-	  error: '',
-	  system: '',
-	})
-	const logFilters = reactive<Record<AppLogType, { selected: string[]; keyword: string }>>({
-	  request_response: { selected: [], keyword: '' },
-	  llm: { selected: [], keyword: '' },
-	  error: { selected: [], keyword: '' },
-	  system: { selected: [], keyword: '' },
-	})
+const logsByType = reactive<Record<AppLogType, AppLog[]>>({
+  request_response: [],
+  llm: [],
+  error: [],
+  system: [],
+})
+const logsLoading = ref(false)
+const logsUpdatedAt = reactive<Record<AppLogType, string>>({
+  request_response: '',
+  llm: '',
+  error: '',
+  system: '',
+})
+const selectedLogId = reactive<Record<AppLogType, string>>({
+  request_response: '',
+  llm: '',
+  error: '',
+  system: '',
+})
+const logFilters = reactive<Record<AppLogType, { selected: string[]; keyword: string }>>({
+  request_response: { selected: [], keyword: '' },
+  llm: { selected: [], keyword: '' },
+  error: { selected: [], keyword: '' },
+  system: { selected: [], keyword: '' },
+})
 
 const activeError = computed(() => {
   if (selectedId.value) {
@@ -422,7 +434,8 @@ function extractGlmSnippet(context: DebugError['context']): GlmSnippet | null {
   if (!content && !finishReason) return null
 
   return {
-    requestId: typeof (response as any).request_id === 'string' ? (response as any).request_id : undefined,
+    requestId:
+      typeof (response as any).request_id === 'string' ? (response as any).request_id : undefined,
     id: typeof (response as any).id === 'string' ? (response as any).id : undefined,
     model: typeof (response as any).model === 'string' ? (response as any).model : undefined,
     finishReason,
@@ -447,7 +460,8 @@ function extractPromptSnippet(context: DebugError['context']): PromptSnippet | n
   const promptLength = (context as any).promptLength
 
   const snippet: PromptSnippet = {}
-  if (typeof promptLength === 'number' && Number.isFinite(promptLength)) snippet.promptLength = promptLength
+  if (typeof promptLength === 'number' && Number.isFinite(promptLength))
+    snippet.promptLength = promptLength
   if (typeof promptSystem === 'string' && promptSystem.trim()) snippet.promptSystem = promptSystem
   if (typeof promptUser === 'string' && promptUser.trim()) snippet.promptUser = promptUser
 
@@ -487,7 +501,7 @@ function handleRefresh() {
 
 watch(
   () => props.modelValue,
-  (visible) => {
+  visible => {
     if (visible) {
       void refreshActiveTab()
     }
@@ -512,7 +526,7 @@ watch(
   }
 )
 
-	async function loadErrors() {
+async function loadErrors() {
   if (!props.sessionId) {
     errors.value = []
     selectedId.value = ''
@@ -530,8 +544,8 @@ watch(
     ElMessage.error('加载调试错误失败')
   } finally {
     loading.value = false
-	  }
-	}
+  }
+}
 
 async function loadLogs(type: AppLogType) {
   if (!props.sessionId) {
@@ -555,40 +569,40 @@ async function loadLogs(type: AppLogType) {
   }
 }
 
-	async function clearErrors() {
-	  const currentSessionId = props.sessionId?.trim()
-	  if (!currentSessionId) return
-	  if (clearing.value) return
+async function clearErrors() {
+  const currentSessionId = props.sessionId?.trim()
+  if (!currentSessionId) return
+  if (clearing.value) return
 
-	  try {
-	    await ElMessageBox.confirm(
-	      '将删除该会话所有调试报错记录（不可恢复）。确定继续吗？',
-	      '清空报错确认',
-	      {
-	        confirmButtonText: '清空',
-	        cancelButtonText: '取消',
-	        type: 'warning',
-	      }
-	    )
-	  } catch {
-	    return
-	  }
+  try {
+    await ElMessageBox.confirm(
+      '将删除该会话所有调试报错记录（不可恢复）。确定继续吗？',
+      '清空报错确认',
+      {
+        confirmButtonText: '清空',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+  } catch {
+    return
+  }
 
-	  try {
-	    clearing.value = true
-	    const response = await debugErrorApi.clearBySession(currentSessionId)
-	    const deletedCount = response.data?.deletedCount ?? 0
-	    errors.value = []
-	    selectedId.value = ''
-	    lastUpdated.value = new Date().toISOString()
-	    ElMessage.success(`已清空 ${deletedCount} 条报错`)
-	  } catch (error) {
-	    console.error('清空调试错误失败:', error)
-	    ElMessage.error('清空调试错误失败')
-	  } finally {
-	    clearing.value = false
-	  }
-	}
+  try {
+    clearing.value = true
+    const response = await debugErrorApi.clearBySession(currentSessionId)
+    const deletedCount = response.data?.deletedCount ?? 0
+    errors.value = []
+    selectedId.value = ''
+    lastUpdated.value = new Date().toISOString()
+    ElMessage.success(`已清空 ${deletedCount} 条报错`)
+  } catch (error) {
+    console.error('清空调试错误失败:', error)
+    ElMessage.error('清空调试错误失败')
+  } finally {
+    clearing.value = false
+  }
+}
 
 async function clearLogs() {
   const currentSessionId = props.sessionId?.trim()
@@ -698,10 +712,12 @@ function getLogFilterOptions(type: AppLogType): LogFilterGroup[] {
   if (methods.size > 0) {
     groups.push({
       label: '方法',
-      options: Array.from(methods).sort().map(method => ({
-        label: method,
-        value: `method:${method}`,
-      })),
+      options: Array.from(methods)
+        .sort()
+        .map(method => ({
+          label: method,
+          value: `method:${method}`,
+        })),
     })
   }
 
@@ -758,7 +774,9 @@ function getFilteredLogs(type: AppLogType): AppLog[] {
   })
 }
 
-function groupFilters(selected: string[]): Record<'level' | 'method' | 'status' | 'model' | 'label', string[]> {
+function groupFilters(
+  selected: string[]
+): Record<'level' | 'method' | 'status' | 'model' | 'label', string[]> {
   const grouped: Record<'level' | 'method' | 'status' | 'model' | 'label', string[]> = {
     level: [],
     method: [],
@@ -768,7 +786,13 @@ function groupFilters(selected: string[]): Record<'level' | 'method' | 'status' 
   }
   for (const item of selected) {
     const [kind, value] = item.split(':')
-    if (kind === 'level' || kind === 'method' || kind === 'status' || kind === 'model' || kind === 'label') {
+    if (
+      kind === 'level' ||
+      kind === 'method' ||
+      kind === 'status' ||
+      kind === 'model' ||
+      kind === 'label'
+    ) {
       grouped[kind].push(value)
     }
   }
@@ -784,10 +808,10 @@ function matchesLogFilters(
   const methodMatches =
     filters.method.length === 0 ||
     (meta.method ? filters.method.includes(meta.method.toUpperCase()) : false)
-  const statusGroup = typeof meta.statusCode === 'number'
-    ? `${Math.floor(meta.statusCode / 100)}xx`
-    : ''
-  const statusMatches = filters.status.length === 0 || (statusGroup ? filters.status.includes(statusGroup) : false)
+  const statusGroup =
+    typeof meta.statusCode === 'number' ? `${Math.floor(meta.statusCode / 100)}xx` : ''
+  const statusMatches =
+    filters.status.length === 0 || (statusGroup ? filters.status.includes(statusGroup) : false)
   const payload = log.payload as Record<string, unknown> | undefined
   const params = payload?.params as Record<string, unknown> | undefined
   const model = typeof params?.model === 'string' ? params.model.trim() : ''
@@ -916,7 +940,13 @@ function formatPayload(payload?: Record<string, unknown>) {
   background:
     radial-gradient(circle at 15% 20%, rgba(242, 140, 56, 0.12), transparent 55%),
     radial-gradient(circle at 85% 15%, rgba(84, 128, 141, 0.14), transparent 50%),
-    repeating-linear-gradient(120deg, rgba(93, 83, 72, 0.04) 0px, rgba(93, 83, 72, 0.04) 1px, transparent 1px, transparent 16px),
+    repeating-linear-gradient(
+      120deg,
+      rgba(93, 83, 72, 0.04) 0px,
+      rgba(93, 83, 72, 0.04) 1px,
+      transparent 1px,
+      transparent 16px
+    ),
     var(--debug-bg);
 }
 
@@ -951,15 +981,15 @@ function formatPayload(payload?: Record<string, unknown>) {
   color: var(--debug-ink);
 }
 
-	.ghost-button:hover {
-	  border-color: var(--debug-accent);
-	  color: #b3541e;
-	}
+.ghost-button:hover {
+  border-color: var(--debug-accent);
+  color: #b3541e;
+}
 
-	.danger-button:hover {
-	  border-color: rgba(219, 90, 76, 0.6);
-	  color: #b33d35;
-	}
+.danger-button:hover {
+  border-color: rgba(219, 90, 76, 0.6);
+  color: #b33d35;
+}
 
 .debug-tabs {
   display: flex;
@@ -1066,7 +1096,10 @@ function formatPayload(payload?: Record<string, unknown>) {
   border-radius: 14px;
   box-shadow: 0 6px 16px rgba(33, 28, 22, 0.08);
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
   animation: fade-in 0.4s ease forwards;
   opacity: 0;
 }
@@ -1261,19 +1294,38 @@ function formatPayload(payload?: Record<string, unknown>) {
     width: 100% !important;
   }
 
+  :deep(.debug-drawer.el-drawer) {
+    max-width: 100% !important;
+  }
+
+  .debug-shell {
+    min-height: 100dvh;
+  }
+
   .debug-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+    padding: 14px 16px 10px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: rgba(247, 242, 234, 0.96);
+    backdrop-filter: blur(8px);
   }
 
   .header-actions {
     width: 100%;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .log-filters {
     flex-direction: column;
+  }
+
+  .debug-tabs {
+    padding: 0 14px 16px;
   }
 }
 </style>

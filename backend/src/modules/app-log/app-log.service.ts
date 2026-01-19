@@ -73,8 +73,7 @@ export class AppLogService {
   async recordRequestResponseLog(input: RequestResponseLogInput): Promise<void> {
     if (!this.isRequestResponseEnabled()) return
     const method = input.method.trim().toUpperCase()
-    if (method === 'GET' && typeof input.statusCode === 'number' && input.statusCode < 400)
-      return
+    if (method === 'GET' && typeof input.statusCode === 'number' && input.statusCode < 400) return
 
     const payload = this.sanitizePayload({
       method,
@@ -166,11 +165,7 @@ export class AppLogService {
     })
   }
 
-  async findBySession(
-    sessionId: string,
-    type?: AppLogType,
-    limit = 200
-  ): Promise<AppLogDto[]> {
+  async findBySession(sessionId: string, type?: AppLogType, limit = 200): Promise<AppLogDto[]> {
     const normalizedSessionId = sessionId.trim()
     if (!normalizedSessionId) return []
 
@@ -195,10 +190,7 @@ export class AppLogService {
     }))
   }
 
-  async deleteBySession(
-    sessionId: string,
-    type?: AppLogType
-  ): Promise<{ deletedCount: number }> {
+  async deleteBySession(sessionId: string, type?: AppLogType): Promise<{ deletedCount: number }> {
     const normalizedSessionId = sessionId.trim()
     if (!normalizedSessionId) return { deletedCount: 0 }
 
@@ -210,6 +202,27 @@ export class AppLogService {
     })
 
     return { deletedCount: result.count ?? 0 }
+  }
+
+  async findLastRequestAtBySessions(sessionIds: string[]): Promise<Record<string, Date>> {
+    const normalized = Array.from(new Set(sessionIds.map(id => id.trim()).filter(Boolean)))
+    if (normalized.length === 0) return {}
+
+    const rows = await this.prisma.appLog.groupBy({
+      by: ['sessionId'],
+      where: {
+        sessionId: { in: normalized },
+        type: { in: ['request_response', 'llm', 'error'] },
+      },
+      _max: { createdAt: true },
+    })
+
+    const result: Record<string, Date> = {}
+    for (const row of rows) {
+      if (!row.sessionId || !row._max.createdAt) continue
+      result[row.sessionId] = row._max.createdAt
+    }
+    return result
   }
 
   private isRequestResponseEnabled(): boolean {
@@ -272,11 +285,7 @@ export class AppLogService {
     return this.sanitizeValue(input, 0, new WeakSet()) as Record<string, unknown>
   }
 
-  private sanitizeValue(
-    value: unknown,
-    depth: number,
-    seen: WeakSet<object>
-  ): unknown {
+  private sanitizeValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
     if (value == null) return value
     if (typeof value === 'string') return this.truncate(value)
     if (typeof value === 'number' || typeof value === 'boolean') return value
@@ -358,7 +367,14 @@ export class AppLogService {
   private extractRequestParams(requestBody: Record<string, unknown>): Record<string, unknown> {
     const pick = (key: string) => (key in requestBody ? requestBody[key] : undefined)
     const params: Record<string, unknown> = {}
-    for (const key of ['model', 'temperature', 'max_tokens', 'thinking', 'response_format', 'stream']) {
+    for (const key of [
+      'model',
+      'temperature',
+      'max_tokens',
+      'thinking',
+      'response_format',
+      'stream',
+    ]) {
       const value = pick(key)
       if (value != null) params[key] = value
     }

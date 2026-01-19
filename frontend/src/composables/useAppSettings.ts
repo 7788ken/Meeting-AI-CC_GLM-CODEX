@@ -25,7 +25,7 @@ const FONT_SIZE_MIN = 12
 const FONT_SIZE_MAX = 24
 
 const resolveEnv = <T>(value: T | undefined, fallback: T): T =>
-  (value === undefined || value === null || value === '' ? fallback : value)
+  value === undefined || value === null || value === '' ? fallback : value
 
 const buildDefaultSettings = (): AppSettings => {
   const vad = getVadConfig()
@@ -50,8 +50,8 @@ const buildDefaultSettings = (): AppSettings => {
 
 const fallbackDefaults: AppSettings = buildDefaultSettings()
 
-let settings = ref<AppSettings>(fallbackDefaults)
-let defaults: AppSettings = { ...fallbackDefaults }
+const settings = ref<AppSettings>(fallbackDefaults)
+const defaults: AppSettings = { ...fallbackDefaults }
 
 function loadFromStorage(): AppSettings | null {
   if (typeof localStorage === 'undefined') return null
@@ -205,7 +205,9 @@ applySettings(settings.value)
 
 export const useAppSettings = () => ({
   settings,
-  get defaults() { return defaults },
+  get defaults() {
+    return defaults
+  },
   updateSettings,
   resetSettings,
   applySettings,

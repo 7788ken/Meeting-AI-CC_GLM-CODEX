@@ -7,4 +7,3 @@ export class AppConfigRemarkDto {
   @ApiProperty({ description: '备注说明' })
   remark: string
 }
-

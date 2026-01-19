@@ -6,9 +6,7 @@ import { GlmRateLimiter } from '../../common/llm/glm-rate-limiter'
 import { AppConfigService } from '../app-config/app-config.service'
 import { AppLogService } from '../app-log/app-log.service'
 
-export type TranscriptSummaryStreamChunk =
-  | { type: 'delta'; text: string }
-  | { type: 'done' }
+export type TranscriptSummaryStreamChunk = { type: 'delta'; text: string } | { type: 'done' }
 
 @Injectable()
 export class TranscriptAnalysisGlmClient {
@@ -26,9 +24,7 @@ export class TranscriptAnalysisGlmClient {
   ) {}
 
   getModelName(): string {
-    const preferred = this.appConfigService
-      .getString('GLM_TRANSCRIPT_SUMMARY_MODEL', '')
-      .trim()
+    const preferred = this.appConfigService.getString('GLM_TRANSCRIPT_SUMMARY_MODEL', '').trim()
     const fallback = this.appConfigService
       .getString('GLM_TRANSCRIPT_EVENT_SEGMENT_MODEL', '')
       .trim()
@@ -184,7 +180,10 @@ export class TranscriptAnalysisGlmClient {
     })
 
     if (response.status === 429) {
-      this.glmRateLimiter.onRateLimit(this.readRetryAfterMsFromHeaders(response.headers), 'analysis')
+      this.glmRateLimiter.onRateLimit(
+        this.readRetryAfterMsFromHeaders(response.headers),
+        'analysis'
+      )
     }
 
     if (response.status >= 400) {
@@ -492,5 +491,4 @@ export class TranscriptAnalysisGlmClient {
     const delay = Math.min(max, base * Math.pow(2, attempt) + jitter)
     return Math.max(0, Math.floor(delay))
   }
-
 }

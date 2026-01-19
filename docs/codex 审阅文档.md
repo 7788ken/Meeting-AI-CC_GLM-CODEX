@@ -112,7 +112,6 @@
 ## 8. 待修复/疑问/待讨论（滚动）
 
 - 待跟进：基于 queueDelay P50/P95 指标评估是否需要调整全局 + 桶双层排队策略。`backend/src/common/llm/glm-rate-limiter.ts` `backend/src/main.ts`
-- 待讨论：`TranscriptGateway`(socket.io) 与原生 WebSocket 并存是否保留。`backend/src/modules/transcript/transcript.gateway.ts`
 
 ## 9. 相关文档（避免重复造轮子）
 

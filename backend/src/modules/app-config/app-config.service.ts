@@ -55,11 +55,7 @@ export class AppConfigService implements OnModuleInit {
     return String(raw)
   }
 
-  getNumber(
-    key: string,
-    fallback: number,
-    isValid?: (value: number) => boolean
-  ): number {
+  getNumber(key: string, fallback: number, isValid?: (value: number) => boolean): number {
     const raw = this.getRaw(key)
     if (raw == null || raw === '') return fallback
     const value = Number(raw)
@@ -187,7 +183,10 @@ export class AppConfigService implements OnModuleInit {
     await this.prisma.$transaction(
       keys.map(key =>
         this.prisma.appConfig.updateMany({
-          where: { key, OR: [{ remark: null }, { remark: '' }, { remark: { not: APP_CONFIG_REMARKS[key] } }] },
+          where: {
+            key,
+            OR: [{ remark: null }, { remark: '' }, { remark: { not: APP_CONFIG_REMARKS[key] } }],
+          },
           data: { remark: APP_CONFIG_REMARKS[key] },
         })
       )
