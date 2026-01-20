@@ -1,278 +1,105 @@
-# Vue 组件文档
-
-## 组件列表
-
-### 布局组件
-
-#### MainLayout
-
-主布局容器，包含顶部导航和内容区域。
-
-**位置**: `src/components/MainLayout.vue` (F1031)
-
-**Props**: 无
-
-**Slots**:
-- `default` - 内容区域
-
-**示例**:
-```vue
-<MainLayout>
-  <router-view />
-</MainLayout>
-```
-
----
-
-#### AppHeader
-
-应用顶部导航栏。
-
-**位置**: `src/components/AppHeader.vue` (F1032)
-
-**Props**: 无
-
-**Emits**:
-- `navigate` - 导航事件
-
-**功能**:
-- 显示应用标题
-- 显示当前会话信息
-- 提供设置入口
-
----
-
-### 会议控制组件
-
-#### MeetingActionBar
-
-会议操作栏，提供录音、静音、结束会话与快捷键入口。
-
-**位置**: `src/components/MeetingActionBar.vue`
-
-**Props**:
-| Prop | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `enabled` | `boolean` | - | 是否启用操作栏渲染 |
-| `compact` | `boolean` | - | 是否使用紧凑布局 |
-| `disabled` | `boolean` | - | 是否禁用按钮交互 |
-| `ending` | `boolean` | - | 会话结束中状态 |
-| `isSessionEnded` | `boolean` | - | 会话已结束标记 |
-| `recordingStatus` | `'idle' \| 'connecting' \| 'recording' \| 'paused' \| 'error'` | - | 录音状态 |
-| `isPaused` | `boolean` | - | 是否处于暂停状态 |
-
-**Emits**:
-| Event | Payload | 说明 |
-|-------|---------|------|
-| `toggle-recording` | - | 开始/停止录音 |
-| `toggle-mute` | - | 暂停/继续 |
-| `end-session` | - | 结束会话 |
-| `toggle-realtime` | - | 切换实时面板 |
-
-**暴露方法**:
-| 方法 | 参数 | 说明 |
-|------|------|------|
-| `openHelp` | - | 打开快捷键弹窗 |
-
-**使用场景**:
-- 会议进行页的主操作栏（开始/停止录音、暂停/继续、结束会话）
-- 窄屏模式下合并操作入口与快捷键提示
-
-**相关文档**:
-- [前端架构](./architecture.md)
-
----
-
-#### MicPermission
-
-麦克风权限请求组件。
-
-**位置**: `src/components/MicPermission.vue` (F1010)
-
-**Props**:
-| Prop | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `required` | `boolean` | `true` | 是否必须授权 |
-
-**Emits**:
-| Event | Payload | 说明 |
-|-------|---------|------|
-| `granted` | - | 授权成功 |
-| `denied` | - | 授权失败 |
-
----
-
-### 内容展示组件
-
-#### TranscriptDisplay
-
-实时转写内容展示面板。
-
-**位置**: `src/components/TranscriptDisplay.vue` (F1016-F1020)
-
-**Props**:
-| Prop | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `speeches` | `Speech[]` | `[]` | 发言记录列表 |
-| `autoScroll` | `boolean` | `true` | 是否自动滚动 |
-
-**Emits**:
-| Event | Payload | 说明 |
-|-------|---------|------|
-| `refresh` | - | 刷新列表 |
-| `clear` | - | 清空列表 |
-| `select` | `id: string` | 选择发言 |
-| `update:speech` | `speech: Speech` | 更新发言内容 |
-| `toggle-mark` | `speech: Speech` | 切换标记状态 |
-
-**暴露方法**:
-| 方法 | 参数 | 说明 |
-|------|------|------|
-| `scrollToBottom` | - | 滚动到底部 |
-
-**功能特性**:
-- 实时显示转写内容
-- 自动滚动控制
-- 实时编辑功能
-- 标记重要内容
-
----
-
-#### SpeechList
-
-发言列表组件。
-
-**位置**: `src/components/SpeechList.vue` (F1021)
-
-**Props**:
-| Prop | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `speeches` | `Speech[]` | `[]` | 发言记录 |
-| `filter` | `string` | - | 搜索关键词 |
-
-**Emits**:
-| Event | Payload | 说明 |
-|-------|---------|------|
-| `select` | `speech: Speech` | 选择发言 |
-
-**功能**:
-- 列表展示
-- 搜索过滤 (F1022 - 待实现)
-- 标记管理 (F1023 - 待实现)
-
----
-
-### AI 分析组件
-
-#### AIAnalysisPanel
-
-AI 分析面板组件。
-
-**位置**: `src/components/AIAnalysisPanel.vue` (F1025-F1029)
-
-**Props**:
-| Prop | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `sessionId` | `string` | - | 会话 ID |
-| `speeches` | `Speech[]` | `[]` | 发言记录 |
-| `disabled` | `boolean` | `false` | 是否禁用 |
-| `autoGenerate` | `boolean` | `false` | 是否自动生成 |
-| `defaultAnalysisType` | `string` | `'summary'` | 默认分析类型 |
-
-**Emits**:
-| Event | Payload | 说明 |
-|-------|---------|------|
-| `analyze` | `model, type` | 开始分析 |
-| `generated` | `analysis: AIAnalysis` | 分析完成 |
-| `error` | `error: Error` | 分析错误 |
-
-**暴露方法**:
-| 方法 | 参数 | 说明 |
-|------|------|------|
-| `setAnalysisResult` | `success, message` | 设置分析结果 |
-| `reset` | - | 重置状态 |
-| `generate` | - | 触发分析 |
-| `clear` | - | 清空结果 |
-
-**分析类型**:
-- `summary` - 会议摘要
-- `action-items` - 行动项
-- `sentiment` - 情感分析
-- `keywords` - 关键词
-- `topics` - 议题分析
-- `full-report` - 完整报告
-
-**功能特性**:
-- 多种分析类型切换
-- 多 AI 模型选择
-- 结果导出 (Markdown, TXT)
-- 缓存机制
-- 复制功能
-
----
-
-#### ModelSelector
-
-AI 模型选择器组件。
-
-**位置**: `src/components/ModelSelector.vue` (F1028)
-
-**Props**:
-| Prop | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `modelValue` | `AIModel` | - | 当前选中的模型 |
-| `disabled` | `boolean` | `false` | 是否禁用 |
-
-**Emits**:
-| Event | Payload | 说明 |
-|-------|---------|------|
-| `update:modelValue` | `model: AIModel` | 模型变化 |
-
-**可用模型**:
-- `glm` - 智谱 GLM（模型版本由 `GLM_ANALYSIS_MODEL` 配置）
-- `GLM_ANALYSIS_MODEL` 中配置的模型名 - 智谱 GLM（兼容别名）
-
----
-
-## 组件使用示例
-
-### 完整会议页面
-
-```vue
-<template>
-  <MainLayout>
-    <template #header>
-      <AppHeader />
-    </template>
-
-    <div class="meeting-content">
-      <div class="right-panel">
-        <AIAnalysisPanel
-          :session-id="sessionId"
-          :speeches="speeches"
-          @generated="handleAnalysisGenerated"
-        />
-      </div>
-    </div>
-
-    <MeetingActionBar
-      :enabled="true"
-      :compact="false"
-      :disabled="!sessionId"
-      :ending="endingSession"
-      :isSessionEnded="isSessionEnded"
-      :recordingStatus="recordingStatus"
-      :isPaused="isPaused"
-      @toggle-recording="toggleRecording"
-      @toggle-mute="toggleMute"
-      @end-session="endSession"
-    />
-  </MainLayout>
-</template>
-```
-
----
-
-**相关文档**：
-- [前端架构](./architecture.md)
-- [状态管理](./state-management.md)
+# 前端组件
+
+<cite>
+**本文档引用的文件**
+- [frontend/src/components/AppHeader.vue](file://frontend/src/components/AppHeader.vue)
+- [frontend/src/components/MainLayout.vue](file://frontend/src/components/MainLayout.vue)
+- [frontend/src/components/MeetingActionBar.vue](file://frontend/src/components/MeetingActionBar.vue)
+- [frontend/src/components/MicPermission.vue](file://frontend/src/components/MicPermission.vue)
+- [frontend/src/components/ModelSelector.vue](file://frontend/src/components/ModelSelector.vue)
+- [frontend/src/components/TranscriptEventSegmentsPanel.vue](file://frontend/src/components/TranscriptEventSegmentsPanel.vue)
+- [frontend/src/components/SettingsDrawer.vue](file://frontend/src/components/SettingsDrawer.vue)
+- [frontend/src/components/DebugDrawer.vue](file://frontend/src/components/DebugDrawer.vue)
+</cite>
+
+## 目录
+1. [组件概览](#组件概览)
+2. [AppHeader](#appheader)
+3. [MainLayout](#mainlayout)
+4. [MeetingActionBar](#meetingactionbar)
+5. [MicPermission](#micpermission)
+6. [ModelSelector](#modelselector)
+7. [TranscriptEventSegmentsPanel](#transcripteventsegmentspanel)
+8. [SettingsDrawer](#settingsdrawer)
+9. [DebugDrawer](#debugdrawer)
+
+## 组件概览
+- 布局/容器：MainLayout
+- 页头与状态：AppHeader
+- 会议控制：MeetingActionBar、MicPermission
+- 数据面板：TranscriptEventSegmentsPanel
+- 系统设置与调试：SettingsDrawer、DebugDrawer
+- 选择器：ModelSelector
+
+**Section sources**
+- [frontend/src/components/MainLayout.vue](file://frontend/src/components/MainLayout.vue#L1-L15)
+- [frontend/src/components/AppHeader.vue](file://frontend/src/components/AppHeader.vue#L1-L41)
+- [frontend/src/components/MeetingActionBar.vue](file://frontend/src/components/MeetingActionBar.vue#L1-L173)
+- [frontend/src/components/MicPermission.vue](file://frontend/src/components/MicPermission.vue#L1-L199)
+- [frontend/src/components/TranscriptEventSegmentsPanel.vue](file://frontend/src/components/TranscriptEventSegmentsPanel.vue#L1-L149)
+- [frontend/src/components/SettingsDrawer.vue](file://frontend/src/components/SettingsDrawer.vue#L1-L1560)
+- [frontend/src/components/DebugDrawer.vue](file://frontend/src/components/DebugDrawer.vue#L1-L360)
+- [frontend/src/components/ModelSelector.vue](file://frontend/src/components/ModelSelector.vue#L1-L57)
+
+## AppHeader
+- 用于会议页头部，展示标题与会话状态标签。
+- Props：`title`、`showBackButton`、`status`（active/ended）。
+- Emits：`back`。
+
+**Section sources**
+- [frontend/src/components/AppHeader.vue](file://frontend/src/components/AppHeader.vue#L1-L41)
+
+## MainLayout
+- 页面骨架，提供 `header` 具名插槽与默认内容区域。
+
+**Section sources**
+- [frontend/src/components/MainLayout.vue](file://frontend/src/components/MainLayout.vue#L1-L15)
+
+## MeetingActionBar
+- 会议操作栏，包含录音、静音、结束会话与快捷键入口。
+- Props：`enabled`、`compact`、`disabled`、`ending`、`isSessionEnded`、`recordingStatus`、`isPaused`。
+- Emits：`toggle-recording`、`toggle-mute`、`end-session`、`toggle-realtime`。
+- 暴露方法：`openHelp` 与 `hostEl`。
+
+**Section sources**
+- [frontend/src/components/MeetingActionBar.vue](file://frontend/src/components/MeetingActionBar.vue#L1-L173)
+
+## MicPermission
+- 麦克风权限引导对话框，自动检测与请求权限。
+- Props：`modelValue`、`autoCheck`。
+- Emits：`update:modelValue`、`granted`、`denied`、`cancel`。
+
+**Section sources**
+- [frontend/src/components/MicPermission.vue](file://frontend/src/components/MicPermission.vue#L1-L199)
+
+## ModelSelector
+- AI 模型下拉选择器。
+- Props：`modelValue`、`disabled`、`placeholder`、`size`。
+- Emits：`update:modelValue`、`change`。
+
+**Section sources**
+- [frontend/src/components/ModelSelector.vue](file://frontend/src/components/ModelSelector.vue#L1-L50)
+
+## TranscriptEventSegmentsPanel
+- 语句拆分列表面板，支持进度提示与快速分析入口。
+- Props：`segments`、`order`、`loading`、`progress`、`highlightedSegmentId`、`translationEnabled`、`displayMode`。
+- Emits：`select-range`、`target-analysis`。
+
+**Section sources**
+- [frontend/src/components/TranscriptEventSegmentsPanel.vue](file://frontend/src/components/TranscriptEventSegmentsPanel.vue#L1-L149)
+
+## SettingsDrawer
+- 系统设置抽屉，提供 AI 模型、转写、拆分、分析、提示词库等配置入口。
+- Props：`modelValue`。
+- Emits：`update:modelValue`。
+
+**Section sources**
+- [frontend/src/components/SettingsDrawer.vue](file://frontend/src/components/SettingsDrawer.vue#L1-L1560)
+
+## DebugDrawer
+- 会话调试抽屉，包含报错列表/详情与日志面板。
+- Props：`modelValue`、`sessionId`。
+- Emits：`update:modelValue`。
+
+**Section sources**
+- [frontend/src/components/DebugDrawer.vue](file://frontend/src/components/DebugDrawer.vue#L1-L360)

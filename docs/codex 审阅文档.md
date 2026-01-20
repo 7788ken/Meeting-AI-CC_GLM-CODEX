@@ -111,11 +111,12 @@
 
 ## 8. 待修复/疑问/待讨论（滚动）
 
-- 待跟进：基于 queueDelay P50/P95 指标评估是否需要调整全局 + 桶双层排队策略。`backend/src/common/llm/glm-rate-limiter.ts` `backend/src/main.ts`
+- 待跟进：基于 queueDelay P50/P95 指标评估是否需要调整全局 + 桶双层排队策略（已补充排队耗时统计，待根据数据评估）。`backend/src/common/llm/glm-rate-limiter.ts` `backend/src/main.ts`
 
 ## 9. 相关文档（避免重复造轮子）
 
-- 开发流程与规范：`Readme/代码规范和开发流程.md`
-- 测试策略：`Readme/测试策略和测试用例设计规范.md`
-- API 规范：`Readme/API接口规范文档.md`
-- 架构与模块：`Readme/系统架构设计文档.md`、`Readme/模块设计文档.md`
+- 项目 Wiki（文档入口）：`docs/wiki/home.md`
+- 后端架构：`docs/wiki/backend/architecture.md`
+- 后端 API：`docs/wiki/backend/api.md`
+- 前端架构：`docs/wiki/frontend/architecture.md`
+- Docker 部署：`docs/wiki/deployment/docker.md`

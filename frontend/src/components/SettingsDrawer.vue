@@ -6,6 +6,7 @@
     direction="rtl"
     append-to-body
     class="settings-drawer"
+    body-class="settings-drawer-body"
     :destroy-on-close="false"
   >
     <div class="settings-shell">
@@ -17,17 +18,25 @@
           </el-button>
         </div>
         <div class="header-actions">
-          <el-button size="small" class="ghost-button" :icon="Refresh" @click="onReset">
-            重置
-          </el-button>
-          <el-button size="small" type="primary" :icon="Check" @click="onSave">
-            保存并关闭
-          </el-button>
+          <el-button
+            size="small"
+            class="ghost-button"
+            :icon="Refresh"
+            aria-label="重置为默认设置"
+            @click="onReset"
+          />
+          <el-button
+            size="small"
+            type="primary"
+            :icon="Check"
+            aria-label="保存设置"
+            @click="onSave"
+          />
         </div>
       </header>
 
       <div class="drawer-body">
-        <el-tabs v-model="activeSection" tab-position="left" class="settings-tabs">
+        <el-tabs v-model="activeSection" :tab-position="tabPosition" class="settings-tabs">
           <el-tab-pane name="models">
             <template #label>
               <span class="tab-label">
@@ -1457,7 +1466,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft,
@@ -1515,6 +1524,10 @@ const visibleProxy = computed({
   get: () => props.modelValue,
   set: (v: boolean) => emit('update:modelValue', v),
 })
+
+const isNarrow = ref(false)
+const tabPosition = computed(() => (isNarrow.value ? 'top' : 'left'))
+let mediaQuery: MediaQueryList | null = null
 
 const form = reactive<AppSettings>({ ...settings.value })
 const segmentationForm = reactive<TranscriptEventSegmentationConfig>({
@@ -1620,6 +1633,23 @@ const securityForm = reactive({
 
 const vadPreview = computed(() => {
   return `VAD_START_TH=${form.vadStartTh}  VAD_STOP_TH=${form.vadStopTh}  VAD_GAP_MS=${form.vadGapMs}`
+})
+
+function updateIsNarrow(): void {
+  if (!mediaQuery) return
+  isNarrow.value = mediaQuery.matches
+}
+
+onMounted(() => {
+  mediaQuery = window.matchMedia('(max-width: 768px)')
+  updateIsNarrow()
+  mediaQuery.addEventListener('change', updateIsNarrow)
+})
+
+onUnmounted(() => {
+  if (!mediaQuery) return
+  mediaQuery.removeEventListener('change', updateIsNarrow)
+  mediaQuery = null
 })
 
 watch(
@@ -2138,12 +2168,19 @@ const onSave = async () => {
   } else {
     ElMessage.warning(`设置已保存，但${failed.join('、')}同步失败`)
   }
-  visibleProxy.value = false
 }
 
 const onReset = async () => {
   try {
-    await ElMessageBox.confirm('确定恢复默认设置？', '重置', { type: 'warning' })
+    await ElMessageBox.confirm(
+      '将恢复本地设置、语句拆分与 AI 分析提示词为默认值，并丢弃当前未保存的修改。',
+      '确认重置设置',
+      {
+        type: 'warning',
+        confirmButtonText: '确认重置',
+        cancelButtonText: '取消',
+      }
+    )
     const next = resetSettings()
     Object.assign(form, next)
 
@@ -2174,7 +2211,7 @@ const onReset = async () => {
 </script>
 
 <style scoped>
-.settings-drawer :deep(.el-drawer__body) {
+.settings-drawer :deep(.settings-drawer-body) {
   padding: 0;
   background: var(--paper-50);
   background-image:
@@ -2595,14 +2632,14 @@ const onReset = async () => {
     width: 100% !important;
   }
 
-  .settings-drawer :deep(.el-drawer__body) {
+  .settings-drawer :deep(.settings-drawer-body) {
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 
   .drawer-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 10px;
     padding: 12px 14px;
     position: sticky;
     top: 0;
@@ -2610,17 +2647,38 @@ const onReset = async () => {
   }
 
   .header-actions {
-    width: 100%;
-    flex-wrap: wrap;
+    width: auto;
+    flex-wrap: nowrap;
     justify-content: flex-end;
   }
 
   .drawer-body {
-    padding: 10px 12px 16px;
+    padding: 10px 8px 16px;
+  }
+
+  .settings-tabs {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .settings-tabs :deep(.el-tabs__header) {
+    flex: none;
+  }
+
+  .settings-tabs :deep(.el-tabs__content) {
+    flex: 1;
+    min-height: 0;
   }
 
   .settings-tabs :deep(.el-tabs__nav-wrap) {
     padding-right: 0;
+    padding-left: 0;
+  }
+
+  .settings-tabs :deep(.el-tabs__header.is-top) .el-tabs__nav-prev,
+  .settings-tabs :deep(.el-tabs__header.is-top) .el-tabs__nav-next {
+    display: none;
   }
 
   .settings-tabs :deep(.el-tabs__nav-scroll) {
@@ -2644,5 +2702,6 @@ const onReset = async () => {
   .pane {
     padding: 12px;
   }
+ 
 }
 </style>

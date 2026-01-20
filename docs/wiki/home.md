@@ -1,158 +1,74 @@
 # AI 会议助手 Wiki
 
-欢迎来到 AI 会议助手项目文档。这是一个基于 Vue 3 + NestJS 的实时语音转写与 AI 分析系统。
+<cite>
+**本文档引用的文件**
+- [README.md](file://README.md)
+- [package.json](file://package.json)
+- [frontend/package.json](file://frontend/package.json)
+- [backend/package.json](file://backend/package.json)
+- [frontend/src/main.ts](file://frontend/src/main.ts)
+- [frontend/src/router/index.ts](file://frontend/src/router/index.ts)
+- [backend/src/app.module.ts](file://backend/src/app.module.ts)
+- [backend/src/main.ts](file://backend/src/main.ts)
+- [backend/prisma/schema.prisma](file://backend/prisma/schema.prisma)
+- [docs/wiki/backend/architecture.md](file://docs/wiki/backend/architecture.md)
+- [docs/wiki/backend/api.md](file://docs/wiki/backend/api.md)
+- [docs/wiki/frontend/architecture.md](file://docs/wiki/frontend/architecture.md)
+- [docs/wiki/frontend/components.md](file://docs/wiki/frontend/components.md)
+- [docs/wiki/frontend/concurrency-dashboard.md](file://docs/wiki/frontend/concurrency-dashboard.md)
+- [docs/wiki/deployment/docker.md](file://docs/wiki/deployment/docker.md)
+</cite>
 
-## 📋 项目概览
+## 目录
+1. [项目概览](#项目概览)
+2. [技术架构速览](#技术架构速览)
+3. [开发脚本与快速启动](#开发脚本与快速启动)
+4. [文档导航](#文档导航)
 
-AI 会议助手是一个智能会议记录系统，支持：
-- **实时语音转写**：基于 GLM ASR 的实时语音识别
-- **AI 智能分析**：基于 GLM 的会议内容分析
-- **会议内容管理**：支持编辑、标记、导出等功能
+## 项目概览
+Meeting-AI 是面向会议场景的 Web 智能应用，覆盖实时语音转写、语句拆分/翻译与 AI 分析，并支持队列与性能指标的可观测能力。
 
-## 🏗️ 技术架构
+**Section sources**
+- [README.md](file://README.md#L1-L15)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        前端 (Vue 3)                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │  会议视图   │  │  转写展示   │  │   AI 分析面板       │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│         │                 │                    │            │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │  Pinia 状态 │  │  API 服务   │  │   WebSocket 服务    │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                    HTTP / WebSocket
-                            │
-┌─────────────────────────────────────────────────────────────┐
-│                      后端 (NestJS)                           │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │ 会话管理    │  │ 转写服务    │  │   AI 分析服务       │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│         │                 │                    │            │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │  PostgreSQL │  │   MongoDB   │  │   外部 AI 服务      │ │
-│  │  (Prisma)   │  │  (Mongoose) │  │ (GLM)              │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-```
+## 技术架构速览
+- 前端采用 Vue 3 + Vite + Pinia + Element Plus，入口在 `main.ts`，路由包含首页、会议页与运行中控大屏入口。
+- 后端基于 NestJS，模块覆盖会话、发言、原文事件流、语句拆分、AI 分析、配置与运维流。
+- 数据层以 PostgreSQL（Prisma）承载会话与配置数据，MongoDB 承载原文事件流、语句拆分与分析结果。
+- 服务统一前缀默认 `/api`，并提供 `/api/docs` Swagger 文档与 `/transcript` WebSocket 转写入口。
 
-## 📚 文档目录
+**Section sources**
+- [frontend/package.json](file://frontend/package.json#L1-L45)
+- [frontend/src/main.ts](file://frontend/src/main.ts#L1-L16)
+- [frontend/src/router/index.ts](file://frontend/src/router/index.ts#L1-L29)
+- [backend/package.json](file://backend/package.json#L1-L46)
+- [backend/src/app.module.ts](file://backend/src/app.module.ts#L1-L70)
+- [backend/src/main.ts](file://backend/src/main.ts#L68-L130)
+- [backend/prisma/schema.prisma](file://backend/prisma/schema.prisma#L1-L61)
 
-### 前端开发
-| 文档 | 描述 |
-|------|------|
-| [前端架构](./frontend/architecture.md) | 前端项目结构和设计模式 |
-| [组件文档](./frontend/components.md) | Vue 组件使用说明 |
-| [状态管理](./frontend/state-management.md) | Pinia 状态管理指南 |
-| [API 服务](./frontend/api-service.md) | 前端 API 调用规范 |
-| [并发请求运行中控大屏](./frontend/concurrency-dashboard.md) | 运行态队列与链路监控视图 |
+## 开发脚本与快速启动
+- 安装依赖：`pnpm install`
+- 启动前端：`pnpm dev:frontend`
+- 启动后端：`pnpm dev:backend`
+- 构建前端：`pnpm build:frontend`
+- 构建后端：`pnpm build:backend`
 
-### 后端开发
-| 文档 | 描述 |
-|------|------|
-| [后端架构](./backend/architecture.md) | 后端项目结构和模块划分 |
-| [API 接口](./backend/api.md) | RESTful API 接口文档 |
-| [数据模型](./backend/data-models.md) | 数据库模型和关系 |
-| [WebSocket 协议](./backend/websocket.md) | 实时通信协议说明 |
+**Section sources**
+- [package.json](file://package.json#L1-L15)
+- [README.md](file://README.md#L38-L64)
 
-### 部署运维
-| 文档 | 描述 |
-|------|------|
-| [本地开发](./development/local-setup.md) | 本地开发环境搭建 |
-| [Docker 部署](./deployment/docker.md) | Docker 容器化部署 |
-| [环境配置](./deployment/environment.md) | 环境变量配置说明 |
+## 文档导航
+- 后端架构：`docs/wiki/backend/architecture.md`
+- 后端 API：`docs/wiki/backend/api.md`
+- 前端架构：`docs/wiki/frontend/architecture.md`
+- 前端组件：`docs/wiki/frontend/components.md`
+- 运行中控大屏：`docs/wiki/frontend/concurrency-dashboard.md`
+- Docker 部署：`docs/wiki/deployment/docker.md`
 
-## 🚀 快速开始
-
-### 前置要求
-- Node.js >= 18
-- pnpm >= 8
-- Docker & Docker Compose
-
-### 本地开发
-```bash
-# 克隆项目
-git clone <repository-url>
-
-# 安装依赖
-pnpm install
-
-# 启动数据库
-docker-compose up -d postgres mongodb
-
-# 启动后端
-cd backend && pnpm run start:dev
-
-# 启动前端
-cd frontend && pnpm run dev
-```
-
-## 📦 项目结构
-
-```
-team2/
-├── frontend/                 # 前端项目
-│   ├── src/
-│   │   ├── components/       # Vue 组件
-│   │   ├── views/           # 页面视图
-│   │   ├── services/        # API 服务
-│   │   ├── stores/          # Pinia 状态
-│   │   ├── utils/           # 工具函数
-│   │   └── types/           # TypeScript 类型
-│   ├── Dockerfile
-│   └── vite.config.ts
-│
-├── backend/                 # 后端项目
-│   ├── src/
-│   │   ├── modules/         # 业务模块
-│   │   │   ├── analysis/    # AI 分析模块
-│   │   │   ├── session/     # 会话管理模块
-│   │   │   ├── speech/      # 发言记录模块
-│   │   │   └── transcript/  # 转写服务模块
-│   │   ├── database/        # 数据库配置
-│   │   ├── config/          # 配置管理
-│   │   └── common/          # 公共模块
-│   ├── prisma/              # Prisma Schema
-│   └── Dockerfile
-│
-├── docs/                    # 项目文档
-│   └── wiki/                # Wiki 文档
-│
-├── docker-compose.yml       # Docker 编排
-├── MVP任务清单.md           # MVP 任务清单
-└── README.md                # 项目说明
-```
-
-## 🧪 测试
-
-```bash
-# 前端单元测试
-cd frontend && pnpm test
-
-# 前端 E2E 测试
-cd frontend && pnpm test:e2e
-
-# 后端单元测试
-cd backend && pnpm test
-
-# 后端 E2E 测试
-cd backend && pnpm test:e2e
-```
-
-## 📝 开发规范
-
-- [代码风格](./development/coding-style.md)
-- [提交规范](./development/git-commit.md)
-- [测试规范](./development/testing-guide.md)
-
-## 🔗 相关链接
-
-- [MVP 任务清单](../../MVP任务清单.md)
-- [GitHub Issues](https://github.com/your-repo/issues)
-- [API 文档](http://localhost:5181/api/docs) (本地运行时访问)
-
----
-
-**最后更新**: 2026-01-17
+**Section sources**
+- [docs/wiki/backend/architecture.md](file://docs/wiki/backend/architecture.md)
+- [docs/wiki/backend/api.md](file://docs/wiki/backend/api.md)
+- [docs/wiki/frontend/architecture.md](file://docs/wiki/frontend/architecture.md)
+- [docs/wiki/frontend/components.md](file://docs/wiki/frontend/components.md)
+- [docs/wiki/frontend/concurrency-dashboard.md](file://docs/wiki/frontend/concurrency-dashboard.md)
+- [docs/wiki/deployment/docker.md](file://docs/wiki/deployment/docker.md)

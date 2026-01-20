@@ -1,32 +1,60 @@
 # 并发请求运行中控大屏
 
-> 最后更新: 2026-01-19
+<cite>
+**本文档引用的文件**
+- [frontend/src/router/index.ts](file://frontend/src/router/index.ts)
+- [frontend/src/views/ConcurrencySimulatorView.vue](file://frontend/src/views/ConcurrencySimulatorView.vue)
+- [backend/src/modules/ops/ops.controller.ts](file://backend/src/modules/ops/ops.controller.ts)
+</cite>
 
-## 目标
+## 目录
+1. [目标与入口](#目标与入口)
+2. [数据来源](#数据来源)
+3. [界面区域](#界面区域)
+4. [事件与告警逻辑](#事件与告警逻辑)
+5. [配置授权流程](#配置授权流程)
+6. [生命周期](#生命周期)
 
-用于运行态观测队列压力、并发与冷却策略、活跃会话以及任务/事件链路，支撑实时监控与决策。
+## 目标与入口
+- 路由入口：`/ops/concurrency-dashboard`。
+- 页面聚焦系统实时运作、队列压力与事件链路状态，用于运行时监控与决策。
 
-## 页面入口
+**Section sources**
+- [frontend/src/router/index.ts](file://frontend/src/router/index.ts#L1-L23)
+- [frontend/src/views/ConcurrencySimulatorView.vue](file://frontend/src/views/ConcurrencySimulatorView.vue#L1-L24)
 
-- 路由：`/ops/concurrency-dashboard`
-- 页面文件：`frontend/src/views/ConcurrencySimulatorView.vue`
+## 数据来源
+- 页面通过 EventSource 订阅 `/ops/stream` 获取队列、任务日志与会话运行态。
+- 后端 Ops 模块以 SSE 形式每秒推送数据。
 
-## 核心区域
+**Section sources**
+- [frontend/src/views/ConcurrencySimulatorView.vue](file://frontend/src/views/ConcurrencySimulatorView.vue#L670-L889)
+- [backend/src/modules/ops/ops.controller.ts](file://backend/src/modules/ops/ops.controller.ts#L1-L58)
 
-- **顶部指标卡**：总排队、执行中/并发上限、活跃会话、最近刷新、队列压力、调度频率
-- **队列监控**：全局/分桶排队数、冷却、P50/P95、并发使用率
-- **运行中会话**：活跃会话列表（标题、开始时间、持续时长）
-- **事件链路日志**：运行流事件与告警
-- **任务日志**：任务类型、阶段、等待/运行/完成耗时
-- **系统参数**：限流矩阵与能力/策略快照
-- **运行脉冲**：关键开关、实例与最近同步信息
+## 界面区域
+- 顶部指标卡：总排队、执行中、活动会话、最近刷新、队列压力、调度频率。
+- 队列监控：分桶排队、冷却、延迟与并发使用率。
+- 运行中会话：活动会话列表与时长。
+- 事件链路日志与任务日志：展示运行事件与任务链路明细。
+- 系统参数：限流矩阵与能力策略展示。
 
-## 权限与数据
+**Section sources**
+- [frontend/src/views/ConcurrencySimulatorView.vue](file://frontend/src/views/ConcurrencySimulatorView.vue#L1-L240)
 
-- 未授权时提示并引导打开设置授权。
-- 数据来自后端队列统计与系统配置。
+## 事件与告警逻辑
+队列状态变化触发事件记录，例如限流、排队开始/清空、并发触顶等。
 
-## 相关文档
+**Section sources**
+- [frontend/src/views/ConcurrencySimulatorView.vue](file://frontend/src/views/ConcurrencySimulatorView.vue#L640-L666)
 
-- [并发解决方案](../../并发解决方案.md)
-- [前端架构](./architecture.md)
+## 配置授权流程
+页面进入时同步系统配置，若设置了安全密码则引导验证并打开设置抽屉。
+
+**Section sources**
+- [frontend/src/views/ConcurrencySimulatorView.vue](file://frontend/src/views/ConcurrencySimulatorView.vue#L721-L809)
+
+## 生命周期
+页面挂载时启动运行流连接与时钟，卸载时断开连接并停止定时器。
+
+**Section sources**
+- [frontend/src/views/ConcurrencySimulatorView.vue](file://frontend/src/views/ConcurrencySimulatorView.vue#L813-L894)

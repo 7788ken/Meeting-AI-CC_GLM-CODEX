@@ -1,267 +1,86 @@
 # 后端架构
 
-## 技术栈
+<cite>
+**本文档引用的文件**
+- [backend/package.json](file://backend/package.json)
+- [backend/src/app.module.ts](file://backend/src/app.module.ts)
+- [backend/src/main.ts](file://backend/src/main.ts)
+- [backend/prisma/schema.prisma](file://backend/prisma/schema.prisma)
+- [backend/src/modules/speech/schemas/speech.schema.ts](file://backend/src/modules/speech/schemas/speech.schema.ts)
+- [backend/src/modules/transcript-stream/schemas/transcript-event.schema.ts](file://backend/src/modules/transcript-stream/schemas/transcript-event.schema.ts)
+- [backend/src/modules/transcript-stream/schemas/transcript-state.schema.ts](file://backend/src/modules/transcript-stream/schemas/transcript-state.schema.ts)
+- [backend/src/modules/transcript-event-segmentation/schemas/transcript-event-segment.schema.ts](file://backend/src/modules/transcript-event-segmentation/schemas/transcript-event-segment.schema.ts)
+- [backend/src/modules/transcript-analysis/schemas/transcript-analysis-summary.schema.ts](file://backend/src/modules/transcript-analysis/schemas/transcript-analysis-summary.schema.ts)
+- [backend/src/modules/transcript-analysis/schemas/transcript-analysis-segment.schema.ts](file://backend/src/modules/transcript-analysis/schemas/transcript-analysis-segment.schema.ts)
+</cite>
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| NestJS | 10.x | Node.js 后端框架 |
-| TypeScript | 5.3+ | 类型安全 |
-| Prisma | 5.x | PostgreSQL ORM |
-| Mongoose | 8.x | MongoDB ODM |
-| WebSocket | 1.x | 实时通信 |
-| Jest | 29.x | 单元测试 |
+## 目录
+1. [概览](#概览)
+2. [模块划分](#模块划分)
+3. [启动与横切能力](#启动与横切能力)
+4. [数据存储](#数据存储)
+5. [实时转写与事件流](#实时转写与事件流)
+6. [语句拆分与分析](#语句拆分与分析)
+7. [观测与配置模块](#观测与配置模块)
 
-## 目录结构
+## 概览
+后端基于 NestJS，核心依赖包括 Prisma、Mongoose、JWT 与 WebSocket，采用多模块拆分的业务结构，覆盖会话、发言、原文事件流、语句拆分与 AI 分析等能力。
 
-```
-backend/src/
-├── modules/             # 业务模块
-│   ├── analysis/        # AI 分析模块 (B1022-B1026)
-│   │   ├── clients/
-│   │   │   └── glm.client.ts       # GLM AI 客户端 (B1023)
-│   │   ├── dto/
-│   │   │   ├── analysis.dto.ts
-│   │   │   └── analysis.enum.ts
-│   │   ├── schemas/
-│   │   │   └── analysis.schema.ts   # Mongoose Schema (B1011)
-│   │   ├── analysis.controller.ts   # 分析控制器 (B1022)
-│   │   ├── analysis.service.ts      # 分析服务 (B1026)
-│   │   └── analysis.module.ts
-│   │
-│   ├── session/         # 会话管理模块 (B1012-B1015)
-│   │   ├── dto/
-│   │   │   └── session.dto.ts
-│   │   ├── session.controller.ts    # 会话控制器 (B1012-B1014)
-│   │   ├── session.service.ts       # 会话服务 (B1015)
-│   │   └── session.module.ts
-│   │
-│   ├── speech/          # 发言记录模块 (B1027-B1030)
-│   │   ├── dto/
-│   │   │   └── speech.dto.ts
-│   │   ├── schemas/
-│   │   │   └── speech.schema.ts     # Mongoose Schema (B1010)
-│   │   ├── speech.controller.ts     # 发言控制器 (B1027-B1030)
-│   │   ├── speech.service.ts
-│   │   └── speech.module.ts
-│   │
-│   └── transcript/      # 转写服务模块 (B1016-B1019)
-│       ├── dto/
-│       │   └── transcript.dto.ts
-│       ├── glm-asr.client.ts        # GLM ASR 客户端
-│       ├── smart-audio-buffer.service.ts # 智能音频缓冲
-│       ├── transcript.gateway.ts    # WebSocket 网关 (B1016)
-│       ├── transcript.service.ts    # 转写服务 (B1017)
-│       └── transcript.module.ts
-│
-├── database/            # 数据库配置
-│   ├── prisma.module.ts         # Prisma 模块 (B1006)
-│   ├── prisma.service.ts        # Prisma 服务
-│   ├── mongodb.module.ts        # MongoDB 模块 (B1009)
-│   └── mongodb.ts               # MongoDB 连接
-│
-├── config/              # 配置管理
-│   ├── configuration.ts
-│   └── configuration.service.ts
-│
-├── common/              # 公共模块
-│   └── filters/
-│       └── all-exceptions.filter.ts  # 全局异常过滤 (B1002)
-│
-├── app.module.ts        # 根模块 (B1001)
-├── main.ts              # 应用入口 (B1001)
-└── prisma/              # Prisma Schema
-    └── schema.prisma    # 数据模型定义 (B1007, B1008)
-```
+**Section sources**
+- [backend/package.json](file://backend/package.json#L1-L46)
+- [backend/src/app.module.ts](file://backend/src/app.module.ts#L1-L70)
 
-## 核心架构模式
+## 模块划分
+应用根模块汇聚了会话、发言、转写、拆分、分析、配置、日志、运维等模块，形成业务与基础能力分层：
+- 业务主线：Session、Speech、Transcript、TranscriptStream、TranscriptEventSegmentation、TranscriptAnalysis。
+- 基础服务：Auth、AppConfig、PromptLibrary、Ops、AppLog、DebugError。
 
-### 1. 模块化架构 (Modular Architecture)
+**Section sources**
+- [backend/src/app.module.ts](file://backend/src/app.module.ts#L1-L50)
 
-每个业务功能是一个独立的 NestJS 模块：
+## 启动与横切能力
+- 通过全局配置加载与验证管道控制输入校验，统一设置 CORS 与 API 前缀。
+- Swagger 文档在 `/api/docs` 暴露；WebSocket 服务监听 `/transcript` 路径。
+- 全局异常过滤、日志拦截与 JWT Guard 统一接入。
 
-```typescript
-@Module({
-  imports: [MongooseModule.forFeature([{ name: 'Analysis', schema: AnalysisSchema }])],
-  controllers: [AnalysisController],
-  providers: [AnalysisService, GLMClient],
-  exports: [AnalysisService],
-})
-export class AnalysisModule {}
-```
-
-### 2. 依赖注入 (Dependency Injection)
-
-服务通过构造函数注入依赖：
-
-```typescript
-@Injectable()
-export class AnalysisService {
-  constructor(
-    @InjectModel('Analysis') private analysisModel: Model<Analysis>,
-    private glmClient: GlmClient,
-  ) {}
-
-  async generate(request: AnalysisRequest): Promise<AIAnalysis> {
-    return this.glmClient.generateAnalysis(request)
-  }
-}
-```
-
-### 3. 原生 WebSocket
-
-实时通信使用原生 WebSocket，统一入口为 `/transcript`：
-
-```typescript
-// ws://{host}/transcript
-// 控制消息（JSON）
-{ "type": "set_session", "sessionId": "..." }
-{ "type": "start_transcribe", "asrConfig": { "language": "zh-CN" } }
-{ "type": "stop_transcribe" }
-
-// 音频数据（二进制 PCM 16-bit）
-// 服务端返回：{ type: "transcript", data: {...} } 等消息
-```
+**Section sources**
+- [backend/src/main.ts](file://backend/src/main.ts#L53-L130)
+- [backend/src/app.module.ts](file://backend/src/app.module.ts#L52-L67)
 
 ## 数据存储
+- PostgreSQL（Prisma）：存储会话、后端配置与应用日志。
+- MongoDB（Mongoose）：存储发言记录、原文事件流、拆分结果与分析产出。
 
-### PostgreSQL (Prisma)
+**Section sources**
+- [backend/prisma/schema.prisma](file://backend/prisma/schema.prisma#L1-L61)
+- [backend/src/modules/speech/schemas/speech.schema.ts](file://backend/src/modules/speech/schemas/speech.schema.ts#L1-L56)
+- [backend/src/modules/transcript-stream/schemas/transcript-event.schema.ts](file://backend/src/modules/transcript-stream/schemas/transcript-event.schema.ts#L1-L42)
+- [backend/src/modules/transcript-stream/schemas/transcript-state.schema.ts](file://backend/src/modules/transcript-stream/schemas/transcript-state.schema.ts#L1-L29)
+- [backend/src/modules/transcript-event-segmentation/schemas/transcript-event-segment.schema.ts](file://backend/src/modules/transcript-event-segmentation/schemas/transcript-event-segment.schema.ts#L1-L90)
+- [backend/src/modules/transcript-analysis/schemas/transcript-analysis-summary.schema.ts](file://backend/src/modules/transcript-analysis/schemas/transcript-analysis-summary.schema.ts#L1-L33)
+- [backend/src/modules/transcript-analysis/schemas/transcript-analysis-segment.schema.ts](file://backend/src/modules/transcript-analysis/schemas/transcript-analysis-segment.schema.ts#L1-L43)
 
-存储结构化数据：会话等
+## 实时转写与事件流
+- 服务端使用原生 WebSocket `/transcript` 接收音频并输出转写事件。
+- 原文事件流以 `transcript_events` 落库，`transcript_state` 维护会话级事件索引与版本号。
 
-```prisma
-// prisma/schema.prisma
-model Session {
-  id          String   @id @default(uuid())
-  title       String?
-  description String?
-  startedAt   DateTime @default(now())
-  endedAt     DateTime?
-  duration    Int?
-  isActive    Boolean  @default(true)
-}
-```
+**Section sources**
+- [backend/src/main.ts](file://backend/src/main.ts#L108-L130)
+- [backend/src/modules/transcript-stream/schemas/transcript-event.schema.ts](file://backend/src/modules/transcript-stream/schemas/transcript-event.schema.ts#L1-L42)
+- [backend/src/modules/transcript-stream/schemas/transcript-state.schema.ts](file://backend/src/modules/transcript-stream/schemas/transcript-state.schema.ts#L1-L29)
 
-### MongoDB (Mongoose)
+## 语句拆分与分析
+- 语句拆分结果存储于 `transcript_events_segments`，记录事件范围、序号与翻译字段。
+- 会话总结与语句分析以 Markdown 形式存储，分别落在 `transcript_analysis_summaries` 与 `transcript_analysis_segment_analyses`。
 
-存储文档数据：发言记录、AI 分析结果等
+**Section sources**
+- [backend/src/modules/transcript-event-segmentation/schemas/transcript-event-segment.schema.ts](file://backend/src/modules/transcript-event-segmentation/schemas/transcript-event-segment.schema.ts#L1-L90)
+- [backend/src/modules/transcript-analysis/schemas/transcript-analysis-summary.schema.ts](file://backend/src/modules/transcript-analysis/schemas/transcript-analysis-summary.schema.ts#L1-L33)
+- [backend/src/modules/transcript-analysis/schemas/transcript-analysis-segment.schema.ts](file://backend/src/modules/transcript-analysis/schemas/transcript-analysis-segment.schema.ts#L1-L43)
 
-```typescript
-// speech.schema.ts
-export const SpeechSchema = SchemaFactory.createForClass(Speech)
-@Schema({ _id: false })
-export class Speech {
-  @Prop() id: string
-  @Prop() sessionId: string
-  @Prop() content: string
-  @Prop() confidence: number
-  @Prop() isMarked: boolean
-}
-```
+## 观测与配置模块
+- AppConfig/PromptLibrary 负责模型与提示词配置。
+- Ops 模块提供运行中控数据流；AppLog/DebugError 支撑调试台观测。
 
-## API 设计
-
-### RESTful API
-
-```
-POST   /sessions                    # 创建会话
-GET    /sessions                    # 获取会话列表
-GET    /sessions/:id                # 获取会话详情
-PUT    /sessions/:id/end            # 结束会话
-
-POST   /speeches                    # 创建发言记录
-GET    /speeches/session/:id        # 获取会话的所有发言
-PUT    /speeches/:id                # 更新发言记录
-
-POST   /analysis/generate           # 生成 AI 分析
-POST   /analysis/get-or-create      # 获取或缓存分析
-GET    /analysis/session/:id        # 获取会话的所有分析
-```
-
-### WebSocket 协议
-
-```
-客户端 → 服务器:
-  audio:start    { sessionId, language }
-  audio:data     ArrayBuffer (PCM16)
-  audio:end      {}
-
-服务器 → 客户端:
-  transcript:data { content, isFinal, confidence }
-  error          { message }
-```
-
-## 外部服务集成
-
-### GLM ASR (语音识别)
-
-- 二进制协议通信
-- 流式音频处理
-- 实时转写返回
-
-### GLM AI (文本分析)
-
-- HTTP API 调用
-- Prompt 模板管理
-- 结果缓存机制
-
-
-## 错误处理
-
-```typescript
-@Catch()
-export class AllExceptionsFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost) {
-    const ctx = host.switchToHttp()
-    const response = ctx.getResponse<Response>()
-
-    const status = exception instanceof HttpException
-      ? exception.getStatus()
-      : HttpStatus.INTERNAL_SERVER_ERROR
-
-    const message = exception instanceof HttpException
-      ? exception.message
-      : 'Internal server error'
-
-    response.status(status).json({
-      statusCode: status,
-      message,
-      timestamp: new Date().toISOString(),
-    })
-  }
-}
-```
-
-## 数据验证
-
-使用 class-validator 进行 DTO 验证：
-
-```typescript
-export class CreateSessionDto {
-  @IsOptional()
-  @IsString()
-  title?: string
-
-  @IsOptional()
-  @IsString()
-  description?: string
-}
-```
-
-## 测试策略
-
-```typescript
-// 单元测试
-describe('AnalysisService', () => {
-  it('should generate analysis result', async () => {
-    const result = await service.generate({ sessionId: '1', speechIds: [] })
-    expect(result).toBeDefined()
-  })
-})
-```
-
----
-
-**相关文档**：
-- [API 接口](./api.md)
-- [数据模型](./data-models.md)
-- [WebSocket 协议](./websocket.md)
+**Section sources**
+- [backend/src/app.module.ts](file://backend/src/app.module.ts#L15-L50)

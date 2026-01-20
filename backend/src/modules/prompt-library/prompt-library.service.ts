@@ -2,6 +2,11 @@ import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from
 import { randomUUID } from 'crypto'
 import { AppConfigService } from '../app-config/app-config.service'
 import {
+  DEFAULT_CLASS_CHUNK_SUMMARY_SYSTEM_PROMPT,
+  DEFAULT_CLASS_SUMMARY_SYSTEM_PROMPT,
+  DEFAULT_INTERVIEW_SUMMARY_SYSTEM_PROMPT,
+  DEFAULT_NEGOTIATION_CHUNK_SUMMARY_SYSTEM_PROMPT,
+  DEFAULT_NEGOTIATION_SUMMARY_SYSTEM_PROMPT,
   DEFAULT_TRANSCRIPT_CHUNK_SUMMARY_SYSTEM_PROMPT,
   DEFAULT_INTERVIEW_REPLY_SYSTEM_PROMPT,
   DEFAULT_TRANSCRIPT_SUMMARY_SYSTEM_PROMPT,
@@ -44,6 +49,36 @@ type BuiltInPromptDefinition = {
 }
 
 const BUILTIN_PROMPT_DEFINITIONS: BuiltInPromptDefinition[] = [
+  {
+    alias: 'builtin:class-summary',
+    name: '上课总结（内置）',
+    type: 'summary',
+    content: DEFAULT_CLASS_SUMMARY_SYSTEM_PROMPT,
+  },
+  {
+    alias: 'builtin:class-chunk-summary',
+    name: '上课分片总结（内置）',
+    type: 'chunk_summary',
+    content: DEFAULT_CLASS_CHUNK_SUMMARY_SYSTEM_PROMPT,
+  },
+  {
+    alias: 'builtin:negotiation-summary',
+    name: '谈判总结（内置）',
+    type: 'summary',
+    content: DEFAULT_NEGOTIATION_SUMMARY_SYSTEM_PROMPT,
+  },
+  {
+    alias: 'builtin:negotiation-chunk-summary',
+    name: '谈判分片总结（内置）',
+    type: 'chunk_summary',
+    content: DEFAULT_NEGOTIATION_CHUNK_SUMMARY_SYSTEM_PROMPT,
+  },
+  {
+    alias: 'builtin:interview-summary',
+    name: '面试总结（内置）',
+    type: 'summary',
+    content: DEFAULT_INTERVIEW_SUMMARY_SYSTEM_PROMPT,
+  },
   {
     alias: 'builtin:interview-reply-assistant',
     name: '面试回复助手（内置）',
