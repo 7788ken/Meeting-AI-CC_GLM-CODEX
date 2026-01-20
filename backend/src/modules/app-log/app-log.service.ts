@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { PrismaService } from '../../database/prisma.service'
 import { AppConfigService } from '../app-config/app-config.service'
 import { AppLogDto } from './dto/app-log.dto'
@@ -251,7 +251,7 @@ export class AppLogService {
           type: input.type,
           level: input.level,
           message: input.message,
-          payload: input.payload ? (input.payload as Prisma.JsonValue) : undefined,
+          payload: input.payload ? (input.payload as InputJsonValue) : undefined,
         },
       })
       await this.pruneLogs()
