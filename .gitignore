@@ -51,3 +51,4 @@ frontend/e2e*.png
 docs/demo/*
 backend/.en-bak
 .tsupgrader/*
+.run/*
