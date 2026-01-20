@@ -251,7 +251,7 @@ export class AppLogService {
           type: input.type,
           level: input.level,
           message: input.message,
-          payload: input.payload ? (input.payload as Prisma.InputJsonValue) : undefined,
+          payload: input.payload ? (input.payload as Prisma.JsonValue) : undefined,
         },
       })
       await this.pruneLogs()
